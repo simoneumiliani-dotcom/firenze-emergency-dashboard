@@ -66,10 +66,9 @@ async function extractPdfText(file) {
   const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
 
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
-      import.meta.url
-    ).toString();
+    // Evita che Next/Vercel provino a minificare il worker ESM di pdf.js.
+    // Il worker resta versionato con la libreria installata e viene caricato solo nel browser.
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
   }
 
   const buffer = await file.arrayBuffer();
