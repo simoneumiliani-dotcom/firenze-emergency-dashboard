@@ -113,6 +113,7 @@ async function login() {
 
 function buildHeaders(session = {}) {
   const headers = { "accept": "application/json,text/plain,*/*" };
+  if (session.extraHeaders) Object.assign(headers, session.extraHeaders);
   if (session.authHeader) headers.authorization = session.authHeader;
   if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
   const basicAuth = getBasicAuth();
@@ -130,6 +131,8 @@ function getAuthCandidates(session) {
       candidates.push({ authenticated: true, authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
     }
     candidates.push({ authenticated: true, authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
+    candidates.push({ authenticated: true, authMode: "x-api-key", extraHeaders: { "x-api-key": accessKey } });
+    candidates.push({ authenticated: true, authMode: "x-access-key", extraHeaders: { "x-access-key": accessKey } });
   }
   return candidates.filter((candidate, index, all) =>
     index === all.findIndex((item) => item.authMode === candidate.authMode && item.authHeader === candidate.authHeader)
