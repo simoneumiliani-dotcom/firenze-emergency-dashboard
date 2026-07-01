@@ -50,7 +50,7 @@ export default function FirenzeStationsPage() {
                 Provincia di Firenze
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-                Catalogo operativo usato dalla dashboard per mappa, selettori e fallback dati. L'endpoint tecnico resta
+                Catalogo operativo usato dalla dashboard per mappa, selettori e fallback dati. L&apos;endpoint tecnico resta
                 disponibile su{" "}
                 <code className="rounded border border-emergency-line bg-black/30 px-1.5 py-0.5 text-cyan-100">
                   /api/stations/firenze
