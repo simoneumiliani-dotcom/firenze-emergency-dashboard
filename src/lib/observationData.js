@@ -89,18 +89,37 @@ async function meteoHubLogin() {
 
   if (!response.ok) throw new Error(`Login MeteoHub HTTP ${response.status}`);
 
-  const token = payload.access_token || payload.token || payload.accessToken || payload.jwt;
-  if (!token) throw new Error("Login MeteoHub riuscito ma token non trovato.");
-  return token;
+  const token = findToken(payload);
+  const cookie = response.headers.get("set-cookie") || "";
+  if (!token && !cookie) throw new Error("Login MeteoHub riuscito ma token/sessione non trovati.");
+  return { token, cookie };
 }
 
-async function meteoHubFetchJson(path, token) {
+function findToken(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const direct = payload.access_token || payload.token || payload.accessToken || payload.jwt || payload.id_token;
+  if (direct) return direct;
+
+  for (const value of Object.values(payload)) {
+    const nested = findToken(value);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function buildMeteoHubHeaders(session) {
+  const headers = { "accept": "application/json,text/plain,*/*" };
+  if (session.token) headers.authorization = `Bearer ${session.token}`;
+  if (session.cookie) headers.cookie = session.cookie;
+  return headers;
+}
+
+async function meteoHubFetchJson(path, session) {
   const response = await fetch(`${getBaseUrl()}${path}`, {
     cache: "no-store",
-    headers: {
-      "accept": "application/json,text/plain,*/*",
-      "authorization": `Bearer ${token}`
-    }
+    headers: buildMeteoHubHeaders(session)
   });
 
   if (!response.ok) throw new Error(`MeteoHub ${path} HTTP ${response.status}`);
@@ -241,8 +260,8 @@ async function fetchMeteoHubMeasurements() {
     };
   }
 
-  const token = await meteoHubLogin();
-  const requests = await fetchMeteoHubRequests(token);
+  const session = await meteoHubLogin();
+  const requests = await fetchMeteoHubRequests(session);
   const measurements = buildEmptyMeasurements("MeteoHub");
   const readyRequests = requests.filter((request) => {
     const status = normalizeStatus(request.status);
@@ -252,7 +271,7 @@ async function fetchMeteoHubMeasurements() {
   let parsedRows = 0;
   for (const request of readyRequests.slice(0, 6)) {
     try {
-      const output = await meteoHubFetchJson(`/api/data/${encodeURIComponent(request.fileoutput)}`, token);
+      const output = await meteoHubFetchJson(`/api/data/${encodeURIComponent(request.fileoutput)}`, session);
       const rows = flattenRows(output);
       parsedRows += rows.length;
       applyMeteoHubRows(measurements, rows);
