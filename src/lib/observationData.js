@@ -194,6 +194,7 @@ async function meteoHubLogin() {
 
 function buildMeteoHubHeaders(session = {}) {
   const headers = { "accept": "application/json,text/plain,*/*" };
+  if (session.extraHeaders) Object.assign(headers, session.extraHeaders);
   if (session.authHeader) headers.authorization = session.authHeader;
   if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
   const basicAuth = getMeteoHubBasicAuth();
@@ -370,6 +371,8 @@ function getMeteoHubAuthCandidates(session) {
       candidates.push({ authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
     }
     candidates.push({ authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
+    candidates.push({ authMode: "x-api-key", extraHeaders: { "x-api-key": accessKey } });
+    candidates.push({ authMode: "x-access-key", extraHeaders: { "x-access-key": accessKey } });
   }
 
   return candidates.filter((candidate, index, all) =>
