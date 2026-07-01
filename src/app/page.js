@@ -100,12 +100,17 @@ function buildHydroHistory(value) {
   }));
 }
 
-function normalizeCfrData(payload) {
+function normalizeObservationData(payload) {
   const fallback = buildFallbackMeasurements();
   return {
     measurements: payload?.measurements || fallback,
     source: payload?.source || "Catalogo stazioni locale",
+    primarySource: payload?.primarySource || "MeteoHub",
+    fallbackSource: payload?.fallbackSource || null,
     fetchedAt: payload?.fetchedAt || null,
+    cache: payload?.cache || null,
+    meteoHub: payload?.meteoHub || null,
+    openMeteoFallbackCount: payload?.openMeteoFallbackCount || 0,
     warning: payload?.warning || null
   };
 }
@@ -487,21 +492,21 @@ function WebcamCard({ webcam, reloadKey }) {
 
 export default function DashboardPage() {
   const [alert, setAlert] = useState({ level: "Verde", matches: [], fileName: null });
-  const [cfrData, setCfrData] = useState(normalizeCfrData(null));
+  const [observationData, setObservationData] = useState(normalizeObservationData(null));
   const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
   const [loading, setLoading] = useState(true);
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
 
-  async function loadCfrData() {
+  async function loadObservationData() {
     setLoading(true);
     try {
-      const response = await fetch("/api/cfr-data", { cache: "no-store" });
+      const response = await fetch("/api/observations", { cache: "no-store" });
       const payload = await response.json();
-      setCfrData(normalizeCfrData(payload));
+      setObservationData(normalizeObservationData(payload));
     } catch (error) {
-      setCfrData(normalizeCfrData({ warning: "Fonte CFR non raggiungibile. I valori CFR sono indicati come n.d." }));
+      setObservationData(normalizeObservationData({ warning: "MeteoHub non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
     } finally {
       setLoading(false);
     }
@@ -528,12 +533,12 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    loadCfrData();
+    loadObservationData();
     loadWeatherData();
     loadMeteoHubData();
   }, []);
 
-  const hydrometryStations = cfrData.measurements.hydrometry || [];
+  const hydrometryStations = observationData.measurements.hydrometry || [];
   const highestHydroStatus = useMemo(() => {
     if (hydrometryStations.some((station) => getStationStatus(station) === "Rosso")) return "Rosso";
     if (hydrometryStations.some((station) => getStationStatus(station) === "Giallo")) return "Giallo";
@@ -541,7 +546,7 @@ export default function DashboardPage() {
   }, [hydrometryStations]);
 
   const visibleAlert = alert.level !== "Verde" ? alert.level : highestHydroStatus;
-  const mapStations = Object.values(cfrData.measurements).flat();
+  const mapStations = Object.values(observationData.measurements).flat();
 
   return (
     <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
@@ -550,7 +555,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard allerta meteo ed emergenze</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio configurabile CFR Toscana per pluviometria, idrometria, termometria, anemometria, igrometria e nivometria.</p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio MeteoHub con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
           </div>
           <div className={`rounded-lg border px-4 py-3 ${ALERT_STYLE[visibleAlert]}`}>
             <div className="flex items-center gap-2">
@@ -566,12 +571,12 @@ export default function DashboardPage() {
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {Object.entries(MEASUREMENT_TYPES).map(([type, meta]) => {
             const Icon = ICONS[meta.icon] || Gauge;
-            return <StatCard key={type} icon={Icon} label={meta.label} value={loading ? "..." : cfrData.measurements[type]?.length || 0} />;
+            return <StatCard key={type} icon={Icon} label={meta.label} value={loading ? "..." : observationData.measurements[type]?.length || 0} />;
           })}
         </section>
 
-        {cfrData.warning && (
-          <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{cfrData.warning}</div>
+        {observationData.warning && (
+          <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{observationData.warning}</div>
         )}
 
         <MapDashboard stations={mapStations} />
@@ -582,7 +587,7 @@ export default function DashboardPage() {
               key={config.id}
               index={index}
               config={config}
-              measurements={cfrData.measurements}
+              measurements={observationData.measurements}
               onChange={(nextConfig) => {
                 setPanelConfigs((current) => current.map((item) => item.id === config.id ? nextConfig : item));
               }}
@@ -603,7 +608,7 @@ export default function DashboardPage() {
         <WebcamGrid />
 
         <footer className="pb-6 text-xs text-slate-500">
-          Fonte stazioni: {cfrData.source}. Meteo: {weatherData.source} {weatherData.fetchedAt || ""}. Ultimo tentativo CFR: {cfrData.fetchedAt || "n.d."}.
+          Fonte osservazioni: {observationData.source}. Cache: {observationData.cache?.hit ? "hit" : "refresh"} {observationData.cache?.updatedAt || ""}. Meteo: {weatherData.source} {weatherData.fetchedAt || ""}.
         </footer>
       </div>
     </main>

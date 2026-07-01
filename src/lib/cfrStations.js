@@ -1,3 +1,5 @@
+import firenzeStationCatalog from "@/data/firenzeStations.json";
+
 const HYDRO_PLUVIO_RAW = `
 TOS01000891|Il Palagio
 TOS01000901|Vallombrosa
@@ -344,7 +346,13 @@ function uniqueById(stations) {
   return [...map.values()];
 }
 
-export const STATIONS_BY_TYPE = {
+function stationsFromCatalog(type) {
+  return firenzeStationCatalog.stations
+    .filter((station) => station.sensors.includes(type))
+    .map((station) => ({ id: station.id, name: station.name, type }));
+}
+
+const LEGACY_STATIONS_BY_TYPE = {
   pluviometry: parseStations(HYDRO_PLUVIO_RAW, "pluviometry"),
   hydrometry: parseStations(HYDRO_PLUVIO_RAW, "hydrometry"),
   thermometry: parseStations(THERMO_RAW, "thermometry"),
@@ -356,6 +364,11 @@ export const STATIONS_BY_TYPE = {
     ...parseStations(NIVOMETRY_EXTRA_RAW, "nivometry")
   ])
 };
+
+export const STATIONS_BY_TYPE = Object.fromEntries(Object.keys(MEASUREMENT_TYPES).map((type) => {
+  const catalogStations = stationsFromCatalog(type);
+  return [type, catalogStations.length ? catalogStations : LEGACY_STATIONS_BY_TYPE[type]];
+}));
 
 export const ALL_STATIONS = uniqueById(Object.values(STATIONS_BY_TYPE).flat());
 
@@ -456,6 +469,10 @@ export const STATION_COORDINATES = {
   TOS30290400: { lat: 44.113, lng: 11.548 }
 };
 
+const CATALOG_COORDINATES = Object.fromEntries(
+  firenzeStationCatalog.stations.map((station) => [station.id, { lat: station.lat, lng: station.lng }])
+);
+
 export function getStationCatalog(type) {
   return STATIONS_BY_TYPE[type] || [];
 }
@@ -469,5 +486,6 @@ export function getStationById(id) {
 }
 
 export function getStationPosition(id) {
-  return STATION_COORDINATES[id] ? { ...STATION_COORDINATES[id], approximate: false } : {};
+  const position = CATALOG_COORDINATES[id] || STATION_COORDINATES[id];
+  return position ? { ...position, approximate: false } : {};
 }
