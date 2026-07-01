@@ -260,8 +260,9 @@ function inferType(row) {
 function findStation(type, row) {
   const stationId = String(getRowValue(row, ["id", "station_id", "stationId", "codice", "code", "ident", "ana_id", "station", "statid", "report"]) || "").trim();
   const stationName = String(getRowValue(row, ["name", "station_name", "stationName", "nome", "denominazione", "mobile_name", "ident"]) || "").trim().toLowerCase();
-  const lat = parseNumeric(getRowValue(row, ["lat", "latitude", "y"]));
-  const lng = parseNumeric(getRowValue(row, ["lon", "lng", "longitude", "x"]));
+  const coordinates = Array.isArray(row?.geometry?.coordinates) ? row.geometry.coordinates : [];
+  const lat = parseNumeric(getRowValue(row, ["lat", "latitude", "y"])) ?? parseNumeric(coordinates[1]);
+  const lng = parseNumeric(getRowValue(row, ["lon", "lng", "longitude", "x"])) ?? parseNumeric(coordinates[0]);
   const catalog = STATIONS_BY_TYPE[type] || [];
 
   return catalog.find((station) => station.id === stationId)
