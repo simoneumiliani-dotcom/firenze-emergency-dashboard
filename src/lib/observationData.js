@@ -194,7 +194,8 @@ async function meteoHubLogin() {
 
 function buildMeteoHubHeaders(session = {}) {
   const headers = { "accept": "application/json,text/plain,*/*" };
-  if (session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
+  if (session.authHeader) headers.authorization = session.authHeader;
+  if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
   const basicAuth = getMeteoHubBasicAuth();
   if (!headers.authorization && basicAuth) headers.authorization = `Basic ${basicAuth}`;
   if (session.cookie) headers.cookie = session.cookie;
@@ -360,24 +361,48 @@ function buildMeteoHubObservationPath(query) {
   return `/api/observations?${params.toString()}`;
 }
 
-async function fetchMeteoHubObservationRows(session) {
-  const results = [];
-
-  for (const query of METEOHUB_OBSERVATION_QUERIES) {
-    try {
-      const payload = await meteoHubFetchJson(buildMeteoHubObservationPath(query), session);
-      results.push({ type: query.type, rows: flattenRows(payload) });
-    } catch (error) {
-      results.push({ type: query.type, rows: [], warning: error.message });
+function getMeteoHubAuthCandidates(session) {
+  const candidates = [session];
+  const accessKey = getMeteoHubAccessKey();
+  if (accessKey) {
+    candidates.push({ authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${accessKey}:`)}` });
+    if (process.env.METEOHUB_USERNAME) {
+      candidates.push({ authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
     }
+    candidates.push({ authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
   }
 
-  return results;
+  return candidates.filter((candidate, index, all) =>
+    index === all.findIndex((item) => item.authMode === candidate.authMode && item.authHeader === candidate.authHeader)
+  );
+}
+
+async function fetchMeteoHubObservationRows(session) {
+  let lastResults = [];
+
+  for (const authCandidate of getMeteoHubAuthCandidates(session)) {
+    const results = [];
+
+    for (const query of METEOHUB_OBSERVATION_QUERIES) {
+      try {
+        const payload = await meteoHubFetchJson(buildMeteoHubObservationPath(query), authCandidate);
+        results.push({ type: query.type, rows: flattenRows(payload), authMode: authCandidate.authMode });
+      } catch (error) {
+        results.push({ type: query.type, rows: [], warning: error.message, authMode: authCandidate.authMode });
+      }
+    }
+
+    lastResults = results;
+    if (results.some((item) => item.rows.length > 0)) return results;
+    if (!results.every((item) => /HTTP 401|HTTP 403/.test(item.warning || ""))) return results;
+  }
+
+  return lastResults;
 }
 
 async function fetchMeteoHubMeasurements() {
   const session = hasMeteoHubAccessKey()
-    ? { authMode: "basic-access-key" }
+    ? { authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${getMeteoHubAccessKey()}:`)}` }
     : hasMeteoHubCredentials()
       ? { authMode: "basic-credentials" }
       : { authMode: "anonymous" };
@@ -398,7 +423,7 @@ async function fetchMeteoHubMeasurements() {
     requests: [],
     filled,
     parsedRows,
-    authMode: session.authMode,
+    authMode: observations.find((item) => item.rows.length > 0)?.authMode || session.authMode,
     warning: filled
       ? null
       : warnings[0] || "MeteoHub raggiunto, ma le osservazioni realtime non sono ancora riconducibili alle stazioni configurate."
