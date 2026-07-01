@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import stationCatalog from "@/data/firenzeStations.json";
+import stationCatalog from "@/data/_MeteoHub.json";
 
 export const dynamic = "force-dynamic";
 

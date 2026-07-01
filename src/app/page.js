@@ -8,8 +8,10 @@ import {
   ArrowDown,
   ArrowUp,
   CloudRain,
+  Database,
   Droplets,
   Gauge,
+  MapPin,
   RefreshCcw,
   Snowflake,
   Thermometer,
@@ -29,6 +31,7 @@ import {
 import PdfParser from "@/components/PdfParser";
 import {
   CHART_COLORS,
+  ALL_STATIONS,
   DEFAULT_CHART_STATION_IDS,
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
@@ -104,7 +107,7 @@ function normalizeObservationData(payload) {
   const fallback = buildFallbackMeasurements();
   return {
     measurements: payload?.measurements || fallback,
-    source: payload?.source || "Catalogo stazioni locale",
+    source: payload?.source || "Catalogo _MeteoHub",
     primarySource: payload?.primarySource || "MeteoHub",
     fallbackSource: payload?.fallbackSource || null,
     fetchedAt: payload?.fetchedAt || null,
@@ -165,6 +168,68 @@ function StatCard({ icon: Icon, label, value }) {
   );
 }
 
+function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
+  const sourceLabel = source || "MeteoHub";
+  const availableCounts = Object.fromEntries(
+    Object.entries(MEASUREMENT_TYPES).map(([type]) => [
+      type,
+      (measurements[type] || []).filter((station) => station.value !== null && station.value !== undefined).length
+    ])
+  );
+
+  return (
+    <section className="panel p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10">
+            <Database className="h-5 w-5 text-sky-200" />
+          </div>
+          <div>
+            <h2 className="section-title">Stazioni _MeteoHub</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-400">
+              La dashboard usa il catalogo _MeteoHub per mappa, selettori, pannelli di misura e fallback Open-Meteo su coordinate.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:min-w-[28rem]">
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Catalogo</p>
+            <p className="mt-1 text-xl font-semibold text-white">{ALL_STATIONS.length}</p>
+          </div>
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Fonte primaria</p>
+            <p className="mt-1 truncate font-semibold text-sky-100">{sourceLabel}</p>
+          </div>
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Cache</p>
+            <p className="mt-1 font-semibold text-slate-100">{cache?.hit ? "hit" : "refresh"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        {Object.entries(MEASUREMENT_TYPES).map(([type, meta]) => (
+          <div key={type} className="rounded-lg border border-emergency-line bg-black/15 px-3 py-2">
+            <p className="text-xs text-slate-400">{meta.label}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-100">
+              {STATIONS_BY_TYPE[type]?.length || 0} stazioni
+              <span className="ml-2 text-xs font-normal text-sky-200">
+                {availableCounts[type]} con dato
+              </span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <MapPin className="h-4 w-4 text-sky-300" />
+        <span>Coordinate da catalogo _MeteoHub locale.</span>
+        {fetchedAt && <span>Ultimo aggiornamento dati: {fetchedAt}</span>}
+      </div>
+    </section>
+  );
+}
+
 function StationSelect({ value, onChange, options, label }) {
   return (
     <label className="flex flex-col gap-1">
@@ -206,7 +271,10 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
       <div className="flex items-center justify-between gap-3 border-b border-emergency-line px-4 py-3">
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-sky-300" />
-          <h2 className="section-title">Dashboard {index + 1}</h2>
+          <div>
+            <h2 className="section-title">Dashboard _MeteoHub {index + 1}</h2>
+            <p className="text-xs text-slate-400">{catalog.length} stazioni disponibili per {meta.label}</p>
+          </div>
         </div>
         <select
           value={config.type}
@@ -253,6 +321,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
                 <td className="whitespace-nowrap px-4 py-3 text-slate-400">
                   {row.provider || "n.d."}
                   {row.modelled ? <span className="ml-1 text-xs text-sky-300">(coord.)</span> : null}
+                  {row.unavailable ? <span className="ml-1 text-xs text-orange-200">(in attesa)</span> : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-400">{row.updatedAt || "n.d."}</td>
               </tr>
@@ -294,7 +363,7 @@ function RiverChart({ stations, selectedIds, onSelectedIdsChange }) {
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="section-title">Andamento idrometrico</h2>
-          <p className="muted">Selezione manuale delle stazioni. Ogni linea e ogni soglia hanno colore dedicato.</p>
+          <p className="muted">Selezione manuale da stazioni _MeteoHub idrometriche. Ogni linea e ogni soglia hanno colore dedicato.</p>
         </div>
         <select
           value=""
@@ -430,7 +499,7 @@ function MeteoHubPanel({ meteoHubData }) {
       <div className="flex items-center justify-between gap-3 border-b border-emergency-line px-4 py-3">
         <div>
           <h2 className="section-title">MeteoHub Agenzia ItaliaMeteo</h2>
-          <p className="muted">Verifica autenticazione e richieste di estrazione dati configurate.</p>
+          <p className="muted">Stato portale, autenticazione e richieste di estrazione dati configurate.</p>
         </div>
         <CloudRain className="h-5 w-5 text-sky-300" />
       </div>
@@ -554,8 +623,8 @@ export default function DashboardPage() {
         <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard allerta meteo ed emergenze</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio MeteoHub con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard _MeteoHub allerta meteo ed emergenze</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio su stazioni _MeteoHub con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
           </div>
           <div className={`rounded-lg border px-4 py-3 ${ALERT_STYLE[visibleAlert]}`}>
             <div className="flex items-center gap-2">
@@ -574,6 +643,13 @@ export default function DashboardPage() {
             return <StatCard key={type} icon={Icon} label={meta.label} value={loading ? "..." : observationData.measurements[type]?.length || 0} />;
           })}
         </section>
+
+        <MeteoHubStationOverview
+          measurements={observationData.measurements}
+          source={observationData.source}
+          fetchedAt={observationData.fetchedAt}
+          cache={observationData.cache}
+        />
 
         {observationData.warning && (
           <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{observationData.warning}</div>

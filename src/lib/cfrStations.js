@@ -1,4 +1,4 @@
-import firenzeStationCatalog from "@/data/firenzeStations.json";
+import meteoHubStationCatalog from "@/data/_MeteoHub.json";
 
 const HYDRO_PLUVIO_RAW = `
 TOS01000891|Il Palagio
@@ -347,7 +347,7 @@ function uniqueById(stations) {
 }
 
 function stationsFromCatalog(type) {
-  return firenzeStationCatalog.stations
+  return meteoHubStationCatalog.stations
     .filter((station) => station.sensors.includes(type))
     .map((station) => ({ id: station.id, name: station.name, type }));
 }
@@ -470,7 +470,7 @@ export const STATION_COORDINATES = {
 };
 
 const CATALOG_COORDINATES = Object.fromEntries(
-  firenzeStationCatalog.stations.map((station) => [station.id, { lat: station.lat, lng: station.lng }])
+  meteoHubStationCatalog.stations.map((station) => [station.id, { lat: station.lat, lng: station.lng }])
 );
 
 export function getStationCatalog(type) {
