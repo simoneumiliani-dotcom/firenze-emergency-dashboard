@@ -168,6 +168,7 @@ function StatCard({ icon: Icon, label, value }) {
   );
 }
 
+// Sintesi operativa del catalogo usato da pannelli, mappa e fallback su coordinate.
 function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
   const sourceLabel = source || "MeteoHub";
   const availableCounts = Object.fromEntries(
