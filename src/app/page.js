@@ -234,6 +234,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
               <th className="px-4 py-3">Stazione</th>
               <th className="px-4 py-3">{meta.valueLabel}</th>
               <th className="px-4 py-3">Trend</th>
+              <th className="px-4 py-3">Fonte</th>
               <th className="px-4 py-3">Aggiornamento</th>
             </tr>
           </thead>
@@ -244,6 +245,10 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
                 <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-100">{row.name}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-200">{row.value ?? "n.d."} {row.unit}</td>
                 <td className="px-4 py-3"><TrendIcon trend={row.trend} /></td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-400">
+                  {row.provider || "n.d."}
+                  {row.modelled ? <span className="ml-1 text-xs text-sky-300">(coord.)</span> : null}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-400">{row.updatedAt || "n.d."}</td>
               </tr>
             ))}
