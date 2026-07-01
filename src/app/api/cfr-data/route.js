@@ -11,6 +11,9 @@ const CFR_URLS = [
   "https://cfr.toscana.it/monitoraggio/"
 ].filter(Boolean);
 
+const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
+const OPEN_METEO_TYPES = ["pluviometry", "thermometry", "anemometry", "hygrometry", "nivometry"];
+
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -49,6 +52,132 @@ function buildHistory(currentValue, type) {
       warning
     };
   });
+}
+
+function chunk(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function getOpenMeteoValue(payload, type) {
+  const current = payload?.current || {};
+  const hourly = payload?.hourly || {};
+  const hourlyUnits = payload?.hourly_units || {};
+
+  if (type === "pluviometry") return current.precipitation ?? null;
+  if (type === "thermometry") return current.temperature_2m ?? null;
+  if (type === "anemometry") return current.wind_speed_10m ?? null;
+  if (type === "hygrometry") return current.relative_humidity_2m ?? null;
+
+  if (type === "nivometry") {
+    const currentTime = current.time;
+    const snowValues = hourly.snow_depth || [];
+    const snowIndex = Array.isArray(hourly.time) ? hourly.time.indexOf(currentTime) : -1;
+    const value = snowValues[snowIndex >= 0 ? snowIndex : 0];
+    if (value === null || value === undefined) return null;
+    return hourlyUnits.snow_depth === "m" ? Number((value * 100).toFixed(1)) : value;
+  }
+
+  return null;
+}
+
+function normalizeOpenMeteoResponses(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload?.latitude !== undefined && payload?.longitude !== undefined) return [payload];
+  return [];
+}
+
+async function fetchOpenMeteoBatch(stations) {
+  const params = new URLSearchParams({
+    latitude: stations.map((station) => station.lat).join(","),
+    longitude: stations.map((station) => station.lng).join(","),
+    current: "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
+    hourly: "snow_depth",
+    timezone: "Europe/Rome",
+    forecast_days: "1"
+  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(`${OPEN_METEO_URL}?${params.toString()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/json" }
+    });
+
+    if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
+    return normalizeOpenMeteoResponses(await response.json());
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchOpenMeteoMeasurements(measurements) {
+  const candidateMap = new Map();
+
+  OPEN_METEO_TYPES.forEach((type) => {
+    (measurements[type] || []).forEach((station) => {
+      if (station.value !== null && station.value !== undefined) return;
+      if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
+      if (!candidateMap.has(station.id)) {
+        candidateMap.set(station.id, { id: station.id, lat: station.lat, lng: station.lng });
+      }
+    });
+  });
+
+  const candidates = [...candidateMap.values()];
+  const byStationId = new Map();
+
+  for (const stationBatch of chunk(candidates, 35)) {
+    try {
+      const responses = await fetchOpenMeteoBatch(stationBatch);
+      responses.forEach((payload, index) => {
+        const station = stationBatch[index];
+        if (station) byStationId.set(station.id, payload);
+      });
+    } catch {
+      // Open-Meteo e un provider di supporto: se una batch fallisce,
+      // lasciamo i valori ufficiali mancanti come n.d. invece di bloccare l'API.
+    }
+  }
+
+  return byStationId;
+}
+
+async function augmentWithOpenMeteo(measurements) {
+  const openMeteoByStationId = await fetchOpenMeteoMeasurements(measurements);
+  let filled = 0;
+
+  const nextMeasurements = Object.fromEntries(Object.entries(measurements).map(([type, stations]) => {
+    if (!OPEN_METEO_TYPES.includes(type)) return [type, stations];
+
+    return [type, stations.map((station) => {
+      if (station.value !== null && station.value !== undefined) return station;
+
+      const payload = openMeteoByStationId.get(station.id);
+      const value = getOpenMeteoValue(payload, type);
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return station;
+
+      filled += 1;
+      return {
+        ...station,
+        value: Number(Number(value).toFixed(type === "hygrometry" ? 0 : 1)),
+        trend: "stable",
+        updatedAt: payload?.current?.time?.slice(11, 16) || null,
+        unavailable: false,
+        real: true,
+        provider: "Open-Meteo",
+        modelled: true
+      };
+    })];
+  }));
+
+  return { measurements: nextMeasurements, filled };
 }
 
 function emptyMeasurements() {
@@ -104,6 +233,7 @@ function parseTables(html) {
           history: kind === "hydrometry" && value !== null ? buildHistory(value, kind) : undefined,
           warning: kind === "hydrometry" && value !== null ? Number((value + 0.8).toFixed(2)) : null,
           danger: kind === "hydrometry" && value !== null ? Number((value + 1.6).toFixed(2)) : null,
+          provider: "CFR Toscana",
           real: value !== null
         });
       });
@@ -132,6 +262,7 @@ function fillMissingWithCatalog(parsed) {
           warning: null,
           danger: null,
           unavailable: true,
+          provider: "CFR Toscana",
           real: false
         };
       });
@@ -167,29 +298,38 @@ export async function GET() {
   try {
     const { url, html } = await fetchFirstAvailable();
     const parsed = parseTables(html);
-    const measurements = fillMissingWithCatalog(parsed);
+    const augmented = await augmentWithOpenMeteo(fillMissingWithCatalog(parsed));
+    const measurements = augmented.measurements;
+    const parsedCount = Object.values(parsed).flat().length;
 
     return NextResponse.json({
       measurements,
       hydrometers: measurements.hydrometry,
       pluviometers: measurements.pluviometry,
       thermometers: measurements.thermometry,
-      source: url,
+      source: augmented.filled ? `${url} + Open-Meteo` : url,
       fetchedAt: new Date().toLocaleString("it-IT"),
-      warning: Object.values(parsed).flat().length
-        ? null
-        : "Il CFR e stato raggiunto, ma non sono state trovate righe dati compatibili con le stazioni configurate. I valori CFR sono indicati come n.d."
+      warning: parsedCount
+        ? augmented.filled
+          ? `Dati CFR letti dove disponibili; ${augmented.filled} valori meteo mancanti sono integrati da Open-Meteo. L'idrometria resta solo CFR.`
+          : null
+        : augmented.filled
+          ? `Il CFR e stato raggiunto, ma non sono state trovate righe compatibili. ${augmented.filled} valori meteo sono integrati da Open-Meteo; l'idrometria resta n.d.`
+          : "Il CFR e stato raggiunto, ma non sono state trovate righe dati compatibili con le stazioni configurate. I valori CFR sono indicati come n.d."
     });
   } catch (error) {
-    const measurements = fillMissingWithCatalog(emptyMeasurements());
+    const augmented = await augmentWithOpenMeteo(fillMissingWithCatalog(emptyMeasurements()));
+    const measurements = augmented.measurements;
     return NextResponse.json({
       measurements,
       hydrometers: measurements.hydrometry,
       pluviometers: measurements.pluviometry,
       thermometers: measurements.thermometry,
-      source: "CFR Toscana",
+      source: augmented.filled ? "Open-Meteo + catalogo stazioni locale" : "CFR Toscana",
       fetchedAt: new Date().toLocaleString("it-IT"),
-      warning: "Dati CFR non disponibili in questo momento. I valori CFR sono indicati come n.d.; non vengono mostrati valori simulati."
+      warning: augmented.filled
+        ? `Dati CFR non disponibili in questo momento. Sono mostrati ${augmented.filled} valori meteo reali/interpolati Open-Meteo sulle coordinate delle stazioni; l'idrometria resta n.d.`
+        : "Dati CFR non disponibili in questo momento. I valori CFR sono indicati come n.d.; non vengono mostrati valori simulati."
     });
   }
 }
