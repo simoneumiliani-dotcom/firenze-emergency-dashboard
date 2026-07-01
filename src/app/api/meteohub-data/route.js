@@ -66,7 +66,7 @@ function findToken(payload) {
 
 async function login() {
   if (getAccessKey()) {
-    return { authenticated: true, authMode: "basic-access-key", payloadKeys: [] };
+    return { authenticated: true, authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${getAccessKey()}:`)}`, payloadKeys: [] };
   }
 
   if (!hasCredentials()) {
@@ -113,13 +113,28 @@ async function login() {
 
 function buildHeaders(session = {}) {
   const headers = { "accept": "application/json,text/plain,*/*" };
-  if (session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
+  if (session.authHeader) headers.authorization = session.authHeader;
+  if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
   const basicAuth = getBasicAuth();
   if (!headers.authorization && basicAuth) headers.authorization = `Basic ${basicAuth}`;
   if (session.cookie) headers.cookie = session.cookie;
   return headers;
 }
 
+function getAuthCandidates(session) {
+  const candidates = [session];
+  const accessKey = getAccessKey();
+  if (accessKey) {
+    candidates.push({ authenticated: true, authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${accessKey}:`)}` });
+    if (process.env.METEOHUB_USERNAME) {
+      candidates.push({ authenticated: true, authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
+    }
+    candidates.push({ authenticated: true, authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
+  }
+  return candidates.filter((candidate, index, all) =>
+    index === all.findIndex((item) => item.authMode === candidate.authMode && item.authHeader === candidate.authHeader)
+  );
+}
 async function checkObservations(session) {
   const params = new URLSearchParams({
     q: SAMPLE_OBSERVATION_QUERY,
@@ -152,14 +167,27 @@ export async function GET() {
   const session = await login().catch((error) => ({ authenticated: false, authMode: "login-error", warning: error.message }));
 
   try {
-    const observations = await checkObservations(session);
+    let observations = null;
+    let activeSession = session;
+    let lastError = null;
+    for (const candidate of getAuthCandidates(session)) {
+      try {
+        observations = await checkObservations(candidate);
+        activeSession = candidate;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!/HTTP 401|HTTP 403/.test(error.message)) throw error;
+      }
+    }
+    if (!observations && lastError) throw lastError;
 
     return NextResponse.json({
       source: "MeteoHub",
       baseUrl: getBaseUrl(),
       connected: true,
-      authenticated: session.authenticated,
-      authMode: session.authMode,
+      authenticated: activeSession.authenticated,
+      authMode: activeSession.authMode,
       fetchedAt: new Date().toLocaleString("it-IT"),
       requests: [],
       observations,
