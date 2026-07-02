@@ -140,7 +140,7 @@ export default function MapDashboard({ stations = [] }) {
           <MapPin className="h-5 w-5 text-sky-300" />
           <div>
             <h2 className="section-title">Mappa rischi e stazioni</h2>
-            <p className="text-xs text-slate-400">Stazioni _MeteoHub filtrabili per i sei livelli di monitoraggio.</p>
+            <p className="text-xs text-slate-400">Stazioni CFR Toscana filtrabili per i sei livelli di monitoraggio.</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs text-slate-300">
@@ -218,7 +218,7 @@ export default function MapDashboard({ stations = [] }) {
                     <p className="text-xs text-slate-300">{station.id}</p>
                     {station.approximate && (
                       <p className="mt-2 rounded-md border border-emergency-yellow/50 bg-emergency-yellow/15 px-2 py-1 text-xs text-yellow-50">
-                        Posizione indicativa: aggiornare le coordinate _MeteoHub appena disponibili.
+                        Posizione indicativa: aggiornare le coordinate CFR appena disponibili.
                       </p>
                     )}
                     <div className="mt-3 space-y-2">
