@@ -6,7 +6,8 @@ import { AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCir
 const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
 const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
 const BULLETIN_RETENTION_MONTHS = 6;
-const LOCAL_PDF_MAX_BYTES = 3_500_000;
+const PDF_DB_NAME = "firenze-bulletin-pdfs";
+const PDF_DB_STORE = "pdfs";
 
 const TERRITORY_KEYWORDS = [
   "firenze",
@@ -156,14 +157,64 @@ function writeJsonStorage(key, value) {
   }
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve) => {
-    if (!file || file.size > LOCAL_PDF_MAX_BYTES) return resolve(null);
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
+function openPdfDatabase() {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined" || !window.indexedDB) return resolve(null);
+
+    const request = window.indexedDB.open(PDF_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(PDF_DB_STORE)) database.createObjectStore(PDF_DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
+}
+
+async function savePdfBlob(id, file) {
+  const database = await openPdfDatabase();
+  if (!database || !id || !file) return false;
+
+  return new Promise((resolve) => {
+    const transaction = database.transaction(PDF_DB_STORE, "readwrite");
+    transaction.objectStore(PDF_DB_STORE).put(file, id);
+    transaction.oncomplete = () => resolve(true);
+    transaction.onerror = () => resolve(false);
+    transaction.onabort = () => resolve(false);
+  }).finally(() => database.close());
+}
+
+async function loadPdfBlob(id) {
+  const database = await openPdfDatabase();
+  if (!database || !id) return null;
+
+  return new Promise((resolve) => {
+    const transaction = database.transaction(PDF_DB_STORE, "readonly");
+    const request = transaction.objectStore(PDF_DB_STORE).get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => resolve(null);
+  }).finally(() => database.close());
+}
+
+async function removeOldPdfBlobs(validIds) {
+  const database = await openPdfDatabase();
+  if (!database) return;
+
+  await new Promise((resolve) => {
+    const transaction = database.transaction(PDF_DB_STORE, "readwrite");
+    const store = transaction.objectStore(PDF_DB_STORE);
+    const keysRequest = store.getAllKeys();
+    keysRequest.onsuccess = () => {
+      keysRequest.result.forEach((key) => {
+        if (!validIds.includes(key)) store.delete(key);
+      });
+    };
+    transaction.oncomplete = resolve;
+    transaction.onerror = resolve;
+    transaction.onabort = resolve;
+  });
+
+  database.close();
 }
 function buildRelevantExtract(text, matches) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
@@ -234,33 +285,54 @@ export default function PdfParser({ onAlertDetected }) {
   }, []);
 
   useEffect(() => {
-    const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []));
-    writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
+    let cancelled = false;
 
-    const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
-    if (localCurrent && isCurrentBulletin(localCurrent) && isRecentBulletin(localCurrent)) {
-      setResult(localCurrent);
-      setStatus("done");
-      setPdfUrl(localCurrent.pdfDataUrl || localCurrent.pdfUrl || null);
-      setViewerOpen(Boolean(localCurrent.pdfDataUrl || localCurrent.pdfUrl));
-      onAlertDetected?.(localCurrent);
-    } else if (localCurrent) {
-      writeJsonStorage(LOCAL_CURRENT_KEY, null);
+    async function restoreCurrentBulletin() {
+      const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []));
+      writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
+      removeOldPdfBlobs(localArchive.map((item) => item.id));
+
+      const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
+      if (localCurrent && isCurrentBulletin(localCurrent) && isRecentBulletin(localCurrent)) {
+        const pdfBlob = await loadPdfBlob(localCurrent.id);
+        const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : localCurrent.pdfUrl || null;
+
+        if (cancelled) {
+          if (restoredPdfUrl?.startsWith("blob:")) URL.revokeObjectURL(restoredPdfUrl);
+          return;
+        }
+
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = restoredPdfUrl?.startsWith("blob:") ? restoredPdfUrl : null;
+        setResult(localCurrent);
+        setStatus("done");
+        setPdfUrl(restoredPdfUrl);
+        setViewerOpen(Boolean(restoredPdfUrl));
+        onAlertDetected?.(localCurrent);
+      } else if (localCurrent) {
+        writeJsonStorage(LOCAL_CURRENT_KEY, null);
+      }
+
+      fetch("/api/bulletins", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((archive) => {
+          if (cancelled || !archive?.current || !isCurrentBulletin(archive.current)) return;
+          const next = { ...archive.current, archivePersistent: archive.persistent };
+          setResult((current) => current || next);
+          if (next.pdfUrl) {
+            setPdfUrl(next.pdfUrl);
+            setViewerOpen(true);
+          }
+          onAlertDetected?.(next);
+        })
+        .catch(() => {});
     }
 
-    fetch("/api/bulletins", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((archive) => {
-        if (!archive?.current || !isCurrentBulletin(archive.current)) return;
-        const next = { ...archive.current, archivePersistent: archive.persistent };
-        setResult((current) => current || next);
-        if (next.pdfUrl) {
-          setPdfUrl(next.pdfUrl);
-          setViewerOpen(true);
-        }
-        onAlertDetected?.(next);
-      })
-      .catch(() => {});
+    restoreCurrentBulletin();
+
+    return () => {
+      cancelled = true;
+    };
   }, [onAlertDetected]);
 
   const borderClass = useMemo(() => {
@@ -306,12 +378,13 @@ export default function PdfParser({ onAlertDetected }) {
         textPreview: buildRelevantExtract(text, detection.matches),
         textTerms: [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
       };
-      const pdfDataUrl = await fileToDataUrl(file);
-      const localPayload = { ...payload, pdfDataUrl };
+      const savedPdf = await savePdfBlob(payload.id, file);
+      const localPayload = { ...payload, hasLocalPdf: savedPdf };
       const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []);
       const nextArchive = pruneLocalArchive([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
       writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
       writeJsonStorage(LOCAL_CURRENT_KEY, localPayload);
+      removeOldPdfBlobs(nextArchive.map((item) => item.id));
 
       setResult(localPayload);
       setStatus("done");
