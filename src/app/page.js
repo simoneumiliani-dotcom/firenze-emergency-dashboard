@@ -151,6 +151,22 @@ function buildSelectedObservationQuery(panelConfigs, chartStationIds) {
   return [...items].join(",");
 }
 
+const CACHE_WARMUP_TYPES = ["pluviometry", "hydrometry", "thermometry", "anemometry", "hygrometry"];
+const CACHE_WARMUP_BATCH_SIZE = 18;
+
+function buildCacheWarmupJobs() {
+  return CACHE_WARMUP_TYPES.flatMap((type) => {
+    const stationCount = STATIONS_BY_TYPE[type]?.length || 0;
+    const totalBatches = Math.max(1, Math.ceil(stationCount / CACHE_WARMUP_BATCH_SIZE));
+    return Array.from({ length: totalBatches }, (_, batch) => ({
+      type,
+      batch,
+      batchSize: CACHE_WARMUP_BATCH_SIZE,
+      label: MEASUREMENT_TYPES[type]?.label || type
+    }));
+  });
+}
+
 function normalizeWeatherData(payload) {
   return {
     source: payload?.source || "Open-Meteo",
@@ -202,7 +218,7 @@ function StatCard({ icon: Icon, label, value }) {
 }
 
 // Sintesi operativa del catalogo usato da pannelli, mappa e fallback su coordinate.
-function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
+function MeteoHubStationOverview({ measurements, source, fetchedAt, cache, warmup, onWarmCache }) {
   const sourceLabel = source || "CFR Toscana";
   const availableCounts = Object.fromEntries(
     Object.entries(MEASUREMENT_TYPES).map(([type]) => [
@@ -236,9 +252,30 @@ function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
           </div>
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
             <p className="text-xs uppercase tracking-wide text-slate-500">Cache</p>
-            <p className="mt-1 font-semibold text-slate-100">{cache?.hit ? "hit" : "refresh"}</p>
+            <p className="mt-1 font-semibold text-slate-100">{cache?.persistent ? "KV" : cache?.mode || (cache?.hit ? "hit" : "refresh")}</p>
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-sky-400/20 bg-sky-400/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-sky-100">Aggiornamento cache CFR</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {warmup?.running
+              ? "Batch " + warmup.done + "/" + warmup.total + (warmup.current ? " - " + warmup.current : "")
+              : warmup?.message || "Scarica i batch CFR e li fonde nella cache persistente."}
+          </p>
+          {warmup?.error && <p className="mt-1 text-xs text-emergency-orange">{warmup.error}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={onWarmCache}
+          disabled={warmup?.running}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:border-sky-300 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCcw className={"h-4 w-4 " + (warmup?.running ? "animate-spin" : "")} />
+          {warmup?.running ? "Aggiornamento..." : "Aggiorna cache CFR"}
+        </button>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
@@ -599,6 +636,7 @@ export default function DashboardPage() {
   const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
   const [loading, setLoading] = useState(true);
+  const [cacheWarmup, setCacheWarmup] = useState({ running: false, done: 0, total: 0, current: null, message: null, error: null });
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
 
@@ -647,6 +685,47 @@ export default function DashboardPage() {
       setObservationData((current) => ({
         ...current,
         warning: "Realtime CFR non raggiungibile per le stazioni selezionate."
+      }));
+    }
+  }
+
+  async function warmObservationCache() {
+    const jobs = buildCacheWarmupJobs();
+    setCacheWarmup({ running: true, done: 0, total: jobs.length, current: null, message: null, error: null });
+
+    try {
+      for (let index = 0; index < jobs.length; index += 1) {
+        const job = jobs[index];
+        setCacheWarmup((current) => ({
+          ...current,
+          current: job.label + " batch " + (job.batch + 1),
+          done: index
+        }));
+
+        const params = new URLSearchParams({
+          type: job.type,
+          batch: String(job.batch),
+          batchSize: String(job.batchSize)
+        });
+        const response = await fetch("/api/sync-observations?" + params.toString(), { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || "Batch CFR non riuscito");
+
+        setCacheWarmup((current) => ({
+          ...current,
+          done: index + 1,
+          message: "Ultimo batch: " + job.label + " (" + (payload.populatedStations || 0) + " dati letti)"
+        }));
+      }
+
+      await loadObservationData();
+      await loadSelectedObservationData(selectedObservationQuery);
+      setCacheWarmup({ running: false, done: jobs.length, total: jobs.length, current: null, message: "Cache CFR aggiornata. Ricarico completato.", error: null });
+    } catch (error) {
+      setCacheWarmup((current) => ({
+        ...current,
+        running: false,
+        error: error instanceof Error ? error.message : "Aggiornamento cache interrotto"
       }));
     }
   }
@@ -703,6 +782,8 @@ export default function DashboardPage() {
           source={observationData.source}
           fetchedAt={observationData.fetchedAt}
           cache={observationData.cache}
+          warmup={cacheWarmup}
+          onWarmCache={warmObservationCache}
         />
 
         {observationData.warning && (
