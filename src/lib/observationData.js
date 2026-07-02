@@ -4,6 +4,8 @@ const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const OPEN_METEO_TYPES = ["pluviometry", "thermometry", "anemometry", "hygrometry", "nivometry"];
 const CACHE_TTL_MS = Number(process.env.OBSERVATION_CACHE_TTL_SECONDS || 900) * 1000;
 const CFR_FETCH_DEADLINE_MS = Number(process.env.CFR_FETCH_DEADLINE_MS || 8500);
+const DEFAULT_CACHE_MAX_AGE_SECONDS = Number(process.env.OBSERVATION_CACHE_MAX_AGE_SECONDS || 300);
+const CFR_STATION_TIMEOUT_MS = Number(process.env.CFR_STATION_TIMEOUT_MS || 3500);
 
 const CFR_TYPES = {
   hydrometry: "idro",
@@ -146,7 +148,7 @@ async function fetchCfrStation(station, type) {
 
   for (const base of CFR_DETAIL_BASES) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), CFR_STATION_TIMEOUT_MS);
     try {
       const separator = base.includes("?") ? "&" : "?";
       const response = await fetch(base + separator + query, {
@@ -167,6 +169,77 @@ async function fetchCfrStation(station, type) {
     }
   }
   return null;
+}
+
+function normalizeSelectionItem(item) {
+  if (!item) return null;
+  if (typeof item === "string") {
+    const [type, id] = item.split(":");
+    if (!type || !id || !STATIONS_BY_TYPE[type]) return null;
+    const station = STATIONS_BY_TYPE[type].find((candidate) => candidate.id === id);
+    return station ? { type, station } : null;
+  }
+  if (item.type && item.id && STATIONS_BY_TYPE[item.type]) {
+    const station = STATIONS_BY_TYPE[item.type].find((candidate) => candidate.id === item.id);
+    return station ? { type: item.type, station } : null;
+  }
+  return null;
+}
+
+export function parseSelectedStations(value) {
+  if (!value) return [];
+  const rawItems = Array.isArray(value) ? value : String(value).split(",");
+  const map = new Map();
+  rawItems.forEach((item) => {
+    const normalized = normalizeSelectionItem(item);
+    if (normalized) map.set(normalized.type + ":" + normalized.station.id, normalized);
+  });
+  return [...map.values()];
+}
+
+function buildBatchSelection({ type, batch = 0, batchSize = 24 } = {}) {
+  const types = type && STATIONS_BY_TYPE[type] ? [type] : Object.keys(STATIONS_BY_TYPE).filter((item) => CFR_TYPES[item]);
+  const jobs = types.flatMap((itemType) => (STATIONS_BY_TYPE[itemType] || []).map((station) => ({ type: itemType, station })));
+  const safeBatch = Math.max(0, Number(batch) || 0);
+  const safeBatchSize = Math.max(1, Math.min(60, Number(batchSize) || 24));
+  return jobs.slice(safeBatch * safeBatchSize, safeBatch * safeBatchSize + safeBatchSize);
+}
+
+async function fetchCfrMeasurementsForSelection(selection) {
+  const measurements = buildEmptyMeasurements("CFR Toscana");
+  let filled = 0;
+  let attempted = 0;
+  const startedAt = Date.now();
+  const jobs = selection.filter(({ type }) => CFR_TYPES[type]);
+
+  for (const jobBatch of chunk(jobs, Number(process.env.CFR_FETCH_CONCURRENCY || 8))) {
+    if (Date.now() - startedAt > CFR_FETCH_DEADLINE_MS) break;
+    const results = await Promise.all(jobBatch.map((job) => fetchCfrStation(job.station, job.type)));
+    results.forEach((result, index) => {
+      const job = jobBatch[index];
+      attempted += 1;
+      const stationIndex = measurements[job.type].findIndex((station) => station.id === job.station.id);
+      if (stationIndex < 0 || !result) return;
+      const value = Number(result.value);
+      const station = measurements[job.type][stationIndex];
+      filled += 1;
+      measurements[job.type][stationIndex] = {
+        ...station,
+        value,
+        trend: result.trend,
+        updatedAt: result.updatedAt,
+        warning: getWarningThreshold(job.type, value),
+        danger: getDangerThreshold(job.type, value),
+        history: job.type === "hydrometry" ? buildHydroHistory(value) : undefined,
+        unavailable: false,
+        provider: "CFR Toscana",
+        real: true,
+        extra: result.extra
+      };
+    });
+  }
+
+  return { measurements, filled, attempted };
 }
 
 async function fetchCfrMeasurements() {
@@ -256,10 +329,12 @@ async function fetchOpenMeteoBatch(stations) {
   }
 }
 
-async function fetchOpenMeteoMeasurements(measurements) {
+async function fetchOpenMeteoMeasurements(measurements, selection = null) {
   const candidateMap = new Map();
+  const selectionKeys = selection ? new Set(selection.map((item) => item.type + ":" + item.station.id)) : null;
   OPEN_METEO_TYPES.forEach((type) => {
     (measurements[type] || []).forEach((station) => {
+      if (selectionKeys && !selectionKeys.has(type + ":" + station.id)) return;
       if (station.value !== null && station.value !== undefined) return;
       if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
       if (!candidateMap.has(station.id)) candidateMap.set(station.id, { id: station.id, lat: station.lat, lng: station.lng });
@@ -281,8 +356,8 @@ async function fetchOpenMeteoMeasurements(measurements) {
   return byStationId;
 }
 
-async function augmentWithOpenMeteo(measurements) {
-  const openMeteoByStationId = await fetchOpenMeteoMeasurements(measurements);
+async function augmentWithOpenMeteo(measurements, selection = null) {
+  const openMeteoByStationId = await fetchOpenMeteoMeasurements(measurements, selection);
   let filled = 0;
   const startedAt = Date.now();
   const nextMeasurements = Object.fromEntries(Object.entries(measurements).map(([type, stations]) => {
@@ -310,34 +385,78 @@ async function augmentWithOpenMeteo(measurements) {
   return { measurements: nextMeasurements, filled };
 }
 
-export async function getObservationData({ forceRefresh = false } = {}) {
+function mergeMeasurements(baseMeasurements, realtimeMeasurements) {
+  return Object.fromEntries(Object.entries(baseMeasurements).map(([type, stations]) => [
+    type,
+    stations.map((station) => {
+      const realtime = realtimeMeasurements[type]?.find((candidate) => candidate.id === station.id);
+      if (!realtime || realtime.value === null || realtime.value === undefined) return station;
+      return { ...station, ...realtime };
+    })
+  ]));
+}
+
+export function getObservationCacheHeaders({ realtime = false } = {}) {
+  if (realtime) return { "Cache-Control": "no-store" };
+  return {
+    "Cache-Control": "s-maxage=" + DEFAULT_CACHE_MAX_AGE_SECONDS + ", stale-while-revalidate=1800"
+  };
+}
+
+export async function getObservationData({ forceRefresh = false, selected = [], batch = null, type = null, batchSize = 24, realtime = false } = {}) {
+  const selectedStations = parseSelectedStations(selected);
+  const batchSelection = batch === null || batch === undefined ? [] : buildBatchSelection({ type, batch, batchSize });
+  const realtimeSelection = selectedStations.length ? selectedStations : batchSelection;
+
+  if (realtimeSelection.length) {
+    const fetchedAt = new Date().toISOString();
+    const cfrResult = await fetchCfrMeasurementsForSelection(realtimeSelection);
+    const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements, realtimeSelection);
+    return {
+      source: "CFR Toscana",
+      primarySource: "CFR Toscana",
+      fallbackSource: openMeteoResult.filled ? "Open-Meteo" : null,
+      fetchedAt,
+      measurements: openMeteoResult.measurements,
+      cfr: {
+        endpoint: "monitoraggio/dettaglio.php",
+        attemptedStations: cfrResult.attempted,
+        populatedStations: cfrResult.filled,
+        mode: selectedStations.length ? "realtime-selected" : "batch",
+        selectionSize: realtimeSelection.length,
+        batch,
+        type
+      },
+      openMeteoFallbackCount: openMeteoResult.filled,
+      warning: cfrResult.filled
+        ? null
+        : "CFR Toscana non ha restituito dati leggibili per le stazioni richieste."
+    };
+  }
+
   const cache = getCache();
   const now = Date.now();
   if (!forceRefresh && cache.payload && now - cache.updatedAt < CACHE_TTL_MS) {
-    return { ...cache.payload, cache: { hit: true, ttlSeconds: Math.round(CACHE_TTL_MS / 1000) } };
+    return { ...cache.payload, cache: { hit: true, ttlSeconds: Math.round(CACHE_TTL_MS / 1000), mode: "memory" } };
   }
 
-  const fetchedAt = new Date().toISOString();
-  const cfrResult = await fetchCfrMeasurements();
-  const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements);
   const payload = {
     source: "CFR Toscana",
     primarySource: "CFR Toscana",
-    fallbackSource: openMeteoResult.filled ? "Open-Meteo" : null,
-    fetchedAt,
-    measurements: openMeteoResult.measurements,
+    fallbackSource: null,
+    fetchedAt: new Date().toISOString(),
+    measurements: buildEmptyMeasurements("CFR Toscana"),
     cfr: {
       endpoint: "monitoraggio/dettaglio.php",
-      attemptedStations: cfrResult.attempted,
-      populatedStations: cfrResult.filled
+      attemptedStations: 0,
+      populatedStations: 0,
+      mode: "cdn-cache-shell"
     },
-    openMeteoFallbackCount: openMeteoResult.filled,
-    warning: cfrResult.filled
-      ? null
-      : "CFR Toscana non ha restituito dati leggibili in questo momento. Open-Meteo copre solo i sensori meteorologici disponibili."
+    openMeteoFallbackCount: 0,
+    warning: null
   };
 
   cache.payload = payload;
   cache.updatedAt = now;
-  return { ...payload, cache: { hit: false, ttlSeconds: Math.round(CACHE_TTL_MS / 1000) } };
+  return { ...payload, cache: { hit: false, ttlSeconds: Math.round(CACHE_TTL_MS / 1000), mode: "cdn" } };
 }

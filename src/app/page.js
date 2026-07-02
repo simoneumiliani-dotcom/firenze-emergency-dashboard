@@ -118,6 +118,39 @@ function normalizeObservationData(payload) {
   };
 }
 
+function mergeObservationData(base, incoming) {
+  const next = normalizeObservationData(incoming);
+  const measurements = Object.fromEntries(Object.entries(base.measurements).map(([type, stations]) => [
+    type,
+    stations.map((station) => {
+      const realtime = next.measurements[type]?.find((candidate) => candidate.id === station.id);
+      if (!realtime || realtime.value === null || realtime.value === undefined) return station;
+      return { ...station, ...realtime };
+    })
+  ]));
+
+  return {
+    ...base,
+    ...next,
+    measurements,
+    cache: next.cache || base.cache,
+    warning: next.warning || base.warning
+  };
+}
+
+function buildSelectedObservationQuery(panelConfigs, chartStationIds) {
+  const items = new Set();
+  panelConfigs.forEach((config) => {
+    config.stationIds.forEach((stationId) => {
+      if (stationId) items.add(config.type + ":" + stationId);
+    });
+  });
+  chartStationIds.forEach((stationId) => {
+    if (stationId) items.add("hydrometry:" + stationId);
+  });
+  return [...items].join(",");
+}
+
 function normalizeWeatherData(payload) {
   return {
     source: payload?.source || "Open-Meteo",
@@ -572,7 +605,7 @@ export default function DashboardPage() {
   async function loadObservationData() {
     setLoading(true);
     try {
-      const response = await fetch("/api/observations", { cache: "no-store" });
+      const response = await fetch("/api/observations", { cache: "default" });
       const payload = await response.json();
       setObservationData(normalizeObservationData(payload));
     } catch (error) {
@@ -602,11 +635,31 @@ export default function DashboardPage() {
     }
   }
 
+  const selectedObservationQuery = useMemo(() => buildSelectedObservationQuery(panelConfigs, chartStationIds), [panelConfigs, chartStationIds]);
+
+  async function loadSelectedObservationData(selectedQuery) {
+    if (!selectedQuery) return;
+    try {
+      const response = await fetch("/api/observations?selected=" + encodeURIComponent(selectedQuery), { cache: "no-store" });
+      const payload = await response.json();
+      setObservationData((current) => mergeObservationData(current, payload));
+    } catch {
+      setObservationData((current) => ({
+        ...current,
+        warning: "Realtime CFR non raggiungibile per le stazioni selezionate."
+      }));
+    }
+  }
+
   useEffect(() => {
     loadObservationData();
     loadWeatherData();
     loadMeteoHubData();
   }, []);
+
+  useEffect(() => {
+    loadSelectedObservationData(selectedObservationQuery);
+  }, [selectedObservationQuery]);
 
   const hydrometryStations = observationData.measurements.hydrometry || [];
   const highestHydroStatus = useMemo(() => {
