@@ -4,6 +4,35 @@ const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const OPEN_METEO_TYPES = ["pluviometry", "thermometry", "anemometry", "hygrometry", "nivometry"];
 const CACHE_TTL_MS = Number(process.env.OBSERVATION_CACHE_TTL_SECONDS || 900) * 1000;
 
+// Query usate dalla mappa ufficiale MeteoHub /app/maps/observations.
+// Idrometria e nivometria non risultano esposte nella mappa realtime MeteoHub: restano n.d. o fallback dove disponibile.
+const METEOHUB_OBSERVATION_QUERIES = [
+  {
+    type: "thermometry",
+    product: "B12101",
+    timerange: "254,0,0",
+    level: "103,2000,0,0"
+  },
+  {
+    type: "pluviometry",
+    product: "B13011",
+    timerange: "1,0,3600",
+    level: "1,0,0,0"
+  },
+  {
+    type: "hygrometry",
+    product: "B13003",
+    timerange: "254,0,0",
+    level: "103,2000,0,0"
+  },
+  {
+    type: "anemometry",
+    product: "B11002 or B11001",
+    timerange: "254,0,0",
+    level: "103,10000,0,0"
+  }
+];
+
 function getCache() {
   if (!globalThis.__firenzeObservationCache) {
     globalThis.__firenzeObservationCache = { payload: null, updatedAt: 0 };
@@ -17,6 +46,27 @@ function getBaseUrl() {
 
 function hasMeteoHubCredentials() {
   return Boolean(process.env.METEOHUB_USERNAME && process.env.METEOHUB_PASSWORD);
+}
+
+function hasMeteoHubAccessKey() {
+  return Boolean(process.env.METEOHUB_ACCESS_KEY || process.env.METEOHUB_API_KEY);
+}
+
+function encodeBasicAuthValue(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function getMeteoHubAccessKey() {
+  return process.env.METEOHUB_ACCESS_KEY || process.env.METEOHUB_API_KEY || null;
+}
+
+function getMeteoHubBasicAuth() {
+  const secret = getMeteoHubAccessKey() || process.env.METEOHUB_PASSWORD;
+  if (!process.env.METEOHUB_USERNAME || !secret) return null;
+  return encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${secret}`);
 }
 
 function chunk(items, size) {
@@ -61,8 +111,43 @@ export function buildEmptyMeasurements(provider = "MeteoHub") {
   ]));
 }
 
-function normalizeStatus(status) {
-  return String(status || "").toLowerCase();
+
+function readSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  if (typeof headers.raw === "function") return headers.raw()["set-cookie"] || [];
+  const single = headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function toCookieHeader(setCookieHeaders) {
+  return setCookieHeaders
+    .flatMap((item) => String(item).split(/,(?=\s*[^;,=]+=[^;,]+)/))
+    .map((item) => item.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+function findAuthValue(payload, matcher) {
+  if (!payload || typeof payload !== "object") return null;
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (matcher(key) && typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  for (const value of Object.values(payload)) {
+    const nested = findAuthValue(value, matcher);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function findToken(payload) {
+  return findAuthValue(payload, (key) => /^(access_token|accessToken|token|jwt|id_token|idToken)$/i.test(key));
+}
+
+function findSessionId(payload) {
+  return findAuthValue(payload, (key) => /(session|sessionid|sid|connect\.sid|auth)/i.test(key));
 }
 
 function readSetCookieHeaders(headers) {
@@ -147,7 +232,11 @@ async function meteoHubLogin() {
 
 function buildMeteoHubHeaders(session = {}) {
   const headers = { "accept": "application/json,text/plain,*/*" };
-  if (session.token) headers.authorization = `Bearer ${session.token}`;
+  if (session.extraHeaders) Object.assign(headers, session.extraHeaders);
+  if (session.authHeader) headers.authorization = session.authHeader;
+  if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
+  const basicAuth = getMeteoHubBasicAuth();
+  if (!headers.authorization && basicAuth) headers.authorization = `Basic ${basicAuth}`;
   if (session.cookie) headers.cookie = session.cookie;
   return headers;
 }
@@ -171,20 +260,6 @@ async function meteoHubFetchJson(path, session) {
   }
 }
 
-async function fetchMeteoHubRequests(token) {
-  const payload = await meteoHubFetchJson("/api/requests", token);
-  const rows = Array.isArray(payload) ? payload : payload?.requests || payload?.items || payload?.results || [];
-
-  return rows.map((request) => ({
-    raw: request,
-    id: request.id || request.request_id || request.task_id || null,
-    name: request.request_name || request.name || request.title || "Richiesta MeteoHub",
-    status: request.status || request.state || "n.d.",
-    dataset: request.dataset || request.dataset_name || request.dataset_names || null,
-    createdAt: request.created_at || request.creation_time || request.submitted_at || null,
-    fileoutput: request.fileoutput || request.filename || request.output || null
-  }));
-}
 
 function flattenRows(payload) {
   if (!payload) return [];
@@ -220,6 +295,12 @@ function parseNumeric(value) {
 }
 
 function inferType(row) {
+  const product = String(getRowValue(row, ["product", "quantity", "var", "variable", "code", "bcode"]) || "").toUpperCase();
+  if (/B12101/.test(product)) return "thermometry";
+  if (/B13011/.test(product)) return "pluviometry";
+  if (/B13003/.test(product)) return "hygrometry";
+  if (/B1100[12]/.test(product)) return "anemometry";
+
   const joined = JSON.stringify(row).toLowerCase();
   if (/hydro|idrom|water_level|river|livello|quota/.test(joined)) return "hydrometry";
   if (/pluv|rain|precip/.test(joined)) return "pluviometry";
@@ -231,33 +312,39 @@ function inferType(row) {
 }
 
 function findStation(type, row) {
-  const stationId = String(getRowValue(row, ["id", "station_id", "stationId", "codice", "code", "ident", "ana_id"]) || "").trim();
-  const stationName = String(getRowValue(row, ["name", "station_name", "stationName", "nome", "denominazione"]) || "").trim().toLowerCase();
+  const stationId = String(getRowValue(row, ["id", "station_id", "stationId", "codice", "code", "ident", "ana_id", "station", "statid", "report"]) || "").trim();
+  const stationName = String(getRowValue(row, ["name", "station_name", "stationName", "nome", "denominazione", "mobile_name", "ident"]) || "").trim().toLowerCase();
+  const coordinates = Array.isArray(row?.geometry?.coordinates) ? row.geometry.coordinates : [];
+  const lat = parseNumeric(getRowValue(row, ["lat", "latitude", "y"])) ?? parseNumeric(coordinates[1]);
+  const lng = parseNumeric(getRowValue(row, ["lon", "lng", "longitude", "x"])) ?? parseNumeric(coordinates[0]);
   const catalog = STATIONS_BY_TYPE[type] || [];
 
   return catalog.find((station) => station.id === stationId)
     || catalog.find((station) => stationName && station.name.toLowerCase() === stationName)
+    || catalog.find((station) => Number.isFinite(lat) && Number.isFinite(lng)
+      && Math.abs(station.lat - lat) < 0.025
+      && Math.abs(station.lng - lng) < 0.025)
     || null;
 }
 
 function extractMeasurementValue(type, row) {
   const valueKeysByType = {
-    pluviometry: ["precipitation", "rain", "pluv", "pioggia", "value", "valore"],
+    pluviometry: ["precipitation", "rain", "pluv", "pioggia", "value", "val", "valore"],
     hydrometry: ["water_level", "level", "livello", "quota", "idrometro", "value", "valore"],
-    thermometry: ["temperature", "temp", "temperatura", "value", "valore"],
-    anemometry: ["wind_speed", "wind", "vento", "velocita_vento", "value", "valore"],
-    hygrometry: ["relative_humidity", "humidity", "umidita", "igrometria", "value", "valore"],
+    thermometry: ["temperature", "temp", "temperatura", "value", "val", "valore"],
+    anemometry: ["wind_speed", "wind", "vento", "velocita_vento", "value", "val", "valore"],
+    hygrometry: ["relative_humidity", "humidity", "umidita", "igrometria", "value", "val", "valore"],
     nivometry: ["snow_depth", "snow", "neve", "nivometria", "value", "valore"]
   };
 
   return parseNumeric(getRowValue(row, valueKeysByType[type] || ["value", "valore"]));
 }
 
-function applyMeteoHubRows(measurements, rows) {
+function applyMeteoHubRows(measurements, rows, forcedType = null) {
   let filled = 0;
 
   rows.forEach((row) => {
-    const type = inferType(row);
+    const type = forcedType || inferType(row);
     if (!type) return;
 
     const station = findStation(type, row);
@@ -285,46 +372,102 @@ function applyMeteoHubRows(measurements, rows) {
   return filled;
 }
 
-async function fetchMeteoHubMeasurements() {
-  if (!hasMeteoHubCredentials()) {
-    return {
-      measurements: buildEmptyMeasurements("MeteoHub"),
-      requests: [],
-      filled: 0,
-      warning: "Credenziali MeteoHub non configurate."
-    };
-  }
+function formatMeteoHubDate(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}`;
+}
 
-  const session = await meteoHubLogin();
-  const requests = await fetchMeteoHubRequests(session);
-  const measurements = buildEmptyMeasurements("MeteoHub");
-  const readyRequests = requests.filter((request) => {
-    const status = normalizeStatus(request.status);
-    return request.fileoutput && /success|done|completed|ready/.test(status);
+function buildMeteoHubObservationPath(query) {
+  const now = new Date();
+  const from = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  const to = new Date(now.getTime() + 30 * 60 * 1000);
+  const params = new URLSearchParams({
+    q: [
+      `reftime: >=${formatMeteoHubDate(from)}:00,<=${formatMeteoHubDate(to)}:59`,
+      `product:${query.product}`,
+      "license:CCBY_COMPLIANT",
+      `timerange:${query.timerange}`,
+      `level:${query.level}`
+    ].join(";"),
+    reliabilityCheck: "true",
+    last: "true",
+    ts: String(Date.now())
   });
 
-  let parsedRows = 0;
-  for (const request of readyRequests.slice(0, 6)) {
-    try {
-      const output = await meteoHubFetchJson(`/api/data/${encodeURIComponent(request.fileoutput)}`, session);
-      const rows = flattenRows(output);
-      parsedRows += rows.length;
-      applyMeteoHubRows(measurements, rows);
-    } catch {
-      // Se un output storico non e piu scaricabile, passiamo al successivo.
+  return `/api/observations?${params.toString()}`;
+}
+
+function getMeteoHubAuthCandidates(session) {
+  const candidates = [session];
+  const accessKey = getMeteoHubAccessKey();
+  if (accessKey) {
+    candidates.push({ authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${accessKey}:`)}` });
+    if (process.env.METEOHUB_USERNAME) {
+      candidates.push({ authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
     }
+    candidates.push({ authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
+    candidates.push({ authMode: "x-api-key", extraHeaders: { "x-api-key": accessKey } });
+    candidates.push({ authMode: "x-access-key", extraHeaders: { "x-access-key": accessKey } });
   }
 
-  const filled = Object.values(measurements).flat().filter((row) => row.real).length;
+  return candidates.filter((candidate, index, all) =>
+    index === all.findIndex((item) => item.authMode === candidate.authMode && item.authHeader === candidate.authHeader)
+  );
+}
+
+async function fetchMeteoHubObservationRows(session) {
+  let lastResults = [];
+
+  for (const authCandidate of getMeteoHubAuthCandidates(session)) {
+    const results = [];
+
+    for (const query of METEOHUB_OBSERVATION_QUERIES) {
+      try {
+        const payload = await meteoHubFetchJson(buildMeteoHubObservationPath(query), authCandidate);
+        results.push({ type: query.type, rows: flattenRows(payload), authMode: authCandidate.authMode });
+      } catch (error) {
+        results.push({ type: query.type, rows: [], warning: error.message, authMode: authCandidate.authMode });
+      }
+    }
+
+    lastResults = results;
+    if (results.some((item) => item.rows.length > 0)) return results;
+    if (!results.every((item) => /HTTP 401|HTTP 403/.test(item.warning || ""))) return results;
+  }
+
+  return lastResults;
+}
+
+async function fetchMeteoHubMeasurements() {
+  const session = hasMeteoHubAccessKey()
+    ? { authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${getMeteoHubAccessKey()}:`)}` }
+    : hasMeteoHubCredentials()
+      ? { authMode: "basic-credentials" }
+      : { authMode: "anonymous" };
+
+  const measurements = buildEmptyMeasurements("MeteoHub");
+  const observations = await fetchMeteoHubObservationRows(session);
+  const warnings = observations.filter((item) => item.warning).map((item) => item.warning);
+  let parsedRows = 0;
+  let filled = 0;
+
+  observations.forEach((item) => {
+    parsedRows += item.rows.length;
+    filled += applyMeteoHubRows(measurements, item.rows, item.type);
+  });
 
   return {
     measurements,
-    requests: requests.slice(0, 8),
+    requests: [],
     filled,
     parsedRows,
+    authMode: observations.find((item) => item.rows.length > 0)?.authMode || session.authMode,
     warning: filled
       ? null
-      : "MeteoHub collegato, ma nessun output completato contiene ancora righe riconducibili alle stazioni configurate."
+      : warnings[0] || "MeteoHub raggiunto, ma le osservazioni realtime non sono ancora riconducibili alle stazioni configurate."
   };
 }
 
@@ -475,9 +618,11 @@ export async function getObservationData({ forceRefresh = false } = {}) {
     fetchedAt: new Date().toLocaleString("it-IT"),
     cache: { hit: false, updatedAt: new Date().toLocaleString("it-IT"), ttlSeconds: CACHE_TTL_MS / 1000 },
     meteoHub: {
-      connected: !meteoHub.warning || Boolean(meteoHub.requests?.length),
+      connected: !meteoHub.warning || meteoHub.filled > 0,
       filled: meteoHub.filled,
       requests: meteoHub.requests || [],
+      authMode: meteoHub.authMode || null,
+      parsedRows: meteoHub.parsedRows || 0,
       warning: meteoHub.warning || null
     },
     openMeteoFallbackCount: augmented.filled,
