@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCircle } from "lucide-react";
 
+const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
+const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
+const BULLETIN_RETENTION_MONTHS = 6;
+const LOCAL_PDF_MAX_BYTES = 3_500_000;
+
 const TERRITORY_KEYWORDS = [
   "firenze",
   "mugello",
@@ -66,14 +71,100 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^\$\{\}()|[\]\\]/g, "\\$&");
 }
 
-function getBulletinValidity(text) {
+const MONTHS_IT = {
+  gennaio: 0,
+  febbraio: 1,
+  marzo: 2,
+  aprile: 3,
+  maggio: 4,
+  giugno: 5,
+  luglio: 6,
+  agosto: 7,
+  settembre: 8,
+  ottobre: 9,
+  novembre: 10,
+  dicembre: 11
+};
+
+function parseItalianValidityDate(value) {
+  const match = String(value || "").match(/(\d{1,2})[.:](\d{2})\s+di\s+[A-Za-zÀ-ÿ]+,?\s+(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
+  if (!match) return null;
+
+  const [, hour, minute, day, monthName, year] = match;
+  const month = MONTHS_IT[monthName.toLowerCase()];
+  if (month === undefined) return null;
+
+  const date = new Date(Number(year), month, Number(day), Number(hour), Number(minute), 0, 0);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function getBulletinValidityDetails(text) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   const datePart = "\\d{1,2}[.:]\\d{2}\\s+di\\s+[A-Za-zÀ-ÿ]+,?\\s+\\d{1,2}\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4}";
   const match = normalized.match(new RegExp("Valido\\s+dalle\\s+ore\\s+(" + datePart + ")\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
-  if (!match) return null;
-  return "Valido dalle ore " + match[1].trim() + " alle ore " + match[2].trim();
+  if (!match) return { label: null, validFrom: null, validTo: null };
+
+  const fromText = match[1].trim();
+  const toText = match[2].trim();
+  return {
+    label: "Valido dalle ore " + fromText + " alle ore " + toText,
+    validFrom: parseItalianValidityDate(fromText),
+    validTo: parseItalianValidityDate(toText)
+  };
 }
 
+function addMonths(date, months) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function isRecentBulletin(item) {
+  const reference = item?.validTo || item?.uploadedAt;
+  const date = reference ? new Date(reference) : null;
+  return date && Number.isFinite(date.getTime()) && date >= addMonths(new Date(), -BULLETIN_RETENTION_MONTHS);
+}
+
+function isCurrentBulletin(item) {
+  if (!item?.validTo) return false;
+  const validTo = new Date(item.validTo);
+  return Number.isFinite(validTo.getTime()) && validTo >= new Date();
+}
+
+function pruneLocalArchive(items) {
+  return [...(Array.isArray(items) ? items : [])]
+    .filter(isRecentBulletin)
+    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0));
+}
+
+function readJsonStorage(key, fallback) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Se il browser non ha spazio sufficiente, manteniamo comunque la sessione corrente.
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve) => {
+    if (!file || file.size > LOCAL_PDF_MAX_BYTES) return resolve(null);
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
 function buildRelevantExtract(text, matches) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -142,6 +233,36 @@ export default function PdfParser({ onAlertDetected }) {
     };
   }, []);
 
+  useEffect(() => {
+    const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []));
+    writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
+
+    const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
+    if (localCurrent && isCurrentBulletin(localCurrent) && isRecentBulletin(localCurrent)) {
+      setResult(localCurrent);
+      setStatus("done");
+      setPdfUrl(localCurrent.pdfDataUrl || localCurrent.pdfUrl || null);
+      setViewerOpen(Boolean(localCurrent.pdfDataUrl || localCurrent.pdfUrl));
+      onAlertDetected?.(localCurrent);
+    } else if (localCurrent) {
+      writeJsonStorage(LOCAL_CURRENT_KEY, null);
+    }
+
+    fetch("/api/bulletins", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((archive) => {
+        if (!archive?.current || !isCurrentBulletin(archive.current)) return;
+        const next = { ...archive.current, archivePersistent: archive.persistent };
+        setResult((current) => current || next);
+        if (next.pdfUrl) {
+          setPdfUrl(next.pdfUrl);
+          setViewerOpen(true);
+        }
+        onAlertDetected?.(next);
+      })
+      .catch(() => {});
+  }, [onAlertDetected]);
+
   const borderClass = useMemo(() => {
     if (isDragging) return "border-sky-300 bg-sky-400/10";
     if (status === "error") return "border-emergency-red/70 bg-emergency-red/10";
@@ -171,18 +292,39 @@ export default function PdfParser({ onAlertDetected }) {
     try {
       const text = await extractPdfText(file);
       const detection = getBestAlertLevel(text);
+      const validityDetails = getBulletinValidityDetails(text);
+      const uploadedAt = new Date().toISOString();
       const payload = {
         ...detection,
+        id: uploadedAt + "-" + file.name.replace(/[^a-z0-9_.-]+/gi, "-").toLowerCase(),
         fileName: file.name,
         parsedAt: new Date().toLocaleString("it-IT"),
-        validity: getBulletinValidity(text),
+        uploadedAt,
+        validity: validityDetails.label,
+        validFrom: validityDetails.validFrom,
+        validTo: validityDetails.validTo,
         textPreview: buildRelevantExtract(text, detection.matches),
         textTerms: [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
       };
-      setResult(payload);
+      const pdfDataUrl = await fileToDataUrl(file);
+      const localPayload = { ...payload, pdfDataUrl };
+      const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []);
+      const nextArchive = pruneLocalArchive([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
+      writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
+      writeJsonStorage(LOCAL_CURRENT_KEY, localPayload);
+
+      setResult(localPayload);
       setStatus("done");
       setViewerOpen(true);
-      onAlertDetected?.(payload);
+      onAlertDetected?.(localPayload);
+
+      fetch("/api/bulletins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .catch(() => null);
     } catch (error) {
       setStatus("error");
       setResult({
