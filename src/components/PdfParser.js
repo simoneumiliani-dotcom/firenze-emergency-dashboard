@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, UploadCloud, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCircle } from "lucide-react";
 
 const TERRITORY_KEYWORDS = [
   "firenze",
@@ -62,6 +62,41 @@ function getBestAlertLevel(text) {
   };
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^\$\{\}()|[\]\\]/g, "\\$&");
+}
+
+function buildRelevantExtract(text, matches) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+
+  const searchTerms = [...new Set([...matches, "giallo", "arancione", "rosso", "firenze", "mugello", "sieve", "valdarno"])];
+  const lowerText = normalized.toLowerCase();
+  const firstIndex = searchTerms
+    .map((term) => lowerText.indexOf(term.toLowerCase()))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+
+  if (firstIndex === undefined) return normalized.slice(0, 1800);
+
+  const start = Math.max(0, firstIndex - 600);
+  const end = Math.min(normalized.length, firstIndex + 1800);
+  return (start > 0 ? "... " : "") + normalized.slice(start, end) + (end < normalized.length ? " ..." : "");
+}
+
+function HighlightedText({ text, terms }) {
+  if (!text) return null;
+  const uniqueTerms = [...new Set(terms.filter(Boolean))];
+  if (!uniqueTerms.length) return text;
+
+  const pattern = new RegExp("(" + uniqueTerms.map(escapeRegExp).join("|") + ")", "gi");
+  return String(text).split(pattern).map((part, index) => {
+    const highlighted = uniqueTerms.some((term) => part.toLowerCase() === term.toLowerCase());
+    if (!highlighted) return <span key={index}>{part}</span>;
+    return <mark key={index} className="rounded bg-emergency-yellow/25 px-1 text-yellow-100">{part}</mark>;
+  });
+}
+
 async function extractPdfText(file) {
   const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
 
@@ -88,6 +123,16 @@ export default function PdfParser({ onAlertDetected }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [extractOpen, setExtractOpen] = useState(false);
+  const objectUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
 
   const borderClass = useMemo(() => {
     if (isDragging) return "border-sky-300 bg-sky-400/10";
@@ -107,6 +152,13 @@ export default function PdfParser({ onAlertDetected }) {
 
     setStatus("reading");
     setResult(null);
+    setViewerOpen(false);
+    setExtractOpen(false);
+
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const nextPdfUrl = URL.createObjectURL(file);
+    objectUrlRef.current = nextPdfUrl;
+    setPdfUrl(nextPdfUrl);
 
     try {
       const text = await extractPdfText(file);
@@ -115,10 +167,12 @@ export default function PdfParser({ onAlertDetected }) {
         ...detection,
         fileName: file.name,
         parsedAt: new Date().toLocaleString("it-IT"),
-        textPreview: text.slice(0, 900)
+        textPreview: buildRelevantExtract(text, detection.matches),
+        textTerms: [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
       };
       setResult(payload);
       setStatus("done");
+      setViewerOpen(true);
       onAlertDetected?.(payload);
     } catch (error) {
       setStatus("error");
@@ -174,16 +228,50 @@ export default function PdfParser({ onAlertDetected }) {
           {status === "reading" && <p className="text-sm text-slate-300">Lettura del PDF in corso...</p>}
 
           {status === "done" && result && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emergency-green" />
                 <div>
-                  <p className="text-sm font-medium text-slate-100">{result.fileName}</p>
+                  <button
+                    type="button"
+                    onClick={() => setViewerOpen((current) => !current)}
+                    className="text-left text-sm font-medium text-slate-100 underline-offset-4 hover:text-sky-100 hover:underline"
+                  >
+                    {result.fileName}
+                  </button>
                   <p className="text-xs text-slate-400">{result.reason}</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
-                Livello rilevato: <span className="font-semibold">{result.level}</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewerOpen((current) => !current)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20"
+                >
+                  <Eye className="h-4 w-4" />
+                  {viewerOpen ? "Chiudi PDF" : "Leggi bollettino"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtractOpen((current) => !current)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-3 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
+                >
+                  <FileText className="h-4 w-4" />
+                  Testo estratto
+                </button>
+                {pdfUrl && (
+                  <a
+                    href={pdfUrl}
+                    download={result.fileName}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-3 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
+                  >
+                    <Download className="h-4 w-4" />
+                    Scarica
+                  </a>
+                )}
+                <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
+                  Livello rilevato: <span className="font-semibold">{result.level}</span>
+                </div>
               </div>
             </div>
           )}
@@ -209,6 +297,32 @@ export default function PdfParser({ onAlertDetected }) {
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 p-3 text-sm text-orange-100">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               Verificare sempre il bollettino ufficiale prima di attivare procedure operative.
+            </div>
+          )}
+
+          {viewerOpen && pdfUrl && (
+            <div className="mt-3 overflow-hidden rounded-lg border border-emergency-line bg-black/30">
+              <div className="flex items-center justify-between border-b border-emergency-line px-3 py-2">
+                <p className="text-sm font-medium text-slate-100">Bollettino ufficiale</p>
+                <button type="button" onClick={() => setViewerOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
+              </div>
+              <iframe
+                src={pdfUrl}
+                title="Anteprima bollettino PDF"
+                className="h-[32rem] w-full bg-slate-950 sm:h-[38rem]"
+              />
+            </div>
+          )}
+
+          {extractOpen && result?.textPreview && (
+            <div className="mt-3 rounded-lg border border-emergency-line bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-slate-100">Estratto testuale rilevante</p>
+                <button type="button" onClick={() => setExtractOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
+              </div>
+              <p className="max-h-56 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                <HighlightedText text={result.textPreview} terms={result.textTerms || []} />
+              </p>
             </div>
           )}
         </div>
