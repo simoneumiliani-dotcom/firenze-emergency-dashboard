@@ -607,7 +607,7 @@ export default function DashboardPage() {
     try {
       const response = await fetch("/api/observations", { cache: "default" });
       const payload = await response.json();
-      setObservationData(normalizeObservationData(payload));
+      setObservationData((current) => mergeObservationData(current, payload));
     } catch (error) {
       setObservationData(normalizeObservationData({ warning: "CFR Toscana non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
     } finally {

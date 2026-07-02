@@ -6,6 +6,8 @@ const CACHE_TTL_MS = Number(process.env.OBSERVATION_CACHE_TTL_SECONDS || 900) * 
 const CFR_FETCH_DEADLINE_MS = Number(process.env.CFR_FETCH_DEADLINE_MS || 8500);
 const DEFAULT_CACHE_MAX_AGE_SECONDS = Number(process.env.OBSERVATION_CACHE_MAX_AGE_SECONDS || 300);
 const CFR_STATION_TIMEOUT_MS = Number(process.env.CFR_STATION_TIMEOUT_MS || 3500);
+const PERSISTED_CACHE_KEY = process.env.OBSERVATION_CACHE_KEY || "firenze:observation-cache:v1";
+const PERSISTED_CACHE_TTL_SECONDS = Number(process.env.OBSERVATION_PERSISTED_CACHE_TTL_SECONDS || 21600);
 
 const CFR_TYPES = {
   hydrometry: "idro",
@@ -30,6 +32,74 @@ function getCache() {
     globalThis.__firenzeObservationCache = { payload: null, updatedAt: 0 };
   }
   return globalThis.__firenzeObservationCache;
+}
+
+function hasPersistentCache() {
+  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+function getKvUrl(path) {
+  return process.env.KV_REST_API_URL.replace(/\/+$/, "") + path;
+}
+
+async function readPersistedCache() {
+  if (!hasPersistentCache()) return null;
+
+  try {
+    const response = await fetch(getKvUrl("/get/" + encodeURIComponent(PERSISTED_CACHE_KEY)), {
+      headers: { Authorization: "Bearer " + process.env.KV_REST_API_TOKEN },
+      cache: "no-store"
+    });
+    if (!response.ok) return null;
+
+    const body = await response.json();
+    const value = body?.result;
+    if (!value) return null;
+    return typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedCache(payload) {
+  if (!hasPersistentCache()) return false;
+
+  try {
+    const response = await fetch(getKvUrl("/pipeline"), {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + process.env.KV_REST_API_TOKEN,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify([
+        ["SET", PERSISTED_CACHE_KEY, JSON.stringify(payload), "EX", PERSISTED_CACHE_TTL_SECONDS]
+      ])
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function readSharedCache() {
+  const cache = getCache();
+  const now = Date.now();
+  if (cache.payload && now - cache.updatedAt < CACHE_TTL_MS) return { payload: cache.payload, mode: "memory" };
+
+  const persisted = await readPersistedCache();
+  if (!persisted?.measurements) return null;
+
+  cache.payload = persisted;
+  cache.updatedAt = now;
+  return { payload: persisted, mode: hasPersistentCache() ? "vercel-kv" : "memory" };
+}
+
+async function writeSharedCache(payload) {
+  const cache = getCache();
+  cache.payload = payload;
+  cache.updatedAt = Date.now();
+  const persisted = await writePersistedCache(payload);
+  return persisted ? "vercel-kv" : "memory";
 }
 
 function chunk(items, size) {
@@ -396,6 +466,30 @@ function mergeMeasurements(baseMeasurements, realtimeMeasurements) {
   ]));
 }
 
+function countPopulatedMeasurements(measurements) {
+  return Object.values(measurements || {})
+    .flat()
+    .filter((station) => station.value !== null && station.value !== undefined).length;
+}
+
+function buildShellPayload() {
+  return {
+    source: "CFR Toscana",
+    primarySource: "CFR Toscana",
+    fallbackSource: null,
+    fetchedAt: new Date().toISOString(),
+    measurements: buildEmptyMeasurements("CFR Toscana"),
+    cfr: {
+      endpoint: "monitoraggio/dettaglio.php",
+      attemptedStations: 0,
+      populatedStations: 0,
+      mode: "empty-cache"
+    },
+    openMeteoFallbackCount: 0,
+    warning: null
+  };
+}
+
 export function getObservationCacheHeaders({ realtime = false } = {}) {
   if (realtime) return { "Cache-Control": "no-store" };
   return {
@@ -406,12 +500,11 @@ export function getObservationCacheHeaders({ realtime = false } = {}) {
 export async function getObservationData({ forceRefresh = false, selected = [], batch = null, type = null, batchSize = 24, realtime = false } = {}) {
   const selectedStations = parseSelectedStations(selected);
   const batchSelection = batch === null || batch === undefined ? [] : buildBatchSelection({ type, batch, batchSize });
-  const realtimeSelection = selectedStations.length ? selectedStations : batchSelection;
 
-  if (realtimeSelection.length) {
+  if (selectedStations.length) {
     const fetchedAt = new Date().toISOString();
-    const cfrResult = await fetchCfrMeasurementsForSelection(realtimeSelection);
-    const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements, realtimeSelection);
+    const cfrResult = await fetchCfrMeasurementsForSelection(selectedStations);
+    const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements, selectedStations);
     return {
       source: "CFR Toscana",
       primarySource: "CFR Toscana",
@@ -422,41 +515,84 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
         endpoint: "monitoraggio/dettaglio.php",
         attemptedStations: cfrResult.attempted,
         populatedStations: cfrResult.filled,
-        mode: selectedStations.length ? "realtime-selected" : "batch",
-        selectionSize: realtimeSelection.length,
-        batch,
-        type
+        mode: "realtime-selected",
+        selectionSize: selectedStations.length,
+        batch: null,
+        type: null
       },
       openMeteoFallbackCount: openMeteoResult.filled,
-      warning: cfrResult.filled
+      warning: cfrResult.filled || openMeteoResult.filled
         ? null
         : "CFR Toscana non ha restituito dati leggibili per le stazioni richieste."
     };
   }
 
-  const cache = getCache();
-  const now = Date.now();
-  if (!forceRefresh && cache.payload && now - cache.updatedAt < CACHE_TTL_MS) {
-    return { ...cache.payload, cache: { hit: true, ttlSeconds: Math.round(CACHE_TTL_MS / 1000), mode: "memory" } };
+  if (batchSelection.length) {
+    const fetchedAt = new Date().toISOString();
+    const cached = await readSharedCache();
+    const basePayload = cached?.payload || buildShellPayload();
+    const cfrResult = await fetchCfrMeasurementsForSelection(batchSelection);
+    const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements, batchSelection);
+    const measurements = mergeMeasurements(basePayload.measurements, openMeteoResult.measurements);
+    const cacheMode = await writeSharedCache({
+      ...basePayload,
+      source: "CFR Toscana",
+      primarySource: "CFR Toscana",
+      fallbackSource: openMeteoResult.filled ? "Open-Meteo" : basePayload.fallbackSource,
+      fetchedAt,
+      measurements,
+      cfr: {
+        endpoint: "monitoraggio/dettaglio.php",
+        attemptedStations: (basePayload.cfr?.attemptedStations || 0) + cfrResult.attempted,
+        populatedStations: countPopulatedMeasurements(measurements),
+        lastBatchAttemptedStations: cfrResult.attempted,
+        lastBatchPopulatedStations: cfrResult.filled,
+        mode: "programmed-batch-cache",
+        selectionSize: batchSelection.length,
+        batch,
+        type
+      },
+      openMeteoFallbackCount: (basePayload.openMeteoFallbackCount || 0) + openMeteoResult.filled,
+      warning: cfrResult.filled || openMeteoResult.filled
+        ? null
+        : "Batch CFR eseguito senza nuovi dati leggibili."
+    });
+
+    const updated = getCache().payload;
+    return {
+      ...updated,
+      cache: {
+        hit: false,
+        mode: cacheMode,
+        persistent: cacheMode === "vercel-kv",
+        ttlSeconds: Math.round(CACHE_TTL_MS / 1000)
+      }
+    };
   }
 
-  const payload = {
-    source: "CFR Toscana",
-    primarySource: "CFR Toscana",
-    fallbackSource: null,
-    fetchedAt: new Date().toISOString(),
-    measurements: buildEmptyMeasurements("CFR Toscana"),
-    cfr: {
-      endpoint: "monitoraggio/dettaglio.php",
-      attemptedStations: 0,
-      populatedStations: 0,
-      mode: "cdn-cache-shell"
-    },
-    openMeteoFallbackCount: 0,
-    warning: null
-  };
+  const cached = forceRefresh ? null : await readSharedCache();
+  if (cached?.payload) {
+    return {
+      ...cached.payload,
+      cache: {
+        hit: true,
+        mode: cached.mode,
+        persistent: cached.mode === "vercel-kv",
+        ttlSeconds: Math.round(CACHE_TTL_MS / 1000)
+      }
+    };
+  }
 
-  cache.payload = payload;
-  cache.updatedAt = now;
-  return { ...payload, cache: { hit: false, ttlSeconds: Math.round(CACHE_TTL_MS / 1000), mode: "cdn" } };
+  const payload = buildShellPayload();
+  const cacheMode = await writeSharedCache(payload);
+  return {
+    ...payload,
+    cfr: { ...payload.cfr, mode: "cdn-cache-shell" },
+    cache: {
+      hit: false,
+      mode: cacheMode,
+      persistent: cacheMode === "vercel-kv",
+      ttlSeconds: Math.round(CACHE_TTL_MS / 1000)
+    }
+  };
 }
