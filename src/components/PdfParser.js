@@ -66,6 +66,13 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^\$\{\}()|[\]\\]/g, "\\$&");
 }
 
+function getBulletinValidity(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  const match = normalized.match(/Valido\s+dalle\s+ore\s+(.+?)\s+alle\s+ore\s+(.+?)(?=\s+(?:BOLLETTINO|ZONE|Legenda|Criticit|Rischio|$))/i);
+  if (!match) return null;
+  return "Valido dalle ore " + match[1].trim() + " alle ore " + match[2].trim();
+}
+
 function buildRelevantExtract(text, matches) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -167,6 +174,7 @@ export default function PdfParser({ onAlertDetected }) {
         ...detection,
         fileName: file.name,
         parsedAt: new Date().toLocaleString("it-IT"),
+        validity: getBulletinValidity(text),
         textPreview: buildRelevantExtract(text, detection.matches),
         textTerms: [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
       };
@@ -229,8 +237,8 @@ export default function PdfParser({ onAlertDetected }) {
 
           {status === "done" && result && (
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emergency-green" />
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 text-emergency-green" />
                 <div>
                   <button
                     type="button"
@@ -240,9 +248,32 @@ export default function PdfParser({ onAlertDetected }) {
                     {result.fileName}
                   </button>
                   <p className="text-xs text-slate-400">{result.reason}</p>
+                  {result.validity && <p className="mt-1 text-xs font-medium text-sky-100">{result.validity}</p>}
                 </div>
               </div>
+              <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
+                Livello rilevato: <span className="font-semibold">{result.level}</span>
+              </div>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="flex items-center gap-2 text-sm text-red-100">
+              <XCircle className="h-5 w-5 text-emergency-red" />
+              {result?.message || "Errore durante il caricamento."}
+            </div>
+          )}
+
+          {status === "done" && result && (
+            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
+                {result.matches?.map((match) => (
+                  <span key={match} className="rounded-full border border-emergency-line bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300">
+                    {match}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
                 <button
                   type="button"
                   onClick={() => setViewerOpen((current) => !current)}
@@ -269,27 +300,7 @@ export default function PdfParser({ onAlertDetected }) {
                     Scarica
                   </a>
                 )}
-                <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
-                  Livello rilevato: <span className="font-semibold">{result.level}</span>
-                </div>
               </div>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="flex items-center gap-2 text-sm text-red-100">
-              <XCircle className="h-5 w-5 text-emergency-red" />
-              {result?.message || "Errore durante il caricamento."}
-            </div>
-          )}
-
-          {!!result?.matches?.length && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {result.matches.map((match) => (
-                <span key={match} className="rounded-full border border-emergency-line bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300">
-                  {match}
-                </span>
-              ))}
             </div>
           )}
 
