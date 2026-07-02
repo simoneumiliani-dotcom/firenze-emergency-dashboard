@@ -7,16 +7,9 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  CloudRain,
   Database,
-  Droplets,
-  Gauge,
   MapPin,
   RefreshCcw,
-  Snowflake,
-  Thermometer,
-  Waves,
-  Wind
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -48,15 +41,6 @@ const MapDashboard = dynamic(() => import("@/components/MapDashboard"), {
     </div>
   )
 });
-
-const ICONS = {
-  rain: CloudRain,
-  water: Waves,
-  temperature: Thermometer,
-  wind: Wind,
-  humidity: Droplets,
-  snow: Snowflake
-};
 
 const WEBCAMS = [
   { id: "firenze-centro", title: "Firenze Centro", area: "Arno e centro storico", imageUrl: "https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?auto=format&fit=crop&w=900&q=80" },
@@ -203,18 +187,6 @@ function TrendIcon({ trend }) {
   if (trend === "up") return <ArrowUp className="h-4 w-4 text-emergency-orange" aria-label="in aumento" />;
   if (trend === "down") return <ArrowDown className="h-4 w-4 text-sky-300" aria-label="in diminuzione" />;
   return <Activity className="h-4 w-4 text-slate-400" aria-label="stabile" />;
-}
-
-function StatCard({ icon: Icon, label, value }) {
-  return (
-    <div className="panel p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-400">{label}</p>
-        <Icon className="h-5 w-5 text-sky-300" />
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-slate-100">{value}</p>
-    </div>
-  );
 }
 
 // Sintesi operativa del catalogo usato da pannelli, mappa e fallback su coordinate.
@@ -769,13 +741,6 @@ export default function DashboardPage() {
         </header>
 
         <PdfParser onAlertDetected={setAlert} />
-
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-          {Object.entries(MEASUREMENT_TYPES).map(([type, meta]) => {
-            const Icon = ICONS[meta.icon] || Gauge;
-            return <StatCard key={type} icon={Icon} label={meta.label} value={loading ? "..." : observationData.measurements[type]?.length || 0} />;
-          })}
-        </section>
 
         <MeteoHubStationOverview
           measurements={observationData.measurements}
