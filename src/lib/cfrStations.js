@@ -65,6 +65,33 @@ TOS30290300|Firenzuola
 TOS30290400|Palazzuolo sul Senio
 `;
 
+const HYDROMETRY_RAW = `
+TOS01004591|Incisa Valle
+TOS01004611|Bilancino
+TOS01004621|S. Piero a Sieve-Sieve
+TOS01004623|S. Piero a Sieve-Carza
+TOS01004641|Fornacina
+TOS01004642|Fornacina 2 ul
+TOS01004659|Nave di Rosano
+TOS01004661|Nave di Rosano valle
+TOS01004679|Firenze Uffizi
+TOS01004683|Firenze Uffizi 3
+TOS01004702|Ponte alle Mosse
+TOS01004705|Greve
+TOS01004723|Tavarnuzze
+TOS01004731|Ponte di Scandicci
+TOS01004791|S. Piero a Ponti
+TOS01004811|Ponte a Signa
+TOS01004901|Montelupo
+TOS01004921|Turbone
+TOS01004941|Empoli
+TOS01005001|Fucecchio valle
+TOS03004729|Ponte a Niccheri
+TOS03004935|Empoli-Pontorme
+TOS15004682|Firenze Uffizi 2
+TOS19000704|Grassina
+`;
+
 const THERMO_RAW = `
 TOS01000901|Vallombrosa
 TOS01000916|Monte di Fo
@@ -354,7 +381,7 @@ function stationsFromCatalog(type) {
 
 const LEGACY_STATIONS_BY_TYPE = {
   pluviometry: parseStations(HYDRO_PLUVIO_RAW, "pluviometry"),
-  hydrometry: parseStations(HYDRO_PLUVIO_RAW, "hydrometry"),
+  hydrometry: parseStations(HYDROMETRY_RAW, "hydrometry"),
   thermometry: parseStations(THERMO_RAW, "thermometry"),
   anemometry: parseStations(WIND_HUMIDITY_RAW, "anemometry"),
   hygrometry: parseStations(WIND_HUMIDITY_RAW, "hygrometry"),
@@ -366,6 +393,8 @@ const LEGACY_STATIONS_BY_TYPE = {
 };
 
 export const STATIONS_BY_TYPE = Object.fromEntries(Object.keys(MEASUREMENT_TYPES).map((type) => {
+  if (type === "hydrometry") return [type, LEGACY_STATIONS_BY_TYPE.hydrometry];
+
   const catalogStations = stationsFromCatalog(type);
   return [type, catalogStations.length ? catalogStations : LEGACY_STATIONS_BY_TYPE[type]];
 }));
@@ -374,12 +403,12 @@ export const ALL_STATIONS = uniqueById(Object.values(STATIONS_BY_TYPE).flat());
 
 export const DEFAULT_PANEL_CONFIGS = [
   { id: "panel-1", type: "pluviometry", stationIds: ["TOS01001096", "TOS01000999", "TOS01004941"] },
-  { id: "panel-2", type: "hydrometry", stationIds: ["TOS01004621", "TOS01004659", "TOS01004811"] },
+  { id: "panel-2", type: "hydrometry", stationIds: ["TOS01004679", "TOS01004621", "TOS01004659"] },
   { id: "panel-3", type: "thermometry", stationIds: ["TOS01001096", "TOS01001041", "TOS11000108"] },
   { id: "panel-4", type: "anemometry", stationIds: ["TOS01000901", "TOS01001041", "TOS11000108"] }
 ];
 
-export const DEFAULT_CHART_STATION_IDS = ["TOS01004621", "TOS01004659", "TOS01004811"];
+export const DEFAULT_CHART_STATION_IDS = ["TOS01004679", "TOS01004621", "TOS01004659"];
 
 export const CHART_COLORS = ["#38bdf8", "#22c55e", "#facc15", "#fb923c", "#ef4444", "#a78bfa", "#14b8a6", "#f472b6"];
 

@@ -1,1262 +1,1224 @@
 ﻿{
-    "generatedAt":  "2026-07-01T14:48:53",
-    "area":  {
-                 "name":  "Provincia/Citta Metropolitana di Firenze",
-                 "method":  "bounding-box preliminare; da sostituire con point-in-polygon su confine amministrativo ufficiale",
-                 "bounds":  {
-                                "minLat":  43.45,
-                                "maxLat":  44.2,
-                                "minLng":  10.75,
-                                "maxLng":  11.75
-                            }
-             },
-    "sensorLabels":  {
-                         "pluviometry":  "Pluviometria",
-                         "hydrometry":  "Idrometria",
-                         "thermometry":  "Termometria",
-                         "anemometry":  "Anemometria",
-                         "hygrometry":  "Igrometria",
-                         "nivometry":  "Nivometria"
-                     },
-    "stations":  [
-                     {
-                         "id":  "TOS01000991",
-                         "name":  "Ronta",
-                         "lat":  44.003,
-                         "lng":  11.431,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004679",
-                         "name":  "Firenze Uffizi",
-                         "lat":  43.768,
-                         "lng":  11.256,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000021",
-                         "name":  "Tavarnelle",
-                         "lat":  43.562,
-                         "lng":  11.172,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001137",
-                         "name":  "S. Donato in Collina",
-                         "lat":  43.728,
-                         "lng":  11.386,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001059",
-                         "name":  "S. Brigida all\u0027Opaco",
-                         "lat":  43.842,
-                         "lng":  11.415,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004901",
-                         "name":  "Montelupo",
-                         "lat":  43.729,
-                         "lng":  11.018,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001189",
-                         "name":  "Le Croci di Calenzano",
-                         "lat":  43.891,
-                         "lng":  11.173,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004705",
-                         "name":  "Greve",
-                         "lat":  43.587,
-                         "lng":  11.317,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000931",
-                         "name":  "Ponte a Olmo",
-                         "lat":  43.884,
-                         "lng":  11.329,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03004911",
-                         "name":  "Sambuca",
-                         "lat":  43.568,
-                         "lng":  11.21,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001029",
-                         "name":  "Dicomano",
-                         "lat":  43.893,
-                         "lng":  11.526,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001103",
-                         "name":  "Caldine",
-                         "lat":  43.819,
-                         "lng":  11.302,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001097",
-                         "name":  "Firenze Orto Botanico",
-                         "lat":  43.777,
-                         "lng":  11.262,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004784",
-                         "name":  "Calenzano",
-                         "lat":  43.854,
-                         "lng":  11.166,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000926",
-                         "name":  "Le Croci (Barberino)",
-                         "lat":  44.004,
-                         "lng":  11.226,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000901",
-                         "name":  "Vallombrosa",
-                         "lat":  43.732,
-                         "lng":  11.556,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004591",
-                         "name":  "Incisa Valle",
-                         "lat":  43.654,
-                         "lng":  11.449,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004725",
-                         "name":  "Strada in Chianti",
-                         "lat":  43.656,
-                         "lng":  11.295,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30248400",
-                         "name":  "Casaglia",
-                         "lat":  44.071,
-                         "lng":  11.565,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004723",
-                         "name":  "Tavarnuzze",
-                         "lat":  43.71,
-                         "lng":  11.228,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001096",
-                         "name":  "Firenze Universita",
-                         "lat":  43.777,
-                         "lng":  11.258,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004921",
-                         "name":  "Turbone",
-                         "lat":  43.674,
-                         "lng":  11.01,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001445",
-                         "name":  "Poggio Aglione",
-                         "lat":  43.692,
-                         "lng":  10.867,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000023",
-                         "name":  "Lamole",
-                         "lat":  43.514,
-                         "lng":  11.376,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001135",
-                         "name":  "Poggio alla Croce",
-                         "lat":  43.634,
-                         "lng":  11.452,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30287700",
-                         "name":  "Monte Faggiola",
-                         "lat":  44.126,
-                         "lng":  11.48,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30290300",
-                         "name":  "Firenzuola",
-                         "lat":  44.12,
-                         "lng":  11.379,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30290400",
-                         "name":  "Palazzuolo sul Senio",
-                         "lat":  44.113,
-                         "lng":  11.548,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03004729",
-                         "name":  "Ponte a Niccheri",
-                         "lat":  43.729,
-                         "lng":  11.314,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000505",
-                         "name":  "Casa Sartori",
-                         "lat":  43.676,
-                         "lng":  10.902,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000022",
-                         "name":  "Barberino",
-                         "lat":  44,
-                         "lng":  11.238,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001225",
-                         "name":  "Case Passerini",
-                         "lat":  43.812,
-                         "lng":  11.165,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001099",
-                         "name":  "Firenze Giardino di Boboli",
-                         "lat":  43.763,
-                         "lng":  11.249,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000017",
-                         "name":  "Borgo S. Lorenzo 2",
-                         "lat":  43.955,
-                         "lng":  11.386,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000057",
-                         "name":  "Sambuca",
-                         "lat":  43.568,
-                         "lng":  11.21,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000891",
-                         "name":  "Il Palagio",
-                         "lat":  43.762,
-                         "lng":  11.381,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000071",
-                         "name":  "Cerreto Guidi",
-                         "lat":  43.758,
-                         "lng":  10.878,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000108",
-                         "name":  "Giogo",
-                         "lat":  44.006,
-                         "lng":  11.49,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004795",
-                         "name":  "Sesto Fiorentino",
-                         "lat":  43.833,
-                         "lng":  11.199,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000911",
-                         "name":  "Cavallina",
-                         "lat":  43.979,
-                         "lng":  11.263,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000961",
-                         "name":  "S. Agata di Mugello",
-                         "lat":  43.998,
-                         "lng":  11.355,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004941",
-                         "name":  "Empoli",
-                         "lat":  43.718,
-                         "lng":  10.947,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000941",
-                         "name":  "Vaglia",
-                         "lat":  43.913,
-                         "lng":  11.28,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004683",
-                         "name":  "Firenze Uffizi 3",
-                         "lat":  43.768,
-                         "lng":  11.256,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004642",
-                         "name":  "Fornacina 2 ul",
-                         "lat":  43.918,
-                         "lng":  11.319,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01005001",
-                         "name":  "Fucecchio valle",
-                         "lat":  43.731,
-                         "lng":  10.811,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000916",
-                         "name":  "Monte di Fo",
-                         "lat":  44.006,
-                         "lng":  11.286,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004611",
-                         "name":  "Bilancino",
-                         "lat":  44,
-                         "lng":  11.275,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004791",
-                         "name":  "S. Piero a Ponti",
-                         "lat":  43.819,
-                         "lng":  11.111,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000999",
-                         "name":  "Borgo S. Lorenzo",
-                         "lat":  43.955,
-                         "lng":  11.386,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03004373",
-                         "name":  "Firenzuola Coniale",
-                         "lat":  44.119,
-                         "lng":  11.379,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30290200",
-                         "name":  "Piancaldoli",
-                         "lat":  44.199,
-                         "lng":  11.339,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004971",
-                         "name":  "Castelfiorentino",
-                         "lat":  43.609,
-                         "lng":  10.969,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004623",
-                         "name":  "S. Piero a Sieve-Carza",
-                         "lat":  43.963,
-                         "lng":  11.323,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001041",
-                         "name":  "Consuma",
-                         "lat":  43.785,
-                         "lng":  11.585,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000089",
-                         "name":  "Pelago",
-                         "lat":  43.772,
-                         "lng":  11.503,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001102",
-                         "name":  "Cercina",
-                         "lat":  43.843,
-                         "lng":  11.244,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004641",
-                         "name":  "Fornacina",
-                         "lat":  43.918,
-                         "lng":  11.319,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000073",
-                         "name":  "Greve in Chianti",
-                         "lat":  43.587,
-                         "lng":  11.317,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001129",
-                         "name":  "Ferrone",
-                         "lat":  43.6,
-                         "lng":  11.308,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004915",
-                         "name":  "Montespertoli",
-                         "lat":  43.644,
-                         "lng":  11.073,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004731",
-                         "name":  "Ponte di Scandicci",
-                         "lat":  43.758,
-                         "lng":  11.184,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000979",
-                         "name":  "Razzuolo",
-                         "lat":  44.088,
-                         "lng":  11.455,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01000921",
-                         "name":  "Mangona",
-                         "lat":  44.044,
-                         "lng":  11.217,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004702",
-                         "name":  "Ponte alle Mosse",
-                         "lat":  43.781,
-                         "lng":  11.23,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS19000704",
-                         "name":  "Grassina",
-                         "lat":  43.734,
-                         "lng":  11.302,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000024",
-                         "name":  "Remole",
-                         "lat":  43.77,
-                         "lng":  11.426,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004659",
-                         "name":  "Nave di Rosano",
-                         "lat":  43.77,
-                         "lng":  11.426,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30250000",
-                         "name":  "Marradi",
-                         "lat":  44.073,
-                         "lng":  11.613,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004661",
-                         "name":  "Nave di Rosano valle",
-                         "lat":  43.77,
-                         "lng":  11.426,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30248000",
-                         "name":  "Bibbiana",
-                         "lat":  44.064,
-                         "lng":  11.638,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03004935",
-                         "name":  "Empoli-Pontorme",
-                         "lat":  43.72,
-                         "lng":  10.959,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001001",
-                         "name":  "Monte Giovi",
-                         "lat":  43.857,
-                         "lng":  11.456,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004967",
-                         "name":  "Certaldo",
-                         "lat":  43.548,
-                         "lng":  11.041,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001371",
-                         "name":  "Vinci",
-                         "lat":  43.783,
-                         "lng":  10.923,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004811",
-                         "name":  "Ponte a Signa",
-                         "lat":  43.784,
-                         "lng":  11.095,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001011",
-                         "name":  "Villore",
-                         "lat":  43.929,
-                         "lng":  11.548,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS11000504",
-                         "name":  "Monteboro",
-                         "lat":  43.717,
-                         "lng":  10.971,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS03001145",
-                         "name":  "Vingone",
-                         "lat":  43.775,
-                         "lng":  11.177,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01001215",
-                         "name":  "S. Giusto",
-                         "lat":  43.759,
-                         "lng":  11.171,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS01004621",
-                         "name":  "S. Piero a Sieve-Sieve",
-                         "lat":  43.963,
-                         "lng":  11.323,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS30287500",
-                         "name":  "Barco",
-                         "lat":  44.134,
-                         "lng":  11.4,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "pluviometry",
-                                         "hydrometry",
-                                         "thermometry",
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     },
-                     {
-                         "id":  "TOS15004682",
-                         "name":  "Firenze Uffizi 2",
-                         "lat":  43.768,
-                         "lng":  11.256,
-                         "province":  "FI",
-                         "source":  "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
-                         "sensors":  [
-                                         "anemometry",
-                                         "hygrometry",
-                                         "nivometry"
-                                     ]
-                     }
-                 ]
+  "generatedAt": "2026-07-01T14:48:53",
+  "area": {
+    "name": "Provincia/Citta Metropolitana di Firenze",
+    "method": "bounding-box preliminare; da sostituire con point-in-polygon su confine amministrativo ufficiale",
+    "bounds": {
+      "minLat": 43.45,
+      "maxLat": 44.2,
+      "minLng": 10.75,
+      "maxLng": 11.75
+    }
+  },
+  "sensorLabels": {
+    "pluviometry": "Pluviometria",
+    "hydrometry": "Idrometria",
+    "thermometry": "Termometria",
+    "anemometry": "Anemometria",
+    "hygrometry": "Igrometria",
+    "nivometry": "Nivometria"
+  },
+  "stations": [
+    {
+      "id": "TOS01000991",
+      "name": "Ronta",
+      "lat": 44.003,
+      "lng": 11.431,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004679",
+      "name": "Firenze Uffizi",
+      "lat": 43.768,
+      "lng": 11.256,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000021",
+      "name": "Tavarnelle",
+      "lat": 43.562,
+      "lng": 11.172,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001137",
+      "name": "S. Donato in Collina",
+      "lat": 43.728,
+      "lng": 11.386,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001059",
+      "name": "S. Brigida all'Opaco",
+      "lat": 43.842,
+      "lng": 11.415,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004901",
+      "name": "Montelupo",
+      "lat": 43.729,
+      "lng": 11.018,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001189",
+      "name": "Le Croci di Calenzano",
+      "lat": 43.891,
+      "lng": 11.173,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004705",
+      "name": "Greve",
+      "lat": 43.587,
+      "lng": 11.317,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000931",
+      "name": "Ponte a Olmo",
+      "lat": 43.884,
+      "lng": 11.329,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03004911",
+      "name": "Sambuca",
+      "lat": 43.568,
+      "lng": 11.21,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001029",
+      "name": "Dicomano",
+      "lat": 43.893,
+      "lng": 11.526,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001103",
+      "name": "Caldine",
+      "lat": 43.819,
+      "lng": 11.302,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001097",
+      "name": "Firenze Orto Botanico",
+      "lat": 43.777,
+      "lng": 11.262,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004784",
+      "name": "Calenzano",
+      "lat": 43.854,
+      "lng": 11.166,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000926",
+      "name": "Le Croci (Barberino)",
+      "lat": 44.004,
+      "lng": 11.226,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000901",
+      "name": "Vallombrosa",
+      "lat": 43.732,
+      "lng": 11.556,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004591",
+      "name": "Incisa Valle",
+      "lat": 43.654,
+      "lng": 11.449,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004725",
+      "name": "Strada in Chianti",
+      "lat": 43.656,
+      "lng": 11.295,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30248400",
+      "name": "Casaglia",
+      "lat": 44.071,
+      "lng": 11.565,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004723",
+      "name": "Tavarnuzze",
+      "lat": 43.71,
+      "lng": 11.228,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001096",
+      "name": "Firenze Universita",
+      "lat": 43.777,
+      "lng": 11.258,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004921",
+      "name": "Turbone",
+      "lat": 43.674,
+      "lng": 11.01,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001445",
+      "name": "Poggio Aglione",
+      "lat": 43.692,
+      "lng": 10.867,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000023",
+      "name": "Lamole",
+      "lat": 43.514,
+      "lng": 11.376,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001135",
+      "name": "Poggio alla Croce",
+      "lat": 43.634,
+      "lng": 11.452,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30287700",
+      "name": "Monte Faggiola",
+      "lat": 44.126,
+      "lng": 11.48,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30290300",
+      "name": "Firenzuola",
+      "lat": 44.12,
+      "lng": 11.379,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30290400",
+      "name": "Palazzuolo sul Senio",
+      "lat": 44.113,
+      "lng": 11.548,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03004729",
+      "name": "Ponte a Niccheri",
+      "lat": 43.729,
+      "lng": 11.314,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000505",
+      "name": "Casa Sartori",
+      "lat": 43.676,
+      "lng": 10.902,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000022",
+      "name": "Barberino",
+      "lat": 44,
+      "lng": 11.238,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001225",
+      "name": "Case Passerini",
+      "lat": 43.812,
+      "lng": 11.165,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001099",
+      "name": "Firenze Giardino di Boboli",
+      "lat": 43.763,
+      "lng": 11.249,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000017",
+      "name": "Borgo S. Lorenzo 2",
+      "lat": 43.955,
+      "lng": 11.386,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000057",
+      "name": "Sambuca",
+      "lat": 43.568,
+      "lng": 11.21,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000891",
+      "name": "Il Palagio",
+      "lat": 43.762,
+      "lng": 11.381,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000071",
+      "name": "Cerreto Guidi",
+      "lat": 43.758,
+      "lng": 10.878,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000108",
+      "name": "Giogo",
+      "lat": 44.006,
+      "lng": 11.49,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004795",
+      "name": "Sesto Fiorentino",
+      "lat": 43.833,
+      "lng": 11.199,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000911",
+      "name": "Cavallina",
+      "lat": 43.979,
+      "lng": 11.263,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000961",
+      "name": "S. Agata di Mugello",
+      "lat": 43.998,
+      "lng": 11.355,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004941",
+      "name": "Empoli",
+      "lat": 43.718,
+      "lng": 10.947,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000941",
+      "name": "Vaglia",
+      "lat": 43.913,
+      "lng": 11.28,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004683",
+      "name": "Firenze Uffizi 3",
+      "lat": 43.768,
+      "lng": 11.256,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004642",
+      "name": "Fornacina 2 ul",
+      "lat": 43.918,
+      "lng": 11.319,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01005001",
+      "name": "Fucecchio valle",
+      "lat": 43.731,
+      "lng": 10.811,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000916",
+      "name": "Monte di Fo",
+      "lat": 44.006,
+      "lng": 11.286,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004611",
+      "name": "Bilancino",
+      "lat": 44,
+      "lng": 11.275,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004791",
+      "name": "S. Piero a Ponti",
+      "lat": 43.819,
+      "lng": 11.111,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000999",
+      "name": "Borgo S. Lorenzo",
+      "lat": 43.955,
+      "lng": 11.386,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03004373",
+      "name": "Firenzuola Coniale",
+      "lat": 44.119,
+      "lng": 11.379,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30290200",
+      "name": "Piancaldoli",
+      "lat": 44.199,
+      "lng": 11.339,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004971",
+      "name": "Castelfiorentino",
+      "lat": 43.609,
+      "lng": 10.969,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004623",
+      "name": "S. Piero a Sieve-Carza",
+      "lat": 43.963,
+      "lng": 11.323,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001041",
+      "name": "Consuma",
+      "lat": 43.785,
+      "lng": 11.585,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000089",
+      "name": "Pelago",
+      "lat": 43.772,
+      "lng": 11.503,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001102",
+      "name": "Cercina",
+      "lat": 43.843,
+      "lng": 11.244,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004641",
+      "name": "Fornacina",
+      "lat": 43.918,
+      "lng": 11.319,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000073",
+      "name": "Greve in Chianti",
+      "lat": 43.587,
+      "lng": 11.317,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001129",
+      "name": "Ferrone",
+      "lat": 43.6,
+      "lng": 11.308,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004915",
+      "name": "Montespertoli",
+      "lat": 43.644,
+      "lng": 11.073,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004731",
+      "name": "Ponte di Scandicci",
+      "lat": 43.758,
+      "lng": 11.184,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000979",
+      "name": "Razzuolo",
+      "lat": 44.088,
+      "lng": 11.455,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01000921",
+      "name": "Mangona",
+      "lat": 44.044,
+      "lng": 11.217,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004702",
+      "name": "Ponte alle Mosse",
+      "lat": 43.781,
+      "lng": 11.23,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS19000704",
+      "name": "Grassina",
+      "lat": 43.734,
+      "lng": 11.302,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000024",
+      "name": "Remole",
+      "lat": 43.77,
+      "lng": 11.426,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004659",
+      "name": "Nave di Rosano",
+      "lat": 43.77,
+      "lng": 11.426,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30250000",
+      "name": "Marradi",
+      "lat": 44.073,
+      "lng": 11.613,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004661",
+      "name": "Nave di Rosano valle",
+      "lat": 43.77,
+      "lng": 11.426,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30248000",
+      "name": "Bibbiana",
+      "lat": 44.064,
+      "lng": 11.638,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03004935",
+      "name": "Empoli-Pontorme",
+      "lat": 43.72,
+      "lng": 10.959,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001001",
+      "name": "Monte Giovi",
+      "lat": 43.857,
+      "lng": 11.456,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004967",
+      "name": "Certaldo",
+      "lat": 43.548,
+      "lng": 11.041,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001371",
+      "name": "Vinci",
+      "lat": 43.783,
+      "lng": 10.923,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004811",
+      "name": "Ponte a Signa",
+      "lat": 43.784,
+      "lng": 11.095,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001011",
+      "name": "Villore",
+      "lat": 43.929,
+      "lng": 11.548,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS11000504",
+      "name": "Monteboro",
+      "lat": 43.717,
+      "lng": 10.971,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS03001145",
+      "name": "Vingone",
+      "lat": 43.775,
+      "lng": 11.177,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01001215",
+      "name": "S. Giusto",
+      "lat": 43.759,
+      "lng": 11.171,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS01004621",
+      "name": "S. Piero a Sieve-Sieve",
+      "lat": 43.963,
+      "lng": 11.323,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "hydrometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS30287500",
+      "name": "Barco",
+      "lat": 44.134,
+      "lng": 11.4,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "pluviometry",
+        "thermometry",
+        "anemometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    },
+    {
+      "id": "TOS15004682",
+      "name": "Firenze Uffizi 2",
+      "lat": 43.768,
+      "lng": 11.256,
+      "province": "FI",
+      "source": "Catalogo stazioni locale derivato da CFR/SIR Toscana; compatibile con normalizzazione MeteoHub",
+      "sensors": [
+        "anemometry",
+        "hydrometry",
+        "hygrometry",
+        "nivometry"
+      ]
+    }
+  ]
 }
