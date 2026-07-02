@@ -68,7 +68,8 @@ function escapeRegExp(value) {
 
 function getBulletinValidity(text) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  const match = normalized.match(/Valido\s+dalle\s+ore\s+(.+?)\s+alle\s+ore\s+(.+?)(?=\s+(?:BOLLETTINO|ZONE|Legenda|Criticit|Rischio|$))/i);
+  const datePart = "\\d{1,2}[.:]\\d{2}\\s+di\\s+[A-Za-zÀ-ÿ]+,?\\s+\\d{1,2}\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4}";
+  const match = normalized.match(new RegExp("Valido\\s+dalle\\s+ore\\s+(" + datePart + ")\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
   if (!match) return null;
   return "Valido dalle ore " + match[1].trim() + " alle ore " + match[2].trim();
 }
