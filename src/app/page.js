@@ -107,8 +107,8 @@ function normalizeObservationData(payload) {
   const fallback = buildFallbackMeasurements();
   return {
     measurements: payload?.measurements || fallback,
-    source: payload?.source || "Catalogo _MeteoHub",
-    primarySource: payload?.primarySource || "MeteoHub",
+    source: payload?.source || "CFR Toscana",
+    primarySource: payload?.primarySource || "CFR Toscana",
     fallbackSource: payload?.fallbackSource || null,
     fetchedAt: payload?.fetchedAt || null,
     cache: payload?.cache || null,
@@ -170,7 +170,7 @@ function StatCard({ icon: Icon, label, value }) {
 
 // Sintesi operativa del catalogo usato da pannelli, mappa e fallback su coordinate.
 function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
-  const sourceLabel = source || "MeteoHub";
+  const sourceLabel = source || "CFR Toscana";
   const availableCounts = Object.fromEntries(
     Object.entries(MEASUREMENT_TYPES).map(([type]) => [
       type,
@@ -186,9 +186,9 @@ function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
             <Database className="h-5 w-5 text-sky-200" />
           </div>
           <div>
-            <h2 className="section-title">Stazioni _MeteoHub</h2>
+            <h2 className="section-title">Stazioni CFR Toscana</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              La dashboard usa il catalogo _MeteoHub per mappa, selettori, pannelli di misura e fallback Open-Meteo su coordinate.
+              La dashboard usa CFR Toscana come fonte primaria per le stazioni, con Open-Meteo solo come supporto dove il dato ufficiale non e disponibile.
             </p>
           </div>
         </div>
@@ -224,7 +224,7 @@ function MeteoHubStationOverview({ measurements, source, fetchedAt, cache }) {
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <MapPin className="h-4 w-4 text-sky-300" />
-        <span>Coordinate da catalogo _MeteoHub locale.</span>
+        <span>Coordinate da catalogo stazioni locale allineato a CFR Toscana.</span>
         {fetchedAt && <span>Ultimo aggiornamento dati: {fetchedAt}</span>}
       </div>
     </section>
@@ -273,7 +273,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-sky-300" />
           <div>
-            <h2 className="section-title">Dashboard _MeteoHub {index + 1}</h2>
+            <h2 className="section-title">Dashboard CFR {index + 1}</h2>
             <p className="text-xs text-slate-400">{catalog.length} stazioni disponibili per {meta.label}</p>
           </div>
         </div>
@@ -364,7 +364,7 @@ function RiverChart({ stations, selectedIds, onSelectedIdsChange }) {
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="section-title">Andamento idrometrico</h2>
-          <p className="muted">Selezione manuale da stazioni _MeteoHub idrometriche. Ogni linea e ogni soglia hanno colore dedicato.</p>
+          <p className="muted">Selezione manuale da stazioni CFR idrometriche. Ogni linea e ogni soglia hanno colore dedicato.</p>
         </div>
         <select
           value=""
@@ -576,7 +576,7 @@ export default function DashboardPage() {
       const payload = await response.json();
       setObservationData(normalizeObservationData(payload));
     } catch (error) {
-      setObservationData(normalizeObservationData({ warning: "MeteoHub non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
+      setObservationData(normalizeObservationData({ warning: "CFR Toscana non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
     } finally {
       setLoading(false);
     }
@@ -624,8 +624,8 @@ export default function DashboardPage() {
         <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard _MeteoHub allerta meteo ed emergenze</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio su stazioni _MeteoHub con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard CFR Toscana allerta meteo ed emergenze</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio su stazioni CFR Toscana con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
           </div>
           <div className={`rounded-lg border px-4 py-3 ${ALERT_STYLE[visibleAlert]}`}>
             <div className="flex items-center gap-2">
