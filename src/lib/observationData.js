@@ -190,14 +190,45 @@ function normalizeCfrValue(type, rawValue, secondaryValue) {
   };
 }
 
-function parseCfrDetail(text, type) {
-  // Logica ricavata dal custom component Home Assistant cfr-toscana.
-  const matches = [...String(text || "").matchAll(/\w+\[\d+\]\s*=\s*new Array\("(.*?)","(.*?)","(.*?)","(.*?)"\);/g)];
-  if (!matches.length) return null;
+function decodeCfrText(value) {
+  return String(value || "")
+    .replace(/\\(["'\\])/g, "$1")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+}
 
-  const previous = matches.length > 1 ? normalizeCfrValue(type, matches[matches.length - 2][3], matches[matches.length - 2][4]).value : null;
-  const last = matches[matches.length - 1];
-  const normalized = normalizeCfrValue(type, last[3], last[4]);
+function parseQuotedArrayItems(rawItems) {
+  const items = [];
+  const pattern = /(["'])((?:\\.|(?!\1).)*?)\1/g;
+  let match;
+  while ((match = pattern.exec(rawItems))) items.push(decodeCfrText(match[2]));
+  return items;
+}
+
+function parseCfrArrayRows(text) {
+  const source = String(text || "");
+  const rows = [...source.matchAll(/\w+\[\d+\]\s*=\s*new\s+Array\((.*?)\);/g)]
+    .map((match) => parseQuotedArrayItems(match[1]))
+    .filter((items) => items.length >= 4);
+
+  if (rows.length) return rows;
+
+  return [...source.matchAll(/\w+\[\d+\]\s*=\s*new\s+Array\(["'](.*?)["']\s*,\s*["'](.*?)["']\s*,\s*["'](.*?)["']\s*,\s*["'](.*?)["']\s*\);/g)]
+    .map((match) => [match[1], match[2], match[3], match[4]].map(decodeCfrText));
+}
+
+function parseCfrDetail(text, type) {
+  // Logica ricavata dal custom component Home Assistant cfr-toscana, resa tollerante
+  // a campi aggiuntivi, apici singoli e piccoli cambi di spaziatura nel JavaScript CFR.
+  const rows = parseCfrArrayRows(text);
+  if (!rows.length) return null;
+
+  const previousRow = rows.length > 1 ? rows[rows.length - 2] : null;
+  const lastRow = rows[rows.length - 1];
+  const previous = previousRow ? normalizeCfrValue(type, previousRow[2], previousRow[3]).value : null;
+  const normalized = normalizeCfrValue(type, lastRow[2], lastRow[3]);
   if (!Number.isFinite(normalized.value)) return null;
 
   return {
@@ -206,7 +237,7 @@ function parseCfrDetail(text, type) {
       Number.isFinite(previous) && normalized.value > previous ? "up" :
       Number.isFinite(previous) && normalized.value < previous ? "down" :
       "stable",
-    updatedAt: getUpdatedAt(last[2]),
+    updatedAt: getUpdatedAt(lastRow[1]),
     extra: normalized.extra
   };
 }
@@ -523,7 +554,9 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
       openMeteoFallbackCount: openMeteoResult.filled,
       warning: cfrResult.filled || openMeteoResult.filled
         ? null
-        : "CFR Toscana non ha restituito dati leggibili per le stazioni richieste."
+        : selectedStations.some((item) => item.type === "hydrometry")
+          ? "CFR Toscana non ha restituito dati idrometrici leggibili per le stazioni richieste. Open-Meteo non fornisce livelli dei fiumi."
+          : "CFR Toscana non ha restituito dati leggibili per le stazioni richieste."
     };
   }
 
@@ -555,7 +588,9 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
       openMeteoFallbackCount: (basePayload.openMeteoFallbackCount || 0) + openMeteoResult.filled,
       warning: cfrResult.filled || openMeteoResult.filled
         ? null
-        : "Batch CFR eseguito senza nuovi dati leggibili."
+        : batchSelection.some((item) => item.type === "hydrometry")
+          ? "Batch idrometrico CFR eseguito senza dati leggibili. Verificare risposta dettaglio.php?type=idro."
+          : "Batch CFR eseguito senza nuovi dati leggibili."
     });
 
     const updated = getCache().payload;
