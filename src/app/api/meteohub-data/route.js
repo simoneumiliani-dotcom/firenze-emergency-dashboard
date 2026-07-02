@@ -11,13 +11,52 @@ function hasCredentials() {
   return Boolean(process.env.METEOHUB_USERNAME && process.env.METEOHUB_PASSWORD);
 }
 
+function readSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  if (typeof headers.raw === "function") return headers.raw()["set-cookie"] || [];
+  const single = headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function toCookieHeader(setCookieHeaders) {
+  return setCookieHeaders
+    .flatMap((item) => String(item).split(/,(?=\s*[^;,=]+=[^;,]+)/))
+    .map((item) => item.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+function findAuthValue(payload, matcher) {
+  if (!payload || typeof payload !== "object") return null;
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (matcher(key) && typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  for (const value of Object.values(payload)) {
+    const nested = findAuthValue(value, matcher);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function findToken(payload) {
+  return findAuthValue(payload, (key) => /^(access_token|accessToken|token|jwt|id_token|idToken)$/i.test(key));
+}
+
+function findSessionId(payload) {
+  return findAuthValue(payload, (key) => /(session|sessionid|sid|connect\.sid|auth)/i.test(key));
+}
+
 async function login() {
   const response = await fetch(`${getBaseUrl()}/auth/login`, {
     method: "POST",
     cache: "no-store",
+    redirect: "manual",
     headers: {
       "content-type": "application/json",
-      "accept": "application/json"
+      "accept": "application/json,text/plain,*/*"
     },
     body: JSON.stringify({
       username: process.env.METEOHUB_USERNAME,
@@ -30,28 +69,39 @@ async function login() {
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
-    payload = { raw: rawBody.slice(0, 300) };
+    payload = rawBody ? { raw: rawBody.slice(0, 300) } : {};
   }
 
-  if (!response.ok) {
+  if ((!response.ok && response.status < 300) || response.status >= 400) {
     throw new Error(`Login MeteoHub HTTP ${response.status}`);
   }
 
-  const token = payload.access_token || payload.token || payload.accessToken || payload.jwt;
-  if (!token) {
-    throw new Error("Login MeteoHub riuscito ma token non trovato nella risposta.");
-  }
+  const token = findToken(payload);
+  const setCookieHeaders = readSetCookieHeaders(response.headers);
+  let cookie = toCookieHeader(setCookieHeaders);
+  const sessionId = findSessionId(payload);
+  if (!cookie && sessionId) cookie = `session=${sessionId}`;
 
-  return token;
+  return {
+    token,
+    cookie,
+    authenticated: true,
+    authMode: token ? "bearer" : cookie ? "cookie" : "login-ok-no-session",
+    payloadKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 8) : []
+  };
 }
 
-async function fetchRequests(token) {
+function buildHeaders(session = {}) {
+  const headers = { "accept": "application/json,text/plain,*/*" };
+  if (session.token) headers.authorization = `Bearer ${session.token}`;
+  if (session.cookie) headers.cookie = session.cookie;
+  return headers;
+}
+
+async function fetchRequests(session) {
   const response = await fetch(`${getBaseUrl()}/api/requests`, {
     cache: "no-store",
-    headers: {
-      "accept": "application/json",
-      "authorization": `Bearer ${token}`
-    }
+    headers: buildHeaders(session)
   });
 
   if (!response.ok) {
@@ -76,23 +126,27 @@ export async function GET() {
     return NextResponse.json({
       source: "MeteoHub",
       connected: false,
+      authenticated: false,
       warning: "Credenziali MeteoHub non configurate in .env.local.",
       requests: []
     });
   }
 
   try {
-    const token = await login();
-    const requests = await fetchRequests(token);
+    const session = await login();
+    const requests = await fetchRequests(session);
 
     return NextResponse.json({
       source: "MeteoHub",
       baseUrl: getBaseUrl(),
       connected: true,
       authenticated: true,
+      authMode: session.authMode,
       fetchedAt: new Date().toLocaleString("it-IT"),
       requests,
-      note: "Connessione autenticata riuscita. Le estrazioni dati MeteoHub sono asincrone e vanno create con /api/data."
+      note: session.authMode === "login-ok-no-session"
+        ? "Login accettato da MeteoHub; nessun token/cookie esposto, endpoint richieste accessibile senza bearer esplicito."
+        : "Connessione autenticata riuscita."
     });
   } catch (error) {
     return NextResponse.json({
