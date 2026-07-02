@@ -7,9 +7,16 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  CloudRain,
   Database,
+  Droplets,
+  Gauge,
   MapPin,
   RefreshCcw,
+  Snowflake,
+  Thermometer,
+  Waves,
+  Wind
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -56,6 +63,15 @@ const ALERT_STYLE = {
   Giallo: "border-emergency-yellow/70 bg-emergency-yellow/10 text-emergency-yellow",
   Arancione: "border-emergency-orange/70 bg-emergency-orange/10 text-emergency-orange",
   Rosso: "border-emergency-red/70 bg-emergency-red/10 text-emergency-red"
+};
+
+const ICONS = {
+  rain: CloudRain,
+  water: Waves,
+  temperature: Thermometer,
+  wind: Wind,
+  humidity: Droplets,
+  snow: Snowflake
 };
 
 function buildFallbackMeasurements() {
@@ -607,21 +623,17 @@ export default function DashboardPage() {
   const [observationData, setObservationData] = useState(normalizeObservationData(null));
   const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
-  const [loading, setLoading] = useState(true);
   const [cacheWarmup, setCacheWarmup] = useState({ running: false, done: 0, total: 0, current: null, message: null, error: null });
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
 
   async function loadObservationData() {
-    setLoading(true);
     try {
       const response = await fetch("/api/observations", { cache: "default" });
       const payload = await response.json();
       setObservationData((current) => mergeObservationData(current, payload));
     } catch (error) {
       setObservationData(normalizeObservationData({ warning: "CFR Toscana non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
-    } finally {
-      setLoading(false);
     }
   }
 
