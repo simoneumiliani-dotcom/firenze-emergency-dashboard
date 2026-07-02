@@ -3,17 +3,14 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const SAMPLE_OBSERVATION_QUERY = "reftime: >=2026-01-01 00:00,<=2099-12-31 23:59;product:B12101;license:CCBY_COMPLIANT;timerange:254,0,0;level:103,2000,0,0";
+const DEFAULT_BBOX = [6.6, 35.4, 18.5, 47.1];
+const REQUEST_PREFIX = "firenze-emergency-dashboard";
 
 function getBaseUrl() {
   return (process.env.METEOHUB_API_BASE || "https://meteohub.agenziaitaliameteo.it").replace(/\/$/, "");
 }
 
-function hasCredentials() {
-  return Boolean(process.env.METEOHUB_USERNAME && process.env.METEOHUB_PASSWORD);
-}
-
-function encodeBasicAuthValue(value) {
+function encodeBase64(value) {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
@@ -24,188 +21,144 @@ function getAccessKey() {
   return process.env.METEOHUB_ACCESS_KEY || process.env.METEOHUB_API_KEY || null;
 }
 
-function getBasicAuth() {
-  const secret = getAccessKey() || process.env.METEOHUB_PASSWORD;
-  if (!process.env.METEOHUB_USERNAME || !secret) return null;
-  return encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${secret}`);
-}
+function authCandidates() {
+  const accessKey = getAccessKey();
+  const username = process.env.METEOHUB_USERNAME;
+  const password = process.env.METEOHUB_PASSWORD;
+  const candidates = [];
 
-function readSetCookieHeaders(headers) {
-  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
-  if (typeof headers.raw === "function") return headers.raw()["set-cookie"] || [];
-  const single = headers.get("set-cookie");
-  return single ? [single] : [];
-}
-
-function toCookieHeader(setCookieHeaders) {
-  return setCookieHeaders
-    .flatMap((item) => String(item).split(/,(?=\s*[^;,=]+=[^;,]+)/))
-    .map((item) => item.split(";")[0].trim())
-    .filter(Boolean)
-    .join("; ");
-}
-
-function findAuthValue(payload, matcher) {
-  if (!payload || typeof payload !== "object") return null;
-
-  for (const [key, value] of Object.entries(payload)) {
-    if (matcher(key) && typeof value === "string" && value.trim()) return value.trim();
+  if (accessKey) {
+    candidates.push({ authMode: "bearer-access-key", headers: { authorization: "Bearer " + accessKey } });
+    candidates.push({ authMode: "basic-access-key-as-username", headers: { authorization: "Basic " + encodeBase64(accessKey + ":") } });
+    if (username) {
+      candidates.push({ authMode: "basic-username-access-key", headers: { authorization: "Basic " + encodeBase64(username + ":" + accessKey) } });
+    }
+    candidates.push({ authMode: "x-api-key", headers: { "x-api-key": accessKey } });
+    candidates.push({ authMode: "x-access-key", headers: { "x-access-key": accessKey } });
   }
 
-  for (const value of Object.values(payload)) {
-    const nested = findAuthValue(value, matcher);
-    if (nested) return nested;
+  if (username && password) {
+    candidates.push({ authMode: "basic-credentials", headers: { authorization: "Basic " + encodeBase64(username + ":" + password) } });
   }
 
-  return null;
+  return candidates.length ? candidates : [{ authMode: "anonymous", headers: {} }];
 }
 
-function findToken(payload) {
-  return findAuthValue(payload, (key) => /^(access_token|accessToken|token|jwt|id_token|idToken)$/i.test(key));
+async function readPayload(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return { raw: text.slice(0, 500) }; }
 }
 
-async function login() {
-  if (getAccessKey()) {
-    return { authenticated: true, authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${getAccessKey()}:`)}`, payloadKeys: [] };
-  }
-
-  if (!hasCredentials()) {
-    return { authenticated: false, authMode: "anonymous", warning: "Credenziali MeteoHub non configurate." };
-  }
-
-  const response = await fetch(`${getBaseUrl()}/auth/login`, {
-    method: "POST",
+async function meteoHubFetch(path, { method = "GET", body, candidate } = {}) {
+  const response = await fetch(getBaseUrl() + path, {
+    method,
     cache: "no-store",
-    redirect: "manual",
     headers: {
-      "content-type": "application/json",
-      "accept": "application/json,text/plain,*/*"
+      accept: "application/json,text/plain,*/*",
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...(candidate?.headers || {})
     },
-    body: JSON.stringify({
-      username: process.env.METEOHUB_USERNAME,
-      password: process.env.METEOHUB_PASSWORD
-    })
+    body: body ? JSON.stringify(body) : undefined
   });
+  const payload = await readPayload(response);
+  if (!response.ok) throw new Error("MeteoHub " + method + " " + path + " HTTP " + response.status);
+  return payload;
+}
 
-  const rawBody = await response.text();
-  let payload = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = rawBody ? { raw: rawBody.slice(0, 300) } : {};
+async function withAuth(operation) {
+  let lastError = null;
+  for (const candidate of authCandidates()) {
+    try {
+      return { authMode: candidate.authMode, payload: await operation(candidate) };
+    } catch (error) {
+      lastError = error;
+      if (!/HTTP 401|HTTP 403/.test(error.message)) throw error;
+    }
   }
+  throw lastError || new Error("MeteoHub non autenticato");
+}
 
-  if ((!response.ok && response.status < 300) || response.status >= 400) {
-    return { authenticated: false, authMode: "login-failed", warning: `Login MeteoHub HTTP ${response.status}` };
-  }
+function requestRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  return payload?.requests || payload?.items || payload?.results || payload?.data || [];
+}
 
-  const token = findToken(payload);
-  const cookie = toCookieHeader(readSetCookieHeaders(response.headers));
-
+function normalizeRequest(request) {
   return {
-    token,
-    cookie,
-    authenticated: Boolean(token || cookie),
-    authMode: token ? "bearer" : cookie ? "cookie" : "login-ok-no-token",
-    payloadKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 8) : []
+    id: request.id || request.uuid || request.request_id || request.task_id || null,
+    name: request.request_name || request.name || request.title || "Richiesta MeteoHub",
+    status: request.status || request.state || "n.d.",
+    dataset: request.dataset || request.dataset_name || request.dataset_names || request.datasets || null,
+    createdAt: request.created_at || request.creation_time || request.submitted_at || request.created || null,
+    fileoutput: request.fileoutput || request.filename || request.output || request.download || request.url || null
   };
 }
 
-function buildHeaders(session = {}) {
-  const headers = { "accept": "application/json,text/plain,*/*" };
-  if (session.extraHeaders) Object.assign(headers, session.extraHeaders);
-  if (session.authHeader) headers.authorization = session.authHeader;
-  if (!headers.authorization && session.token && session.authMode === "bearer") headers.authorization = `Bearer ${session.token}`;
-  const basicAuth = getBasicAuth();
-  if (!headers.authorization && basicAuth) headers.authorization = `Basic ${basicAuth}`;
-  if (session.cookie) headers.cookie = session.cookie;
-  return headers;
+function buildExtractionPayload() {
+  const now = new Date();
+  const end = new Date(now.getTime() - 30 * 60 * 1000);
+  const start = new Date(end.getTime() - 3 * 60 * 60 * 1000);
+  const dataset = process.env.METEOHUB_DATASET_NAME || "radar_v2";
+  const variables = (process.env.METEOHUB_VARIABLES || "reflectivity").split(",").map((item) => item.trim()).filter(Boolean);
+  const bbox = (process.env.METEOHUB_BBOX || DEFAULT_BBOX.join(",")).split(",").map((item) => Number(item.trim())).filter(Number.isFinite);
+  const outputFormat = process.env.METEOHUB_OUTPUT_FORMAT || "netcdf";
+
+  return {
+    request_name: REQUEST_PREFIX + "-" + dataset + "-" + end.toISOString().slice(0, 13),
+    dataset,
+    variables,
+    spatial_coverage: { type: "bbox", coordinates: bbox.length === 4 ? bbox : DEFAULT_BBOX },
+    temporal_coverage: { start: start.toISOString(), end: end.toISOString() },
+    output_format: outputFormat,
+    dataset_names: [dataset],
+    reftime: { from: start.toISOString(), to: end.toISOString() },
+    filters: { product: variables.map((variable) => ({ value: variable })) }
+  };
 }
 
-function getAuthCandidates(session) {
-  const candidates = [session];
-  const accessKey = getAccessKey();
-  if (accessKey) {
-    candidates.push({ authenticated: true, authMode: "basic-access-key-as-username", authHeader: `Basic ${encodeBasicAuthValue(`${accessKey}:`)}` });
-    if (process.env.METEOHUB_USERNAME) {
-      candidates.push({ authenticated: true, authMode: "basic-username-access-key", authHeader: `Basic ${encodeBasicAuthValue(`${process.env.METEOHUB_USERNAME}:${accessKey}`)}` });
+async function listRequests() {
+  const result = await withAuth((candidate) => meteoHubFetch("/api/requests", { candidate }));
+  return { authMode: result.authMode, requests: requestRows(result.payload).map(normalizeRequest) };
+}
+
+async function submitExtractionRequest() {
+  const body = buildExtractionPayload();
+  const result = await withAuth(async (candidate) => {
+    try {
+      return await meteoHubFetch("/api/data", { method: "POST", body, candidate });
+    } catch (error) {
+      if (!/HTTP 404|HTTP 405/.test(error.message)) throw error;
+      return meteoHubFetch("/api/requests", { method: "POST", body, candidate });
     }
-    candidates.push({ authenticated: true, authMode: "bearer-access-key", authHeader: `Bearer ${accessKey}` });
-    candidates.push({ authenticated: true, authMode: "x-api-key", extraHeaders: { "x-api-key": accessKey } });
-    candidates.push({ authenticated: true, authMode: "x-access-key", extraHeaders: { "x-access-key": accessKey } });
-  }
-  return candidates.filter((candidate, index, all) =>
-    index === all.findIndex((item) => item.authMode === candidate.authMode && item.authHeader === candidate.authHeader)
-  );
-}
-async function checkObservations(session) {
-  const params = new URLSearchParams({
-    q: SAMPLE_OBSERVATION_QUERY,
-    reliabilityCheck: "true",
-    last: "true",
-    ts: String(Date.now())
   });
-  const response = await fetch(`${getBaseUrl()}/api/observations?${params.toString()}`, {
-    cache: "no-store",
-    headers: buildHeaders(session)
-  });
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`Osservazioni MeteoHub HTTP ${response.status}`);
-  }
-
-  let count = null;
-  try {
-    const payload = text ? JSON.parse(text) : null;
-    count = Array.isArray(payload) ? payload.length : Array.isArray(payload?.data) ? payload.data.length : null;
-  } catch {
-    count = text ? text.split(/\r?\n/).filter(Boolean).length : 0;
-  }
-
-  return { ok: true, count };
+  return { authMode: result.authMode, request: result.payload, payload: body };
 }
 
 export async function GET() {
-  const session = await login().catch((error) => ({ authenticated: false, authMode: "login-error", warning: error.message }));
-
   try {
-    let observations = null;
-    let activeSession = session;
-    let lastError = null;
-    for (const candidate of getAuthCandidates(session)) {
-      try {
-        observations = await checkObservations(candidate);
-        activeSession = candidate;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!/HTTP 401|HTTP 403/.test(error.message)) throw error;
-      }
-    }
-    if (!observations && lastError) throw lastError;
-
+    const { authMode, requests } = await listRequests();
+    const dashboardRequests = requests.filter((request) => String(request.name || "").startsWith(REQUEST_PREFIX)).slice(0, 8);
     return NextResponse.json({
       source: "MeteoHub",
       baseUrl: getBaseUrl(),
       connected: true,
-      authenticated: activeSession.authenticated,
-      authMode: activeSession.authMode,
+      authenticated: true,
+      authMode,
       fetchedAt: new Date().toLocaleString("it-IT"),
-      requests: [],
-      observations,
-      note: "Endpoint realtime /api/observations raggiungibile. /api/requests e riservato alle estrazioni asincrone e non blocca la dashboard."
+      requests: dashboardRequests.length ? dashboardRequests : requests.slice(0, 8),
+      note: "Flusso asincrono attivo: POST /api/data crea la richiesta, GET /api/requests monitora lo stato, /api/data/{filename} scarica l'output."
     });
   } catch (error) {
-    return NextResponse.json({
-      source: "MeteoHub",
-      baseUrl: getBaseUrl(),
-      connected: false,
-      authenticated: session.authenticated,
-      authMode: session.authMode,
-      fetchedAt: new Date().toLocaleString("it-IT"),
-      warning: session.warning ? `${session.warning}; ${error.message}` : error.message,
-      requests: []
-    });
+    return NextResponse.json({ source: "MeteoHub", baseUrl: getBaseUrl(), connected: false, authenticated: false, fetchedAt: new Date().toLocaleString("it-IT"), warning: error.message, requests: [] });
+  }
+}
+
+export async function POST() {
+  try {
+    const submitted = await submitExtractionRequest();
+    return NextResponse.json({ source: "MeteoHub", connected: true, authenticated: true, authMode: submitted.authMode, submittedAt: new Date().toLocaleString("it-IT"), request: submitted.request, payload: submitted.payload, note: "Richiesta asincrona inviata. Usa GET /api/meteohub-data per monitorare lo stato." }, { status: 202 });
+  } catch (error) {
+    return NextResponse.json({ source: "MeteoHub", connected: false, authenticated: false, warning: error.message }, { status: 502 });
   }
 }
