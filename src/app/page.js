@@ -112,6 +112,8 @@ function normalizeObservationData(payload) {
     cache: payload?.cache || null,
     meteoHub: payload?.meteoHub || null,
     openMeteoFallbackCount: payload?.openMeteoFallbackCount || 0,
+    cfr: payload?.cfr || null,
+    openMeteo: payload?.openMeteo || null,
     warning: payload?.warning || null
   };
 }
@@ -147,6 +149,37 @@ function buildSelectedObservationQuery(panelConfigs, chartStationIds) {
     if (stationId) items.add("hydrometry:" + stationId);
   });
   return [...items].join(",");
+}
+
+
+const OPEN_METEO_CLIENT_TYPES = ["pluviometry", "thermometry", "anemometry", "hygrometry", "nivometry"];
+
+function getOpenMeteoClientValue(payload, type) {
+  const current = payload?.current || {};
+  if (type === "pluviometry") return current.precipitation ?? null;
+  if (type === "thermometry") return current.temperature_2m ?? null;
+  if (type === "anemometry") return current.wind_speed_10m ?? null;
+  if (type === "hygrometry") return current.relative_humidity_2m ?? null;
+  if (type === "nivometry") {
+    const hourly = payload?.hourly || {};
+    const index = Array.isArray(hourly.time) && current.time ? hourly.time.indexOf(current.time) : -1;
+    const rawValue = Array.isArray(hourly.snow_depth) ? hourly.snow_depth[index >= 0 ? index : 0] : 0;
+    if (rawValue === null || rawValue === undefined) return 0;
+    return payload?.hourly_units?.snow_depth === "m" ? Number((rawValue * 100).toFixed(1)) : rawValue;
+  }
+  return null;
+}
+
+function getOpenMeteoClientUrl(station) {
+  const params = new URLSearchParams({
+    latitude: String(station.lat),
+    longitude: String(station.lng),
+    current: "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
+    hourly: "snow_depth",
+    timezone: "Europe/Rome",
+    forecast_days: "1"
+  });
+  return "https://api.open-meteo.com/v1/forecast?" + params.toString();
 }
 
 function normalizeWeatherData(payload) {
@@ -612,6 +645,75 @@ export default function DashboardPage() {
     }
   }
 
+
+  async function loadClientOpenMeteoData() {
+    const selected = [];
+    panelConfigs.forEach((config) => {
+      if (!OPEN_METEO_CLIENT_TYPES.includes(config.type)) return;
+      const catalog = STATIONS_BY_TYPE[config.type] || [];
+      config.stationIds.forEach((stationId) => {
+        const station = catalog.find((item) => item.id === stationId);
+        const position = getStationPosition(stationId);
+        if (station && Number.isFinite(position.lat) && Number.isFinite(position.lng)) {
+          selected.push({ type: config.type, station: { ...station, ...position } });
+        }
+      });
+    });
+
+    const uniqueStations = [...new Map(selected.map((item) => [item.station.id, item.station])).values()];
+    if (!uniqueStations.length) return;
+
+    const responses = await Promise.allSettled(uniqueStations.map(async (station) => {
+      const response = await fetch(getOpenMeteoClientUrl(station), { cache: "no-store" });
+      if (!response.ok) throw new Error("Open Meteo HTTP " + response.status);
+      return [station.id, await response.json()];
+    }));
+    const byStationId = new Map(responses
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => result.value));
+    const fetchedAt = new Date().toISOString();
+    let filled = 0;
+
+    setObservationData((current) => {
+      const selectedKeys = new Set(selected.map((item) => item.type + ":" + item.station.id));
+      const measurements = Object.fromEntries(Object.entries(current.measurements).map(([type, stations]) => [
+        type,
+        stations.map((station) => {
+          if (!selectedKeys.has(type + ":" + station.id)) return station;
+          const payload = byStationId.get(station.id);
+          const value = getOpenMeteoClientValue(payload, type);
+          if (value === null || value === undefined || Number.isNaN(Number(value))) return station;
+          filled += 1;
+          return {
+            ...station,
+            value: Number(Number(value).toFixed(type === "hygrometry" ? 0 : 1)),
+            trend: "stable",
+            updatedAt: payload?.current?.time?.slice(11, 16) || null,
+            unavailable: false,
+            real: true,
+            provider: "Open Meteo"
+          };
+        })
+      ]));
+
+      return {
+        ...current,
+        source: "Open-Meteo + CFR Toscana",
+        primarySource: "Open-Meteo per dati meteo, CFR Toscana per idrometria",
+        measurements,
+        openMeteo: {
+          ...(current.openMeteo || {}),
+          source: "Open Meteo",
+          fetchedAt,
+          populatedStations: filled,
+          primaryTypes: OPEN_METEO_CLIENT_TYPES
+        },
+        openMeteoFallbackCount: filled,
+        warning: current.warning === "Fonti dati non hanno restituito misure leggibili in questo momento." && filled ? null : current.warning
+      };
+    });
+  }
+
   useEffect(() => {
     loadObservationData();
     loadWeatherData();
@@ -620,6 +722,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadSelectedObservationData(selectedObservationQuery);
+    loadClientOpenMeteoData();
   }, [selectedObservationQuery]);
 
   const hydrometryStations = observationData.measurements.hydrometry || [];
