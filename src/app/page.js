@@ -11,7 +11,6 @@ import {
   Database,
   Droplets,
   Gauge,
-  MapPin,
   RefreshCcw,
   Snowflake,
   Thermometer,
@@ -31,7 +30,6 @@ import {
 import PdfParser from "@/components/PdfParser";
 import {
   CHART_COLORS,
-  ALL_STATIONS,
   DEFAULT_CHART_STATION_IDS,
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
@@ -151,22 +149,6 @@ function buildSelectedObservationQuery(panelConfigs, chartStationIds) {
   return [...items].join(",");
 }
 
-const CACHE_WARMUP_TYPES = ["pluviometry", "hydrometry", "thermometry", "anemometry", "hygrometry"];
-const CACHE_WARMUP_BATCH_SIZE = 18;
-
-function buildCacheWarmupJobs() {
-  return CACHE_WARMUP_TYPES.flatMap((type) => {
-    const stationCount = STATIONS_BY_TYPE[type]?.length || 0;
-    const totalBatches = Math.max(1, Math.ceil(stationCount / CACHE_WARMUP_BATCH_SIZE));
-    return Array.from({ length: totalBatches }, (_, batch) => ({
-      type,
-      batch,
-      batchSize: CACHE_WARMUP_BATCH_SIZE,
-      label: MEASUREMENT_TYPES[type]?.label || type
-    }));
-  });
-}
-
 function normalizeWeatherData(payload) {
   return {
     source: payload?.source || "Open-Meteo",
@@ -205,15 +187,17 @@ function TrendIcon({ trend }) {
   return <Activity className="h-4 w-4 text-slate-400" aria-label="stabile" />;
 }
 
-// Sintesi operativa del catalogo usato da pannelli, mappa e fallback su coordinate.
-function MeteoHubStationOverview({ measurements, source, fetchedAt, cache, warmup, onWarmCache }) {
-  const sourceLabel = source || "CFR Toscana";
-  const availableCounts = Object.fromEntries(
-    Object.entries(MEASUREMENT_TYPES).map(([type]) => [
-      type,
-      (measurements[type] || []).filter((station) => station.value !== null && station.value !== undefined).length
-    ])
-  );
+function formatSourceTimestamp(value) {
+  if (!value) return "in attesa di aggiornamento";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value);
+  return date.toLocaleDateString("it-IT", { year: "numeric", month: "2-digit", day: "2-digit" }) + " ora " +
+    date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+
+function SourceStatusPanel({ observationData }) {
+  const cfrUpdatedAt = observationData.cfr?.fetchedAt || observationData.fetchedAt;
+  const openMeteoUpdatedAt = observationData.openMeteo?.fetchedAt || observationData.fetchedAt;
 
   return (
     <section className="panel p-4">
@@ -223,72 +207,28 @@ function MeteoHubStationOverview({ measurements, source, fetchedAt, cache, warmu
             <Database className="h-5 w-5 text-sky-200" />
           </div>
           <div>
-            <h2 className="section-title">Stazioni CFR Toscana</h2>
+            <h2 className="section-title">Fonti dati aggiornate</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              La dashboard usa CFR Toscana come fonte primaria per le stazioni, con Open-Meteo solo come supporto dove il dato ufficiale non e disponibile.
+              Open Meteo e' la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per l'idrometria.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:min-w-[28rem]">
+        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:min-w-[34rem]">
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Catalogo</p>
-            <p className="mt-1 text-xl font-semibold text-white">{ALL_STATIONS.length}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">CFR Toscana</p>
+            <p className="mt-1 font-semibold text-sky-100">Idrometria</p>
+            <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(cfrUpdatedAt)}</p>
           </div>
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Fonte primaria</p>
-            <p className="mt-1 truncate font-semibold text-sky-100">{sourceLabel}</p>
-          </div>
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Cache</p>
-            <p className="mt-1 font-semibold text-slate-100">{cache?.persistent ? "KV" : cache?.mode || (cache?.hit ? "hit" : "refresh")}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Open Meteo</p>
+            <p className="mt-1 font-semibold text-sky-100">Pluvio, termo, vento, umidita, neve</p>
+            <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(openMeteoUpdatedAt)}</p>
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-sky-400/20 bg-sky-400/5 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-sky-100">Aggiornamento cache CFR</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {warmup?.running
-              ? "Batch " + warmup.done + "/" + warmup.total + (warmup.current ? " - " + warmup.current : "")
-              : warmup?.message || "Scarica i batch CFR e li fonde nella cache persistente."}
-          </p>
-          {warmup?.error && <p className="mt-1 text-xs text-emergency-orange">{warmup.error}</p>}
-        </div>
-        <button
-          type="button"
-          onClick={onWarmCache}
-          disabled={warmup?.running}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:border-sky-300 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCcw className={"h-4 w-4 " + (warmup?.running ? "animate-spin" : "")} />
-          {warmup?.running ? "Aggiornamento..." : "Aggiorna cache CFR"}
-        </button>
-      </div>
-
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-        {Object.entries(MEASUREMENT_TYPES).map(([type, meta]) => (
-          <div key={type} className="rounded-lg border border-emergency-line bg-black/15 px-3 py-2">
-            <p className="text-xs text-slate-400">{meta.label}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-100">
-              {STATIONS_BY_TYPE[type]?.length || 0} stazioni
-              <span className="ml-2 text-xs font-normal text-sky-200">
-                {availableCounts[type]} con dato
-              </span>
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-        <MapPin className="h-4 w-4 text-sky-300" />
-        <span>Coordinate da catalogo stazioni locale allineato a CFR Toscana.</span>
-        {fetchedAt && <span>Ultimo aggiornamento dati: {fetchedAt}</span>}
       </div>
     </section>
   );
 }
-
 function StationSelect({ value, onChange, options, label }) {
   return (
     <label className="flex flex-col gap-1">
@@ -623,17 +563,16 @@ export default function DashboardPage() {
   const [observationData, setObservationData] = useState(normalizeObservationData(null));
   const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
-  const [cacheWarmup, setCacheWarmup] = useState({ running: false, done: 0, total: 0, current: null, message: null, error: null });
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
 
   async function loadObservationData() {
     try {
-      const response = await fetch("/api/observations", { cache: "default" });
+      const response = await fetch("/api/observations?refresh=1", { cache: "no-store" });
       const payload = await response.json();
       setObservationData((current) => mergeObservationData(current, payload));
     } catch (error) {
-      setObservationData(normalizeObservationData({ warning: "CFR Toscana non raggiungibile. Open-Meteo viene usato solo dove disponibile come fallback." }));
+      setObservationData(normalizeObservationData({ warning: "Fonti dati non raggiungibili in questo momento. La dashboard mantiene gli ultimi valori disponibili." }));
     }
   }
 
@@ -673,47 +612,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function warmObservationCache() {
-    const jobs = buildCacheWarmupJobs();
-    setCacheWarmup({ running: true, done: 0, total: jobs.length, current: null, message: null, error: null });
-
-    try {
-      for (let index = 0; index < jobs.length; index += 1) {
-        const job = jobs[index];
-        setCacheWarmup((current) => ({
-          ...current,
-          current: job.label + " batch " + (job.batch + 1),
-          done: index
-        }));
-
-        const params = new URLSearchParams({
-          type: job.type,
-          batch: String(job.batch),
-          batchSize: String(job.batchSize)
-        });
-        const response = await fetch("/api/sync-observations?" + params.toString(), { cache: "no-store" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.error || "Batch CFR non riuscito");
-
-        setCacheWarmup((current) => ({
-          ...current,
-          done: index + 1,
-          message: "Ultimo batch: " + job.label + " (" + (payload.populatedStations || 0) + " dati letti)"
-        }));
-      }
-
-      await loadObservationData();
-      await loadSelectedObservationData(selectedObservationQuery);
-      setCacheWarmup({ running: false, done: jobs.length, total: jobs.length, current: null, message: "Cache CFR aggiornata. Ricarico completato.", error: null });
-    } catch (error) {
-      setCacheWarmup((current) => ({
-        ...current,
-        running: false,
-        error: error instanceof Error ? error.message : "Aggiornamento cache interrotto"
-      }));
-    }
-  }
-
   useEffect(() => {
     loadObservationData();
     loadWeatherData();
@@ -740,8 +638,8 @@ export default function DashboardPage() {
         <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard CFR Toscana allerta meteo ed emergenze</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio su stazioni CFR Toscana con cache programmata e fallback Open-Meteo visibile per pluviometria, termometria, anemometria, igrometria e nivometria.</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard meteo e idrometria Firenze</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio con Open Meteo come fonte primaria per le grandezze meteorologiche e CFR Toscana per i livelli idrometrici.</p>
           </div>
           <div className={`rounded-lg border px-4 py-3 ${ALERT_STYLE[visibleAlert]}`}>
             <div className="flex items-center gap-2">
@@ -754,14 +652,7 @@ export default function DashboardPage() {
 
         <PdfParser onAlertDetected={setAlert} />
 
-        <MeteoHubStationOverview
-          measurements={observationData.measurements}
-          source={observationData.source}
-          fetchedAt={observationData.fetchedAt}
-          cache={observationData.cache}
-          warmup={cacheWarmup}
-          onWarmCache={warmObservationCache}
-        />
+        <SourceStatusPanel observationData={observationData} />
 
         {observationData.warning && (
           <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{observationData.warning}</div>
@@ -796,7 +687,7 @@ export default function DashboardPage() {
         <WebcamGrid />
 
         <footer className="pb-6 text-xs text-slate-500">
-          Fonte osservazioni: {observationData.source}. Cache: {observationData.cache?.hit ? "hit" : "refresh"} {observationData.cache?.updatedAt || ""}. Meteo: {weatherData.source} {weatherData.fetchedAt || ""}.
+          Fonti osservazioni: Open Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
         </footer>
       </div>
     </main>
