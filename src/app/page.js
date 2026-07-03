@@ -47,6 +47,8 @@ const MapDashboard = dynamic(() => import("@/components/MapDashboard"), {
   )
 });
 
+const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 const WEBCAMS = [
   { id: "firenze-centro", title: "Firenze Centro", area: "Arno e centro storico", imageUrl: "https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?auto=format&fit=crop&w=900&q=80" },
   { id: "ponte-vecchio", title: "Ponte Vecchio", area: "Vista urbana Arno", imageUrl: "https://images.unsplash.com/photo-1551621955-fa07d5389353?auto=format&fit=crop&w=900&q=80" },
@@ -242,7 +244,7 @@ function SourceStatusPanel({ observationData }) {
           <div>
             <h2 className="section-title">Fonti dati aggiornate</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              Open Meteo costituisce la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per idrometria.
+              Open Meteo costituisce la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per idrometria. Aggiornamento automatico ogni 5 minuti.
             </p>
           </div>
         </div>
@@ -723,6 +725,17 @@ export default function DashboardPage() {
   useEffect(() => {
     loadSelectedObservationData(selectedObservationQuery);
     loadClientOpenMeteoData();
+  }, [selectedObservationQuery]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadObservationData();
+      loadWeatherData();
+      loadSelectedObservationData(selectedObservationQuery);
+      loadClientOpenMeteoData();
+    }, DATA_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
   }, [selectedObservationQuery]);
 
   const hydrometryStations = observationData.measurements.hydrometry || [];
