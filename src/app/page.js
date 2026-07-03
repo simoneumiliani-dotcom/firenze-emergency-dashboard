@@ -209,7 +209,7 @@ function SourceStatusPanel({ observationData }) {
           <div>
             <h2 className="section-title">Fonti dati aggiornate</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              Open Meteo e' la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per l'idrometria.
+              Open Meteo costituisce la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per idrometria.
             </p>
           </div>
         </div>
