@@ -28,6 +28,7 @@ import {
   YAxis
 } from "recharts";
 import PdfParser from "@/components/PdfParser";
+import AppNav from "@/components/AppNav";
 import {
   CHART_COLORS,
   DEFAULT_CHART_STATION_IDS,
@@ -749,15 +750,17 @@ export default function DashboardPage() {
   const mapStations = Object.values(observationData.measurements).flat();
 
   return (
-    <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
+    <>
+      <AppNav />
+      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-5">
-        <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow sm:p-5 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white md:text-3xl">Dashboard meteo e idrometria Firenze</h1>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Dashboard meteo e idrometria Firenze</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio con Open Meteo come fonte primaria per le grandezze meteorologiche e CFR Toscana per i livelli idrometrici.</p>
           </div>
-          <div className={`rounded-lg border px-4 py-3 ${ALERT_STYLE[visibleAlert]}`}>
+          <div className={`w-full rounded-lg border px-4 py-3 sm:w-auto ${ALERT_STYLE[visibleAlert]}`}>
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               <span className="text-sm font-medium">Allerta attiva</span>
@@ -806,6 +809,7 @@ export default function DashboardPage() {
           Fonti osservazioni: Open Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
         </footer>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

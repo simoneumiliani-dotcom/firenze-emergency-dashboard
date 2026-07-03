@@ -135,7 +135,7 @@ export default function MapDashboard({ stations = [] }) {
 
   return (
     <section className="panel overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-emergency-line px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-b border-emergency-line px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-sky-300" />
           <div>
@@ -180,7 +180,7 @@ export default function MapDashboard({ stations = [] }) {
         )}
       </div>
 
-      <div className="h-[30rem] md:h-[38rem]">
+      <div className="h-[24rem] sm:h-[30rem] lg:h-[38rem]">
         {!mounted ? (
           <div className="flex h-full items-center justify-center bg-emergency-panel text-sm text-slate-400">
             Caricamento mappa...
