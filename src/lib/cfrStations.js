@@ -373,9 +373,23 @@ function uniqueById(stations) {
   return [...map.values()];
 }
 
+const OPEN_METEO_SENSOR_TYPES = new Set(["pluviometry", "thermometry", "anemometry", "hygrometry", "nivometry"]);
+
+function hasValidOpenMeteoCoordinates(station) {
+  const lat = Number(station.lat);
+  const lng = Number(station.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
+function isOpenMeteoCatalogStation(station, type) {
+  if (!station.sensors.includes(type)) return false;
+  if (!OPEN_METEO_SENSOR_TYPES.has(type)) return true;
+  return hasValidOpenMeteoCoordinates(station);
+}
+
 function stationsFromCatalog(type) {
   return meteoHubStationCatalog.stations
-    .filter((station) => station.sensors.includes(type))
+    .filter((station) => isOpenMeteoCatalogStation(station, type))
     .map((station) => ({ id: station.id, name: station.name, type }));
 }
 
