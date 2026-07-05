@@ -95,8 +95,11 @@ function buildHydroHistory(value) {
 
 function normalizeObservationData(payload) {
   const fallback = buildFallbackMeasurements();
+  const measurements = payload?.measurements
+    ? { ...payload.measurements, hydrometry: fallback.hydrometry }
+    : fallback;
   return {
-    measurements: payload?.measurements || fallback,
+    measurements,
     source: payload?.source || "CFR Toscana",
     primarySource: payload?.primarySource || "CFR Toscana",
     fallbackSource: payload?.fallbackSource || null,
@@ -671,7 +674,10 @@ export default function DashboardPage() {
       const payload = await response.json();
       setObservationData((current) => mergeObservationData(current, payload));
     } catch (error) {
-      setObservationData(normalizeObservationData({ warning: "Fonti dati non raggiungibili in questo momento. La dashboard mantiene gli ultimi valori disponibili." }));
+      setObservationData((current) => ({
+        ...current,
+        warning: current.warning || "Fonti dati non raggiungibili in questo momento. La dashboard mantiene gli ultimi valori disponibili."
+      }));
     }
   }
 

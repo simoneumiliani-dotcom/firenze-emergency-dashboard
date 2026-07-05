@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { inflateRawSync } from "node:zlib";
 
 export const HYDROMETRY_SOURCES = {
   activeHydrometers: {
@@ -69,6 +70,25 @@ export async function fetchJson(url, options = {}) {
   return JSON.parse(text);
 }
 
+async function fetchBuffer(url, { headers = {}, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  const timeout = withTimeout(timeoutMs);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: timeout.controller.signal,
+      headers: {
+        accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/html,*/*;q=0.8",
+        "user-agent": CFR_USER_AGENT,
+        ...headers
+      }
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status + " per " + url);
+    return Buffer.from(await response.arrayBuffer());
+  } finally {
+    timeout.clear();
+  }
+}
+
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -125,7 +145,20 @@ function normalizeDateTime(value) {
 function normalizeSolarDateTime(value) {
   const text = cleanText(value);
   const italian = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})[.:](\d{2})/);
-  if (!italian) return normalizeDateTime(value);
+  if (!italian) {
+    const shortItalian = text.match(/(\d{2})\/(\d{2})\s+(\d{2})[.:](\d{2})/);
+    if (!shortItalian) return normalizeDateTime(value);
+    const [, day, month, hour, minute] = shortItalian;
+    return new Date(Date.UTC(
+      new Date().getFullYear(),
+      Number(month) - 1,
+      Number(day),
+      Number(hour) - 1,
+      Number(minute),
+      0,
+      0
+    )).toISOString();
+  }
 
   const [, day, month, year, hour, minute] = italian;
   // CFR dichiara "ora solare": UTC+1. Salvando l istante in UTC, la UI italiana
@@ -395,30 +428,26 @@ function hasUsableHeaders(headers) {
 }
 
 function getFallbackCfrValues(row, station) {
-  const stationKey = normalizeNameKey(station?.station_name);
-  const values = row
-    .map((cell, index) => ({ cell, index, text: cleanText(cell), value: parseHydrometricMeters(cell) }))
-    .filter((item) => Number.isFinite(item.value))
-    .filter((item) => !/^TOS\d+/i.test(item.text))
-    .filter((item) => !/\d{2}\/\d{2}\/\d{4}/.test(item.text))
-    .filter((item) => !stationKey || !normalizeNameKey(item.text).includes(stationKey));
+  const codeIndex = row.findIndex((cell) => /^TOS\d+/i.test(cleanText(cell)));
+  const dataCells = codeIndex >= 0 ? row.slice(codeIndex + 5) : row;
 
-  // Ordine export CFR senza intestazioni: liv.2, liv.1, attuale livello,
-  // attuale portata, delta h1, delta h3, delta h6, Data.
-  const danger = values[0]?.value ?? null;
-  const warning = values[1]?.value ?? null;
-  const level = values[2]?.value ?? null;
-  const flow = parseFlowValue(values[3]?.cell);
-  const dateCell = row.find((cell) => /\d{2}\/\d{2}\/\d{4}\s+\d{2}[.:]\d{2}/.test(cleanText(cell)));
+  // Ordine export CFR senza intestazioni: Codice, Fiume, Stazione, Provincia,
+  // Zona, liv.2, liv.1, attuale livello, attuale portata, delta h1, delta h3,
+  // delta h6, Data.
+  const danger = parseHydrometricMeters(dataCells[0]);
+  const warning = parseHydrometricMeters(dataCells[1]);
+  const level = parseHydrometricMeters(dataCells[2]);
+  const flow = parseFlowValue(dataCells[3]);
+  const dateCell = row.find((cell) => /(?:\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{2})\s+\d{2}[.:]\d{2}/.test(cleanText(cell)));
 
   return {
     level,
     warning,
     danger,
     flow,
-    deltaH1: values[4]?.value ?? null,
-    deltaH3: values[5]?.value ?? null,
-    deltaH6: values[6]?.value ?? null,
+    deltaH1: parseHydrometricMeters(dataCells[4]),
+    deltaH3: parseHydrometricMeters(dataCells[5]),
+    deltaH6: parseHydrometricMeters(dataCells[6]),
     measurementText: dateCell || null
   };
 }
@@ -540,6 +569,124 @@ function parseCfrHtmlTables(html, stations, sourceUrl) {
   return rows;
 }
 
+function readUInt32(buffer, offset) {
+  return offset >= 0 && offset + 4 <= buffer.length ? buffer.readUInt32LE(offset) : null;
+}
+
+function xmlDecode(value) {
+  return String(value || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function unzipXlsxEntries(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 22 || buffer.readUInt32LE(0) !== 0x04034b50) return null;
+
+  let eocdOffset = -1;
+  for (let offset = buffer.length - 22; offset >= 0; offset -= 1) {
+    if (readUInt32(buffer, offset) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) return null;
+
+  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+  const centralOffset = buffer.readUInt32LE(eocdOffset + 16);
+  const entries = new Map();
+  let cursor = centralOffset;
+
+  for (let index = 0; index < entryCount; index += 1) {
+    if (readUInt32(buffer, cursor) !== 0x02014b50) break;
+
+    const method = buffer.readUInt16LE(cursor + 10);
+    const compressedSize = buffer.readUInt32LE(cursor + 20);
+    const fileNameLength = buffer.readUInt16LE(cursor + 28);
+    const extraLength = buffer.readUInt16LE(cursor + 30);
+    const commentLength = buffer.readUInt16LE(cursor + 32);
+    const localOffset = buffer.readUInt32LE(cursor + 42);
+    const fileName = buffer.slice(cursor + 46, cursor + 46 + fileNameLength).toString("utf8");
+
+    if (readUInt32(buffer, localOffset) === 0x04034b50) {
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = buffer.slice(dataStart, dataStart + compressedSize);
+      const content = method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : null;
+      if (content) entries.set(fileName, content.toString("utf8"));
+    }
+
+    cursor += 46 + fileNameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
+function getXmlAttribute(xml, name) {
+  const match = String(xml || "").match(new RegExp("\\s" + name + "=\"([^\"]*)\""));
+  return match ? xmlDecode(match[1]) : "";
+}
+
+function columnIndexFromCellRef(ref) {
+  const letters = String(ref || "").match(/^[A-Z]+/)?.[0] || "";
+  return letters.split("").reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+function parseXlsxSharedStrings(xml) {
+  if (!xml) return [];
+  return [...xml.matchAll(/<si\b[\s\S]*?<\/si>/g)].map(([si]) =>
+    [...si.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((match) => xmlDecode(match[1])).join("")
+  );
+}
+
+function parseXlsxSheetRows(sheetXml, sharedStrings) {
+  return [...String(sheetXml || "").matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)].map(([, , rowXml]) => {
+    const cells = [];
+    let maxIndex = -1;
+
+    for (const [, attrs, cellXml] of rowXml.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const ref = getXmlAttribute(attrs, "r");
+      const type = getXmlAttribute(attrs, "t");
+      const index = columnIndexFromCellRef(ref);
+      if (index < 0) continue;
+      maxIndex = Math.max(maxIndex, index);
+
+      let value = "";
+      const valueMatch = cellXml.match(/<v[^>]*>([\s\S]*?)<\/v>/);
+      if (valueMatch) {
+        value = xmlDecode(valueMatch[1]);
+        if (type === "s") value = sharedStrings[Number(value)] ?? value;
+      } else {
+        value = [...cellXml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((match) => xmlDecode(match[1])).join("");
+      }
+      cells[index] = cleanText(value);
+    }
+
+    return Array.from({ length: maxIndex + 1 }, (_, index) => cells[index] || "");
+  });
+}
+
+function parseCfrXlsxRows(buffer, stations, sourceUrl, measurementTime) {
+  const entries = unzipXlsxEntries(buffer);
+  if (!entries) return null;
+
+  const sharedStrings = parseXlsxSharedStrings(entries.get("xl/sharedStrings.xml"));
+  const sheetName = [...entries.keys()].find((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
+  const rows = parseXlsxSheetRows(entries.get(sheetName), sharedStrings);
+  const headerIndex = rows.findIndex((row) => normalizeHeaderKey(row.join(" ")).includes("codice") && normalizeHeaderKey(row.join(" ")).includes("stazione"));
+  if (headerIndex < 0) return [];
+
+  const headers = rows[headerIndex];
+  return rows
+    .slice(headerIndex + 1)
+    .map((row) => normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime))
+    .filter(Boolean);
+}
+
 function parseCfrBulkArrayRows(html, stations, sourceUrl) {
   const text = String(html || "");
   const measurementTime = getCfrPageMeasurementTime(text);
@@ -554,14 +701,14 @@ export async function getHydrometryRealtimeBulk({ stations } = {}) {
     const html = await fetchText(HYDROMETRY_SOURCES.cfrRealtime.url, {
       timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000)
     });
+    const measurementTime = getCfrPageMeasurementTime(html);
     const discoveredLinks = discoverCfrPageLinks(html).filter((link) => /xls|xlsx|excel/i.test(link)).slice(0, 5);
     const tableRows = parseCfrHtmlTables(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
     const excelResults = await Promise.allSettled(discoveredLinks.map(async (link) => {
-      const exportText = await fetchText(link, {
-        timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000),
-        headers: { accept: "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/html,*/*;q=0.8" }
-      });
-      return parseCfrHtmlTables(exportText, stations || [], link);
+      const exportBuffer = await fetchBuffer(link, { timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000) });
+      const xlsxRows = parseCfrXlsxRows(exportBuffer, stations || [], link, measurementTime);
+      if (xlsxRows) return xlsxRows;
+      return parseCfrHtmlTables(exportBuffer.toString("utf8"), stations || [], link);
     }));
     const excelRows = excelResults
       .filter((result) => result.status === "fulfilled")

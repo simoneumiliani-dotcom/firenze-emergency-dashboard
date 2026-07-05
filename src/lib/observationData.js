@@ -9,9 +9,7 @@ const CFR_STATION_TIMEOUT_MS = Number(process.env.CFR_STATION_TIMEOUT_MS || 3500
 const PERSISTED_CACHE_KEY = process.env.OBSERVATION_CACHE_KEY || "firenze:observation-cache:v1";
 const PERSISTED_CACHE_TTL_SECONDS = Number(process.env.OBSERVATION_PERSISTED_CACHE_TTL_SECONDS || 21600);
 
-const CFR_TYPES = {
-  hydrometry: "idro"
-};
+const CFR_TYPES = {};
 
 const CFR_DETAIL_BASES = [
   process.env.CFR_DETAIL_BASE_URL,
@@ -501,16 +499,16 @@ function countPopulatedMeasurements(measurements) {
 
 function buildShellPayload() {
   return {
-    source: "Open-Meteo + CFR Toscana",
-    primarySource: "Open-Meteo per dati meteo, CFR Toscana per idrometria",
+    source: "Open-Meteo",
+    primarySource: "Open-Meteo per dati meteo; idrometria ufficiale da /api/hydrometry",
     fallbackSource: null,
     fetchedAt: new Date().toISOString(),
     measurements: buildEmptyMeasurements("CFR Toscana"),
     cfr: {
-      endpoint: "monitoraggio/dettaglio.php",
+      endpoint: null,
       attemptedStations: 0,
       populatedStations: 0,
-      mode: "empty-cache"
+      mode: "disabled-hydrometry-owned-by-api-hydrometry"
     },
     openMeteoFallbackCount: 0,
     openMeteo: {
@@ -539,16 +537,16 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
     const cfrResult = await fetchCfrMeasurementsForSelection(selectedStations);
     const openMeteoResult = await augmentWithOpenMeteo(cfrResult.measurements, selectedStations);
     return {
-      source: "Open-Meteo + CFR Toscana",
-      primarySource: "Open-Meteo per dati meteo, CFR Toscana per idrometria",
+      source: "Open-Meteo",
+      primarySource: "Open-Meteo per dati meteo; idrometria ufficiale da /api/hydrometry",
       fallbackSource: null,
       fetchedAt,
       measurements: openMeteoResult.measurements,
       cfr: {
-        endpoint: "monitoraggio/dettaglio.php",
+        endpoint: null,
         attemptedStations: cfrResult.attempted,
         populatedStations: cfrResult.filled,
-        mode: "realtime-selected",
+        mode: "disabled-hydrometry-owned-by-api-hydrometry",
         selectionSize: selectedStations.length,
         batch: null,
         type: null,
@@ -578,18 +576,18 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
     const measurements = mergeMeasurements(basePayload.measurements, openMeteoResult.measurements);
     const cacheMode = await writeSharedCache({
       ...basePayload,
-      source: "Open-Meteo + CFR Toscana",
-      primarySource: "Open-Meteo per dati meteo, CFR Toscana per idrometria",
+      source: "Open-Meteo",
+      primarySource: "Open-Meteo per dati meteo; idrometria ufficiale da /api/hydrometry",
       fallbackSource: null,
       fetchedAt,
       measurements,
       cfr: {
-        endpoint: "monitoraggio/dettaglio.php",
+        endpoint: null,
         attemptedStations: (basePayload.cfr?.attemptedStations || 0) + cfrResult.attempted,
         populatedStations: countPopulatedMeasurements(measurements),
         lastBatchAttemptedStations: cfrResult.attempted,
         lastBatchPopulatedStations: cfrResult.filled,
-        mode: "programmed-batch-cache",
+        mode: "programmed-open-meteo-cache",
         selectionSize: batchSelection.length,
         batch,
         type,
@@ -636,22 +634,19 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
 
   const fetchedAt = new Date().toISOString();
   const basePayload = buildShellPayload();
-  const hydrometrySelection = (STATIONS_BY_TYPE.hydrometry || []).map((station) => ({ type: "hydrometry", station }));
-  const cfrResult = await fetchCfrMeasurementsForSelection(hydrometrySelection);
-  const afterCfrMeasurements = mergeMeasurements(basePayload.measurements, cfrResult.measurements);
-  const openMeteoResult = await augmentWithOpenMeteo(afterCfrMeasurements);
-  const measurements = mergeMeasurements(afterCfrMeasurements, openMeteoResult.measurements);
+  const openMeteoResult = await augmentWithOpenMeteo(basePayload.measurements);
+  const measurements = mergeMeasurements(basePayload.measurements, openMeteoResult.measurements);
   const payload = {
     ...basePayload,
-    source: "Open-Meteo + CFR Toscana",
-    primarySource: "Open-Meteo per dati meteo, CFR Toscana per idrometria",
+    source: "Open-Meteo",
+    primarySource: "Open-Meteo per dati meteo; idrometria ufficiale da /api/hydrometry",
     fetchedAt,
     measurements,
     cfr: {
-      endpoint: "monitoraggio/dettaglio.php",
-      attemptedStations: cfrResult.attempted,
-      populatedStations: cfrResult.filled,
-      mode: "realtime-hydrometry",
+      endpoint: null,
+      attemptedStations: 0,
+      populatedStations: 0,
+      mode: "disabled-hydrometry-owned-by-api-hydrometry",
       fetchedAt
     },
     openMeteo: {
@@ -661,7 +656,7 @@ export async function getObservationData({ forceRefresh = false, selected = [], 
       primaryTypes: OPEN_METEO_TYPES
     },
     openMeteoFallbackCount: 0,
-    warning: cfrResult.filled || openMeteoResult.filled
+    warning: openMeteoResult.filled
       ? null
       : "Fonti dati non hanno restituito misure leggibili in questo momento."
   };

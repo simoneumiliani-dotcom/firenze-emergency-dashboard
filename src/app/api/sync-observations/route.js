@@ -22,7 +22,9 @@ export async function GET(request) {
   const batchSize = Number(searchParams.get("batchSize") || 18);
   const explicitType = searchParams.get("type");
   const explicitBatch = searchParams.get("batch");
-  const rotatingTypes = Object.keys(STATIONS_BY_TYPE).filter((item) => item !== "nivometry" || process.env.ENABLE_NIVOMETRY_CACHE !== "0");
+  const rotatingTypes = Object.keys(STATIONS_BY_TYPE)
+    .filter((item) => item !== "hydrometry")
+    .filter((item) => item !== "nivometry" || process.env.ENABLE_NIVOMETRY_CACHE !== "0");
   const slot = Math.floor(Date.now() / (15 * 60 * 1000));
   const type = explicitType || rotatingTypes[slot % rotatingTypes.length];
   const maxBatch = Math.max(1, Math.ceil((STATIONS_BY_TYPE[type]?.length || batchSize) / batchSize));
