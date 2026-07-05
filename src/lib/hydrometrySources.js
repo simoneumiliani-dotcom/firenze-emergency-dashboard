@@ -122,26 +122,35 @@ function getFeatureCoordinates(feature, fallbackFeature = null) {
   return { longitude: null, latitude: null };
 }
 
-function getHistoricalHydrometrySource(feature) {
+function getHistoricalHydrometrySource(feature, stationCode = null) {
   const consistency = feature?.properties?.Consistenza || {};
   const entry = Object.entries(consistency).find(([label, details]) =>
     /IDROMETRIA|IDROMETRI|LIVELLI/i.test(label) || /IDST=idro/i.test(details?.SorgenteDati || "")
   );
-  if (!entry) return { historical_label: null, historical_url: null, historical_years: [] };
-  const [label, details] = entry;
-  return {
-    historical_label: label,
-    historical_url: details?.SorgenteDati || null,
-    historical_years: Array.isArray(details?.Anni?.[0]) ? details.Anni[0] : []
-  };
+  if (entry) {
+    const [label, details] = entry;
+    return {
+      historical_label: label,
+      historical_url: details?.SorgenteDati || null,
+      historical_years: Array.isArray(details?.Anni?.[0]) ? details.Anni[0] : [],
+      historical_inferred: false
+    };
+  }
+
+  return stationCode ? {
+    historical_label: "IDROMETRIA - endpoint SIR candidato",
+    historical_url: "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=" + encodeURIComponent(stationCode),
+    historical_years: [],
+    historical_inferred: true
+  } : { historical_label: null, historical_url: null, historical_years: [], historical_inferred: false };
 }
 
 export function normalizeHydrometryStation(activeFeature, archiveFeature = null) {
   const properties = activeFeature?.properties || {};
   const archiveProperties = archiveFeature?.properties || {};
   const coordinates = getFeatureCoordinates(activeFeature, archiveFeature);
-  const historical = getHistoricalHydrometrySource(archiveFeature);
   const stationCode = cleanText(firstField(properties, ["id_stazione", "Codice", "codice"]) || archiveProperties.Codice);
+  const historical = getHistoricalHydrometrySource(archiveFeature, stationCode);
 
   return {
     station_id: stationCode,
@@ -159,6 +168,7 @@ export function normalizeHydrometryStation(activeFeature, archiveFeature = null)
     historical_label: historical.historical_label,
     historical_url: historical.historical_url,
     historical_years: historical.historical_years,
+    historical_inferred: historical.historical_inferred,
     source_type: HYDROMETRY_SOURCES.activeHydrometers.sourceType,
     source_url: HYDROMETRY_SOURCES.activeHydrometers.dataUrl,
     validated: true

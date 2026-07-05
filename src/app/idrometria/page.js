@@ -185,7 +185,7 @@ export default function IdrometriaPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ province: "FI", realtime: "1", limit: "12" });
+      const params = new URLSearchParams({ province: "FI", realtime: "1", limit: "all" });
       if (stationId) params.set("historicalStationId", stationId);
       const response = await fetch("/api/hydrometry?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
@@ -249,6 +249,7 @@ export default function IdrometriaPage() {
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Realtime CFR</p>
               <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.realtime ?? 0}</p>
+              <p className="mt-1 text-xs text-slate-400">Tentate: {payload?.realtimeDiagnostics?.attemptedStations ?? 0}</p>
             </div>
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Storico caricato</p>

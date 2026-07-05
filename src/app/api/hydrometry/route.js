@@ -46,18 +46,25 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const province = searchParams.get("province") || "FI";
   const realtime = searchParams.get("realtime") !== "0";
-  const realtimeLimit = Number(searchParams.get("limit") || 12);
+  const realtimeLimitParam = searchParams.get("limit");
   const historicalStationId = searchParams.get("historicalStationId");
   const historicalLimit = Number(searchParams.get("historicalLimit") || 120);
 
   try {
     const stations = await getHydrometryStations({ province });
-    let realtimeMeasurements = realtime
+    const realtimeLimit = realtimeLimitParam === "all"
+      ? stations.length
+      : Math.min(stations.length, Math.max(1, Number(realtimeLimitParam || stations.length) || stations.length));
+    const directRealtime = realtime
       ? await getHydrometryRealtime({ stations, limit: realtimeLimit })
       : [];
-    if (realtime && realtimeMeasurements.length === 0) {
-      realtimeMeasurements = await getRealtimeFallback(stations, realtimeLimit);
-    }
+    const fallbackRealtime = realtime
+      ? await getRealtimeFallback(stations, realtimeLimit)
+      : [];
+    const realtimeByStation = new Map();
+    fallbackRealtime.forEach((row) => realtimeByStation.set(row.station_id, row));
+    directRealtime.forEach((row) => realtimeByStation.set(row.station_id, row));
+    const realtimeMeasurements = [...realtimeByStation.values()];
     const selectedHistoricalStation = historicalStationId
       ? stations.find((station) => station.station_id === historicalStationId)
       : null;
@@ -77,6 +84,12 @@ export async function GET(request) {
         stations: stations.length,
         realtime: realtimeMeasurements.length,
         historical: historicalMeasurements.length
+      },
+      realtimeDiagnostics: {
+        attemptedStations: realtime ? realtimeLimit : 0,
+        directRows: directRealtime.length,
+        fallbackRows: fallbackRealtime.length,
+        mergedRows: realtimeMeasurements.length
       },
       notes: [
         "Il realtime CFR Toscana e' operativo e non validato.",
