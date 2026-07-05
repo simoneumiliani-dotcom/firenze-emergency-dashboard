@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CloudSun, LayoutDashboard } from "lucide-react";
+import { BarChart3, CloudSun, LayoutDashboard, Waves } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/previsioni", label: "Previsioni", icon: CloudSun }
+  { href: "/previsioni", label: "Previsioni", icon: CloudSun },
+  { href: "/idrometria", label: "Idrometria", icon: Waves }
 ];
 
 export default function AppNav() {
@@ -25,7 +26,7 @@ export default function AppNav() {
           </span>
         </Link>
 
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-sm sm:flex">
+        <div className="grid grid-cols-3 gap-2 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-sm sm:flex">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
