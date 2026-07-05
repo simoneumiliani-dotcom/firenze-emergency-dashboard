@@ -70,7 +70,7 @@ export async function GET(request) {
         "Lo storico SIR puo' contenere flag @/-9999, P, V o R secondo la scheda OpenData."
       ]
     }, {
-      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=1800" }
+      headers: { "Cache-Control": realtime ? "no-store" : "s-maxage=300, stale-while-revalidate=1800" }
     });
   } catch (error) {
     return NextResponse.json({

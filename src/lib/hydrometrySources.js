@@ -327,7 +327,9 @@ function discoverCfrPageLinks(html) {
 function findStationForCfrRow({ stationText, codeText }, stations) {
   const code = cleanText(codeText);
   if (code) {
-    const byCode = stations.find((station) => station.station_id === code || station.station_code === code);
+    const codeMatch = code.match(/TOS\d+/i);
+    const normalizedCode = codeMatch ? codeMatch[0].toUpperCase() : code;
+    const byCode = stations.find((station) => station.station_id === normalizedCode || station.station_code === normalizedCode);
     if (byCode) return byCode;
   }
 
@@ -336,6 +338,22 @@ function findStationForCfrRow({ stationText, codeText }, stations) {
   return stations.find((station) => {
     const stationKey = normalizeNameKey(station.station_name);
     return stationKey === key || stationKey.includes(key) || key.includes(stationKey);
+  }) || null;
+}
+
+function findStationFromRow(row, stations) {
+  const joined = cleanText(row.join(" "));
+  const codeMatch = joined.match(/TOS\d+/i);
+  if (codeMatch) {
+    const code = codeMatch[0].toUpperCase();
+    const byCode = stations.find((station) => station.station_id === code || station.station_code === code);
+    if (byCode) return byCode;
+  }
+
+  const rowKey = normalizeNameKey(joined);
+  return stations.find((station) => {
+    const stationKey = normalizeNameKey(station.station_name);
+    return stationKey && rowKey.includes(stationKey);
   }) || null;
 }
 
@@ -356,13 +374,45 @@ function pickHeaderValueExcept(row, headers, includePatterns, excludePatterns = 
   return null;
 }
 
+function hasUsableHeaders(headers) {
+  const joined = normalizeHeaderKey(headers.join(" "));
+  return /attuale|liv\.?\s*1|livello\s*1|portata|ult\.?\s*dati|variaz/.test(joined);
+}
+
+function getFallbackCfrValues(row, station) {
+  const stationKey = normalizeNameKey(station?.station_name);
+  const values = row
+    .map((cell, index) => ({ cell, index, text: cleanText(cell), value: parseHydrometricMeters(cell) }))
+    .filter((item) => Number.isFinite(item.value))
+    .filter((item) => !/^TOS\d+/i.test(item.text))
+    .filter((item) => !/\d{2}\/\d{2}\/\d{4}/.test(item.text))
+    .filter((item) => !stationKey || !normalizeNameKey(item.text).includes(stationKey));
+
+  // Ordine CFR senza intestazioni: liv.1, liv.2, attuale, poi variazioni e/o portata.
+  const warning = values[0]?.value ?? null;
+  const danger = values[1]?.value ?? null;
+  const level = values[2]?.value ?? values[0]?.value ?? null;
+  const afterLevel = values.slice(3);
+
+  return {
+    level,
+    warning,
+    danger,
+    flow: parseFlowValue(afterLevel.find((item) => Math.abs(item.value) > 30)?.cell),
+    deltaH1: afterLevel[0]?.value ?? null,
+    deltaH3: afterLevel[1]?.value ?? null,
+    deltaH6: afterLevel[2]?.value ?? null
+  };
+}
+
 function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime) {
   if (!row?.length) return null;
   const stationText = pickHeaderValue(row, headers, [/stazione/, /nome/, /denominazione/]) || row[1] || row[0];
   const codeText = pickHeaderValue(row, headers, [/codice/, /^id$/]) || (/^TOS\d+/i.test(row[0]) ? row[0] : null);
-  const station = findStationForCfrRow({ stationText, codeText }, stations);
+  const station = findStationForCfrRow({ stationText, codeText }, stations) || findStationFromRow(row, stations);
   if (!station) return null;
 
+  const fallbackValues = hasUsableHeaders(headers) ? null : getFallbackCfrValues(row, station);
   const levelText = pickHeaderValueExcept(row, headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/, /portata/]);
   const flowText = pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/]);
   const warningText = pickHeaderValueExcept(row, headers, [/liv\.?\s*1/, /livello\s*1/], []);
@@ -371,10 +421,10 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const deltaH3Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*3/, /variaz.*\bh3\b/]);
   const deltaH6Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*6/, /variaz.*\bh6\b/]);
   const measurementText = pickHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/]);
-  const level = parseHydrometricMeters(levelText);
-  const flow = parseFlowValue(flowText);
-  const warning_m = parseHydrometricMeters(warningText);
-  const danger_m = parseHydrometricMeters(dangerText);
+  const level = parseHydrometricMeters(levelText) ?? fallbackValues?.level;
+  const flow = parseFlowValue(flowText) ?? fallbackValues?.flow;
+  const warning_m = parseHydrometricMeters(warningText) ?? fallbackValues?.warning;
+  const danger_m = parseHydrometricMeters(dangerText) ?? fallbackValues?.danger;
   if (!Number.isFinite(level)) return null;
 
   return {
@@ -390,9 +440,9 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
     flow_mc_s: Number.isFinite(flow) ? flow : null,
     warning_m: Number.isFinite(warning_m) ? warning_m : null,
     danger_m: Number.isFinite(danger_m) ? danger_m : null,
-    delta_h1_m: parseHydrometricMeters(deltaH1Text),
-    delta_h3_m: parseHydrometricMeters(deltaH3Text),
-    delta_h6_m: parseHydrometricMeters(deltaH6Text),
+    delta_h1_m: parseHydrometricMeters(deltaH1Text) ?? fallbackValues?.deltaH1 ?? null,
+    delta_h3_m: parseHydrometricMeters(deltaH3Text) ?? fallbackValues?.deltaH3 ?? null,
+    delta_h6_m: parseHydrometricMeters(deltaH6Text) ?? fallbackValues?.deltaH6 ?? null,
     trend: null,
     source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
     source_url: sourceUrl,
