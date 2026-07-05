@@ -18,21 +18,9 @@ import {
   Wind,
   X
 } from "lucide-react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
 import PdfParser from "@/components/PdfParser";
 import AppNav from "@/components/AppNav";
 import {
-  CHART_COLORS,
-  DEFAULT_CHART_STATION_IDS,
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
   STATIONS_BY_TYPE,
@@ -525,95 +513,6 @@ function MobileMeasurementPanel({ config, onChange, measurements, stationCatalog
   );
 }
 
-function RiverChart({ stations, selectedIds, onSelectedIdsChange }) {
-  const selectedStations = selectedIds
-    .map((id) => stations.find((station) => station.id === id))
-    .filter(Boolean);
-
-  const chartData = useMemo(() => {
-    const points = selectedStations[0]?.history || [];
-    return points.map((point, index) => {
-      const row = { time: point.time };
-      selectedStations.forEach((station) => {
-        row[station.id] = station.history?.[index]?.value ?? null;
-        row[`${station.id}-warning`] = station.history?.[index]?.warning ?? station.warning;
-      });
-      return row;
-    });
-  }, [selectedStations]);
-
-  function toggleStation(stationId) {
-    if (selectedIds.includes(stationId)) {
-      onSelectedIdsChange(selectedIds.filter((id) => id !== stationId));
-      return;
-    }
-    onSelectedIdsChange([...selectedIds, stationId]);
-  }
-
-  return (
-    <section className="panel p-4">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="section-title">Andamento idrometrico</h2>
-          <p className="muted">Selezione manuale da stazioni CFR idrometriche. Ogni linea e ogni soglia hanno colore dedicato.</p>
-        </div>
-        <select
-          value=""
-          onChange={(event) => {
-            if (event.target.value) toggleStation(event.target.value);
-          }}
-          className="rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
-        >
-          <option value="">Aggiungi/rimuovi stazione</option>
-          {stations.map((station) => (
-            <option key={station.id} value={station.id}>
-              {selectedIds.includes(station.id) ? "[x] " : ""}{station.id} - {station.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mb-3 flex flex-wrap gap-2">
-        {selectedStations.map((station, index) => (
-          <button
-            key={station.id}
-            type="button"
-            onClick={() => toggleStation(station.id)}
-            className="rounded-md border px-2.5 py-1 text-xs text-slate-100"
-            style={{ borderColor: CHART_COLORS[index % CHART_COLORS.length], background: `${CHART_COLORS[index % CHART_COLORS.length]}22` }}
-          >
-            {station.name}
-          </button>
-        ))}
-      </div>
-
-      <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
-            <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
-            <XAxis dataKey="time" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-            <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="m" />
-            <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
-            <Legend />
-            {selectedStations.map((station, index) => {
-              const color = CHART_COLORS[index % CHART_COLORS.length];
-              return (
-                <Line key={station.id} type="monotone" dataKey={station.id} name={station.name} stroke={color} strokeWidth={2} dot={false} />
-              );
-            })}
-            {selectedStations.map((station, index) => {
-              const color = CHART_COLORS[index % CHART_COLORS.length];
-              return (
-                <Line key={`${station.id}-warning`} type="monotone" dataKey={`${station.id}-warning`} name={`Soglia ${station.name}`} stroke={color} strokeDasharray="6 6" dot={false} />
-              );
-            })}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
-  );
-}
-
 function WebcamGrid() {
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -757,7 +656,6 @@ export default function DashboardPage() {
   const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
-  const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
   const [hydrometryCatalog, setHydrometryCatalog] = useState(STATIONS_BY_TYPE.hydrometry || []);
 
   async function loadObservationData() {
@@ -813,16 +711,6 @@ export default function DashboardPage() {
         });
         return { ...config, stationIds: nextIds.slice(0, 3) };
       }));
-      setChartStationIds((current) => {
-        const validIds = new Set(hydrometryStations.map((station) => station.id));
-        const nextIds = current.filter((stationId) => validIds.has(stationId));
-        hydrometryStations.some((station) => {
-          if (nextIds.length >= 3) return true;
-          if (!nextIds.includes(station.id)) nextIds.push(station.id);
-          return false;
-        });
-        return nextIds.slice(0, 3);
-      });
     } catch {
       setObservationData((current) => ({
         ...current,
@@ -1027,12 +915,6 @@ export default function DashboardPage() {
             />
           ))}
         </section>
-
-        <RiverChart
-          stations={hydrometryStations}
-          selectedIds={chartStationIds}
-          onSelectedIdsChange={setChartStationIds}
-        />
 
         <WeatherForecastPanel weatherData={weatherData} />
 
