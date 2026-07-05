@@ -131,21 +131,32 @@ function RealtimeTable({ rows }) {
   );
 }
 
-function HistoricalPanel({ station, rows }) {
+function HistoricalPanel({ station, rows, loading, error, onLoad }) {
   return (
     <section className="panel overflow-hidden">
-      <div className="flex items-center gap-3 border-b border-emergency-line px-4 py-3">
-        <History className="h-5 w-5 text-sky-300" />
-        <div>
-          <h2 className="section-title">Storico SIR</h2>
-          <p className="muted">Serie storica collegata alla stazione selezionata, quando la risorsa SorgenteDati e presente.</p>
+      <div className="flex flex-col gap-3 border-b border-emergency-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <History className="h-5 w-5 text-sky-300" />
+          <div>
+            <h2 className="section-title">Storico SIR</h2>
+            <p className="muted">Serie storica collegata alla stazione selezionata, da caricare solo su richiesta.</p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onLoad}
+          disabled={!station || loading}
+          className="inline-flex items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? "Caricamento..." : "Carica storico"}
+        </button>
       </div>
       <div className="p-4">
         <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 text-sm">
           <p className="font-semibold text-slate-100">{station?.station_name || "Nessuna stazione selezionata"}</p>
           <p className="mt-1 text-slate-400">Risorsa storico: {station?.historical_url || "non disponibile"}</p>
         </div>
+        {error && <div className="mt-4 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-sm text-orange-100">{error}</div>}
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-emergency-line">
           <table className="min-w-full divide-y divide-emergency-line text-sm">
             <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
@@ -179,19 +190,23 @@ export default function IdrometriaPage() {
   const [payload, setPayload] = useState(null);
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [historicalLoading, setHistoricalLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [historicalError, setHistoricalError] = useState(null);
 
-  async function loadData(stationId = selectedStationId) {
+  async function loadData() {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ province: "FI", realtime: "1", limit: "all" });
-      if (stationId) params.set("historicalStationId", stationId);
       const response = await fetch("/api/hydrometry?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || data?.error || "Errore idrometria");
-      setPayload(data);
-      if (!stationId && data.stations?.length) {
+      setPayload((current) => ({
+        ...data,
+        historicalMeasurements: current?.historicalMeasurements || []
+      }));
+      if (!selectedStationId && data.stations?.length) {
         const firstHistorical = data.stations.find((station) => station.historical_url) || data.stations[0];
         setSelectedStationId(firstHistorical.station_id);
       }
@@ -203,12 +218,39 @@ export default function IdrometriaPage() {
   }
 
   useEffect(() => {
-    loadData(null);
+    loadData();
   }, []);
 
-  useEffect(() => {
-    if (selectedStationId) loadData(selectedStationId);
-  }, [selectedStationId]);
+  async function loadHistorical(stationId = selectedStationId) {
+    if (!stationId) return;
+    setHistoricalLoading(true);
+    setHistoricalError(null);
+    try {
+      const params = new URLSearchParams({
+        province: "FI",
+        realtime: "0",
+        historical: "1",
+        historicalStationId: stationId,
+        historicalLimit: "120"
+      });
+      const response = await fetch("/api/hydrometry?" + params.toString(), { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || data?.error || "Storico non disponibile");
+      if (data.historicalError) throw new Error(data.historicalError);
+      setPayload((current) => ({
+        ...(current || data),
+        historicalMeasurements: data.historicalMeasurements || [],
+        counts: {
+          ...(current?.counts || data.counts || {}),
+          historical: data.historicalMeasurements?.length || 0
+        }
+      }));
+    } catch (err) {
+      setHistoricalError(err?.message || String(err));
+    } finally {
+      setHistoricalLoading(false);
+    }
+  }
 
   const selectedStation = useMemo(
     () => payload?.stations?.find((station) => station.station_id === selectedStationId) || null,
@@ -229,7 +271,7 @@ export default function IdrometriaPage() {
               </div>
               <button
                 type="button"
-                onClick={() => loadData(selectedStationId)}
+                onClick={() => loadData()}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20"
               >
                 <RefreshCcw className="h-4 w-4" />
@@ -263,7 +305,7 @@ export default function IdrometriaPage() {
             <StationList stations={payload?.stations || []} selectedId={selectedStationId} onSelect={setSelectedStationId} />
             <div className="flex flex-col gap-5">
               <RealtimeTable rows={payload?.realtimeMeasurements || []} />
-              <HistoricalPanel station={selectedStation} rows={payload?.historicalMeasurements || []} />
+              <HistoricalPanel station={selectedStation} rows={payload?.historicalMeasurements || []} loading={historicalLoading} error={historicalError} onLoad={() => loadHistorical(selectedStationId)} />
             </div>
           </section>
         </div>

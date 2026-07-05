@@ -47,7 +47,8 @@ export async function GET(request) {
   const province = searchParams.get("province") || "FI";
   const realtime = searchParams.get("realtime") !== "0";
   const realtimeLimitParam = searchParams.get("limit");
-  const historicalStationId = searchParams.get("historicalStationId");
+  const historicalRequested = searchParams.get("historical") === "1";
+  const historicalStationId = historicalRequested ? searchParams.get("historicalStationId") : null;
   const historicalLimit = Number(searchParams.get("historicalLimit") || 120);
 
   try {
@@ -68,9 +69,15 @@ export async function GET(request) {
     const selectedHistoricalStation = historicalStationId
       ? stations.find((station) => station.station_id === historicalStationId)
       : null;
-    const historicalMeasurements = selectedHistoricalStation
-      ? await getHydrometryHistorical({ station: selectedHistoricalStation, limit: historicalLimit })
-      : [];
+    let historicalMeasurements = [];
+    let historicalError = null;
+    if (selectedHistoricalStation) {
+      try {
+        historicalMeasurements = await getHydrometryHistorical({ station: selectedHistoricalStation, limit: historicalLimit });
+      } catch (error) {
+        historicalError = error?.message || String(error);
+      }
+    }
 
     return NextResponse.json({
       fetchedAt: new Date().toISOString(),
@@ -80,6 +87,7 @@ export async function GET(request) {
       stations,
       realtimeMeasurements,
       historicalMeasurements,
+      historicalError,
       counts: {
         stations: stations.length,
         realtime: realtimeMeasurements.length,
