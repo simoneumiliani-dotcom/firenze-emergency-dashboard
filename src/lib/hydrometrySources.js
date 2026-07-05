@@ -79,6 +79,28 @@ function parseNumber(value) {
   return normalized ? Number(normalized[0]) : null;
 }
 
+function parseHydrometricMeters(value) {
+  const text = cleanText(value);
+  if (!text || /^TOS\d+/i.test(text) || /\d{2}\/\d{2}\/\d{4}/.test(text)) return null;
+
+  const parsed = parseNumber(text);
+  if (!Number.isFinite(parsed)) return null;
+
+  // CFR espone l altezza idrometrica in metri. Convertiamo solo celle dichiarate in cm.
+  if (/\bcm\b/i.test(text)) {
+    const meters = parsed / 100;
+    return Math.abs(meters) <= 30 ? Number(meters.toFixed(3)) : null;
+  }
+
+  // Scarta codici, quote altimetriche e valori non plausibili come livello idrometrico.
+  return Math.abs(parsed) <= 30 ? parsed : null;
+}
+
+function parseFlowValue(value) {
+  const parsed = parseNumber(value);
+  return Number.isFinite(parsed) && Math.abs(parsed) < 10000 ? parsed : null;
+}
+
 function cleanText(value) {
   return String(value || "")
     .replace(/\\(["'\\])/g, "$1")
@@ -208,6 +230,7 @@ function parseQuotedArrayItems(rawItems) {
 }
 
 export function parseCfrRealtimeDetail(html, station) {
+  const source = String(html || "");
   const rows = [...String(html || "").matchAll(/\w+\[\d+\]\s*=\s*new\s+Array\((.*?)\);/g)]
     .map((match) => parseQuotedArrayItems(match[1]))
     .filter((items) => items.length >= 4);
@@ -215,9 +238,13 @@ export function parseCfrRealtimeDetail(html, station) {
   const previous = rows.length > 1 ? rows[rows.length - 2] : null;
   if (!latest) return null;
 
-  const level = parseNumber(latest[2]);
-  const previousLevel = previous ? parseNumber(previous[2]) : null;
-  const flow = parseNumber(latest[3]);
+  const level = parseHydrometricMeters(latest[2]);
+  const previousLevel = previous ? parseHydrometricMeters(previous[2]) : null;
+  const flow = parseFlowValue(latest[3]);
+  const warningMatch = source.match(/Livello\s*1\s*-&gt;\s*([-\d.,]+)\s*m/i) || source.match(/Livello\s*1\s*->\s*([-\d.,]+)\s*m/i);
+  const dangerMatch = source.match(/Livello\s*2\s*-&gt;\s*([-\d.,]+)\s*m/i) || source.match(/Livello\s*2\s*->\s*([-\d.,]+)\s*m/i);
+  const warning_m = parseHydrometricMeters(warningMatch?.[1]);
+  const danger_m = parseHydrometricMeters(dangerMatch?.[1]);
   if (!Number.isFinite(level)) return null;
 
   return {
@@ -231,6 +258,8 @@ export function parseCfrRealtimeDetail(html, station) {
     measurement_time: normalizeDateTime(latest[1]),
     level_m: level,
     flow_mc_s: Number.isFinite(flow) ? flow : null,
+    warning_m: Number.isFinite(warning_m) ? warning_m : null,
+    danger_m: Number.isFinite(danger_m) ? danger_m : null,
     trend:
       Number.isFinite(previousLevel) && level > previousLevel ? "up" :
       Number.isFinite(previousLevel) && level < previousLevel ? "down" :
@@ -288,6 +317,24 @@ function pickHeaderValue(row, headers, patterns) {
   return null;
 }
 
+function pickHeaderValueExcept(row, headers, includePatterns, excludePatterns = []) {
+  for (let index = 0; index < headers.length; index += 1) {
+    const header = normalizeNameKey(headers[index]);
+    if (excludePatterns.some((pattern) => pattern.test(header))) continue;
+    if (includePatterns.some((pattern) => pattern.test(header))) return row[index];
+  }
+  return null;
+}
+
+function findFirstPlausibleLevel(row, skipIndexes = new Set()) {
+  for (let index = 0; index < row.length; index += 1) {
+    if (skipIndexes.has(index)) continue;
+    const level = parseHydrometricMeters(row[index]);
+    if (Number.isFinite(level)) return level;
+  }
+  return null;
+}
+
 function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime) {
   if (!row?.length) return null;
   const stationText = pickHeaderValue(row, headers, [/stazione/, /nome/, /denominazione/]) || row[1] || row[0];
@@ -295,10 +342,18 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const station = findStationForCfrRow({ stationText, codeText }, stations);
   if (!station) return null;
 
-  const numericValues = row.map(parseNumber).filter(Number.isFinite);
-  const level = parseNumber(pickHeaderValue(row, headers, [/livello/, /idrometr/])) ?? numericValues[0] ?? null;
-  const flow = parseNumber(pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/])) ?? numericValues.find((value) => value !== level) ?? null;
-  if (!Number.isFinite(level) && !Number.isFinite(flow)) return null;
+  const stationIndex = row.findIndex((value) => normalizeNameKey(value) === normalizeNameKey(stationText));
+  const codeIndex = row.findIndex((value) => cleanText(value) === cleanText(codeText));
+  const skipIndexes = new Set([stationIndex, codeIndex].filter((index) => index >= 0));
+  const levelText = pickHeaderValueExcept(row, headers, [/altezza/, /idrometr/, /^livello$/], [/livello\s*[12]/, /soglia/, /portata/]);
+  const flowText = pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/]);
+  const warningText = pickHeaderValueExcept(row, headers, [/livello\s*1/, /soglia\s*1/, /prima\s*soglia/], []);
+  const dangerText = pickHeaderValueExcept(row, headers, [/livello\s*2/, /soglia\s*2/, /seconda\s*soglia/], []);
+  const level = parseHydrometricMeters(levelText) ?? findFirstPlausibleLevel(row, skipIndexes);
+  const flow = parseFlowValue(flowText);
+  const warning_m = parseHydrometricMeters(warningText);
+  const danger_m = parseHydrometricMeters(dangerText);
+  if (!Number.isFinite(level)) return null;
 
   return {
     station_id: station.station_id,
@@ -311,6 +366,8 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
     measurement_time: measurementTime,
     level_m: Number.isFinite(level) ? level : null,
     flow_mc_s: Number.isFinite(flow) ? flow : null,
+    warning_m: Number.isFinite(warning_m) ? warning_m : null,
+    danger_m: Number.isFinite(danger_m) ? danger_m : null,
     trend: null,
     source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
     source_url: sourceUrl,

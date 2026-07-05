@@ -18,7 +18,7 @@ import AppNav from "@/components/AppNav";
 
 const LEVEL_LINE_COLOR = "#2f36d8";
 const LEVEL_ONE_COLOR = "#e8df20";
-const LEVEL_TWO_COLOR = "#ff4ec8";
+const LEVEL_TWO_COLOR = "#ef4444";
 
 function formatTime(value) {
   if (!value) return "n.d.";
@@ -63,8 +63,12 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
     .filter((row) => Number.isFinite(Number(row.level_m)));
   const rawRows = stationHistoricalRows.length ? stationHistoricalRows.slice(-48) : buildFallbackTrendPoints(selectedRealtime);
   const currentLevel = Number(selectedRealtime?.level_m ?? rawRows[rawRows.length - 1]?.level_m);
-  const levelOne = Number.isFinite(currentLevel) ? Number((currentLevel + 0.8).toFixed(2)) : null;
-  const levelTwo = Number.isFinite(currentLevel) ? Number((currentLevel + 1.4).toFixed(2)) : null;
+  const levelOne = Number.isFinite(Number(selectedRealtime?.warning_m))
+    ? Number(selectedRealtime.warning_m)
+    : Number.isFinite(currentLevel) ? Number((currentLevel + 0.8).toFixed(2)) : null;
+  const levelTwo = Number.isFinite(Number(selectedRealtime?.danger_m))
+    ? Number(selectedRealtime.danger_m)
+    : Number.isFinite(currentLevel) ? Number((currentLevel + 1.4).toFixed(2)) : null;
   const chartData = rawRows.map((row) => ({
     time: formatChartTime(row.measurement_time),
     timestamp: row.measurement_time,
@@ -147,8 +151,8 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
             <div className="space-y-3 text-sm">
               <div>
                 <p className="font-semibold text-indigo-800">Soglie operative</p>
-                <p className="mt-1">Livello 1 -&gt; {levelOne ?? "n.d."} m</p>
-                <p>Livello 2 -&gt; {levelTwo ?? "n.d."} m</p>
+                <p className="mt-1"><span className="inline-block h-2.5 w-6 rounded-sm bg-yellow-300" /> Livello 1 -&gt; {levelOne ?? "n.d."} m</p>
+                <p><span className="inline-block h-2.5 w-6 rounded-sm bg-red-500" /> Livello 2 -&gt; {levelTwo ?? "n.d."} m</p>
               </div>
               <div className="rounded border border-slate-300 bg-slate-50 p-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Ultima misura</p>

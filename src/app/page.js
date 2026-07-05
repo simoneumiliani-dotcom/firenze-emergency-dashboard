@@ -207,8 +207,12 @@ function normalizeHydrometryForDashboard(payload) {
     const value = realtime?.level_m;
     const numericValue = Number(value);
     const hasValue = Number.isFinite(numericValue);
-    const warning = hasValue ? Number((numericValue + 0.8).toFixed(2)) : null;
-    const danger = hasValue ? Number((numericValue + 1.4).toFixed(2)) : null;
+    const warning = Number.isFinite(Number(realtime?.warning_m))
+      ? Number(realtime.warning_m)
+      : hasValue ? Number((numericValue + 0.8).toFixed(2)) : null;
+    const danger = Number.isFinite(Number(realtime?.danger_m))
+      ? Number(realtime.danger_m)
+      : hasValue ? Number((numericValue + 1.4).toFixed(2)) : null;
 
     return {
       id: station.station_id,
