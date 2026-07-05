@@ -15,7 +15,8 @@ import {
   Snowflake,
   Thermometer,
   Waves,
-  Wind
+  Wind,
+  X
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -265,7 +266,7 @@ function SourceStatusPanel({ observationData }) {
     </section>
   );
 }
-function StationSelect({ value, onChange, options, label }) {
+function StationSelect({ value, onChange, options, label, selectedIds = [] }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs text-slate-400">{label}</span>
@@ -275,7 +276,7 @@ function StationSelect({ value, onChange, options, label }) {
         className="w-full rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
       >
         {options.map((station) => (
-          <option key={station.id} value={station.id}>{station.id} - {station.name}</option>
+          <option key={station.id} value={station.id}>{station.id} - {station.name}{selectedIds.includes(station.id) ? " (selezionata)" : ""}</option>
         ))}
       </select>
     </label>
@@ -307,8 +308,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-sky-300" />
           <div>
-            <h2 className="section-title">Dashboard CFR {index + 1}</h2>
-            <p className="text-xs text-slate-400">{catalog.length} stazioni disponibili per {meta.label}</p>
+            <h2 className="section-title">Controllo {index + 1}</h2>
           </div>
         </div>
         <select
@@ -329,6 +329,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
             value={config.stationIds[slot] || catalog[slot]?.id || ""}
             onChange={(stationId) => updateStation(slot, stationId)}
             options={catalog}
+            selectedIds={config.stationIds}
             label={`Stazione ${slot + 1}`}
           />
         ))}
@@ -363,6 +364,121 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function MobileMeasurementPanel({ config, onChange, measurements }) {
+  const meta = getMeasurementMeta(config.type);
+  const Icon = ICONS[meta.icon] || Gauge;
+  const catalog = STATIONS_BY_TYPE[config.type] || [];
+  const selectedIds = config.stationIds.filter(Boolean).slice(0, 3);
+  const rows = selectedIds
+    .map((stationId) => measurements[config.type]?.find((station) => station.id === stationId))
+    .filter(Boolean);
+
+  function updateType(type) {
+    const nextCatalog = STATIONS_BY_TYPE[type] || [];
+    onChange({ ...config, type, stationIds: nextCatalog.slice(0, 3).map((station) => station.id) });
+  }
+
+  function selectStation(stationId) {
+    if (!stationId || selectedIds.includes(stationId)) return;
+    const nextIds = selectedIds.length < 3 ? [...selectedIds, stationId] : [...selectedIds.slice(1), stationId];
+    onChange({ ...config, stationIds: nextIds });
+  }
+
+  function removeStation(stationId) {
+    const nextIds = selectedIds.filter((id) => id !== stationId);
+    onChange({ ...config, stationIds: nextIds });
+  }
+
+  return (
+    <section className="panel overflow-hidden md:hidden">
+      <div className="border-b border-emergency-line px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Icon className="h-5 w-5 text-sky-300" />
+            <div>
+              <h2 className="section-title">Controllo meteo</h2>
+              <p className="text-xs text-slate-400">Seleziona il servizio e fino a 3 stazioni.</p>
+            </div>
+          </div>
+          <select
+            value={config.type}
+            onChange={(event) => updateType(event.target.value)}
+            className="max-w-[10rem] rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400"
+          >
+            {Object.entries(MEASUREMENT_TYPES).map(([type, item]) => (
+              <option key={type} value={type}>{item.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-400">Aggiungi o sostituisci stazione</span>
+          <select
+            value=""
+            onChange={(event) => selectStation(event.target.value)}
+            className="w-full rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+          >
+            <option value="">Seleziona una stazione</option>
+            {catalog.map((station) => (
+              <option key={station.id} value={station.id}>{station.id} - {station.name}{selectedIds.includes(station.id) ? " (selezionata)" : ""}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-wrap gap-2">
+          {selectedIds.map((stationId) => {
+            const station = catalog.find((item) => item.id === stationId);
+            return (
+              <button
+                key={stationId}
+                type="button"
+                onClick={() => removeStation(stationId)}
+                className="inline-flex items-center gap-2 rounded-full border border-yellow-300/70 bg-yellow-300/15 px-3 py-1.5 text-xs font-medium text-yellow-100"
+              >
+                {station?.name || stationId}
+                <X className="h-3.5 w-3.5" />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-3">
+          {rows.map((row) => (
+            <article key={row.id} className="rounded-lg border border-yellow-300/50 bg-yellow-300/10 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-slate-500">{row.id}</p>
+                  <h3 className="mt-1 text-sm font-semibold text-slate-100">{row.name}</h3>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">{meta.valueLabel}</p>
+                  <p className="mt-1 text-lg font-semibold text-sky-100">{row.value ?? "n.d."} {row.unit}</p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-400">
+                <div>
+                  <p className="text-slate-500">Trend</p>
+                  <TrendIcon trend={row.trend} />
+                </div>
+                <div>
+                  <p className="text-slate-500">Fonte</p>
+                  <p>{row.provider || "n.d."}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Agg.</p>
+                  <p>{row.updatedAt || "n.d."}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -779,7 +895,15 @@ export default function DashboardPage() {
 
         <MapDashboard stations={mapStations} />
 
-        <section className="grid gap-5 xl:grid-cols-2">
+        <MobileMeasurementPanel
+          config={panelConfigs[0]}
+          measurements={observationData.measurements}
+          onChange={(nextConfig) => {
+            setPanelConfigs((current) => current.map((item, index) => index === 0 ? nextConfig : item));
+          }}
+        />
+
+        <section className="hidden gap-5 md:grid xl:grid-cols-2">
           {panelConfigs.map((config, index) => (
             <MeasurementPanel
               key={config.id}
