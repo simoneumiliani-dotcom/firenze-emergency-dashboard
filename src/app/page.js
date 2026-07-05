@@ -142,15 +142,13 @@ function mergeObservationData(base, incoming) {
   };
 }
 
-function buildSelectedObservationQuery(panelConfigs, chartStationIds) {
+function buildSelectedObservationQuery(panelConfigs) {
   const items = new Set();
   panelConfigs.forEach((config) => {
+    if (config.type === "hydrometry") return;
     config.stationIds.forEach((stationId) => {
       if (stationId) items.add(config.type + ":" + stationId);
     });
-  });
-  chartStationIds.forEach((stationId) => {
-    if (stationId) items.add("hydrometry:" + stationId);
   });
   return [...items].join(",");
 }
@@ -205,6 +203,49 @@ function normalizeMeteoHubData(payload) {
     note: payload?.note || null,
     requests: payload?.requests || []
   };
+}
+
+function formatShortTime(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value);
+  return date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+
+function normalizeHydrometryForDashboard(payload) {
+  const realtimeByStation = new Map((payload?.realtimeMeasurements || []).map((row) => [row.station_id, row]));
+  return (payload?.stations || []).map((station) => {
+    const realtime = realtimeByStation.get(station.station_id);
+    const value = realtime?.level_m;
+    const numericValue = Number(value);
+    const hasValue = Number.isFinite(numericValue);
+    const warning = hasValue ? Number((numericValue + 0.8).toFixed(2)) : null;
+    const danger = hasValue ? Number((numericValue + 1.4).toFixed(2)) : null;
+
+    return {
+      id: station.station_id,
+      name: station.station_name,
+      type: "hydrometry",
+      lat: station.latitude,
+      lng: station.longitude,
+      value: hasValue ? numericValue : null,
+      unit: MEASUREMENT_TYPES.hydrometry.unit,
+      trend: realtime?.trend || null,
+      updatedAt: formatShortTime(realtime?.measurement_time),
+      warning,
+      danger,
+      history: hasValue ? buildHydroHistory(numericValue) : undefined,
+      unavailable: !hasValue,
+      provider: realtime ? "CFR Toscana" : "CFR Toscana (in attesa)",
+      real: Boolean(realtime),
+      extra: {
+        riverName: station.river_name,
+        basin: station.basin,
+        flow: realtime?.flow_mc_s ?? null,
+        source_url: realtime?.source_url || station.source_url
+      }
+    };
+  });
 }
 
 function getStationStatus(station) {
@@ -283,10 +324,10 @@ function StationSelect({ value, onChange, options, label, selectedIds = [] }) {
   );
 }
 
-function MeasurementPanel({ index, config, onChange, measurements }) {
+function MeasurementPanel({ index, config, onChange, measurements, stationCatalogs = STATIONS_BY_TYPE }) {
   const meta = getMeasurementMeta(config.type);
   const Icon = ICONS[meta.icon] || Gauge;
-  const catalog = STATIONS_BY_TYPE[config.type] || [];
+  const catalog = stationCatalogs[config.type] || STATIONS_BY_TYPE[config.type] || [];
   const rows = config.stationIds
     .map((stationId) => measurements[config.type]?.find((station) => station.id === stationId))
     .filter(Boolean);
@@ -298,7 +339,7 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
   }
 
   function updateType(type) {
-    const nextCatalog = STATIONS_BY_TYPE[type] || [];
+    const nextCatalog = stationCatalogs[type] || STATIONS_BY_TYPE[type] || [];
     onChange({ ...config, type, stationIds: nextCatalog.slice(0, 3).map((station) => station.id) });
   }
 
@@ -369,17 +410,17 @@ function MeasurementPanel({ index, config, onChange, measurements }) {
   );
 }
 
-function MobileMeasurementPanel({ config, onChange, measurements }) {
+function MobileMeasurementPanel({ config, onChange, measurements, stationCatalogs = STATIONS_BY_TYPE }) {
   const meta = getMeasurementMeta(config.type);
   const Icon = ICONS[meta.icon] || Gauge;
-  const catalog = STATIONS_BY_TYPE[config.type] || [];
+  const catalog = stationCatalogs[config.type] || STATIONS_BY_TYPE[config.type] || [];
   const selectedIds = config.stationIds.filter(Boolean).slice(0, 3);
   const rows = selectedIds
     .map((stationId) => measurements[config.type]?.find((station) => station.id === stationId))
     .filter(Boolean);
 
   function updateType(type) {
-    const nextCatalog = STATIONS_BY_TYPE[type] || [];
+    const nextCatalog = stationCatalogs[type] || STATIONS_BY_TYPE[type] || [];
     onChange({ ...config, type, stationIds: nextCatalog.slice(0, 3).map((station) => station.id) });
   }
 
@@ -717,6 +758,7 @@ export default function DashboardPage() {
   const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [chartStationIds, setChartStationIds] = useState(DEFAULT_CHART_STATION_IDS);
+  const [hydrometryCatalog, setHydrometryCatalog] = useState(STATIONS_BY_TYPE.hydrometry || []);
 
   async function loadObservationData() {
     try {
@@ -725,6 +767,67 @@ export default function DashboardPage() {
       setObservationData((current) => mergeObservationData(current, payload));
     } catch (error) {
       setObservationData(normalizeObservationData({ warning: "Fonti dati non raggiungibili in questo momento. La dashboard mantiene gli ultimi valori disponibili." }));
+    }
+  }
+
+  async function loadHydrometryData() {
+    try {
+      const response = await fetch("/api/hydrometry?province=FI&realtime=1&limit=all", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.message || payload?.error || "Idrometria non disponibile");
+      const hydrometryStations = normalizeHydrometryForDashboard(payload);
+      if (!hydrometryStations.length) return;
+      setHydrometryCatalog(hydrometryStations.map((station) => ({
+        id: station.id,
+        name: station.name,
+        type: station.type,
+        lat: station.lat,
+        lng: station.lng
+      })));
+      setObservationData((current) => ({
+        ...current,
+        measurements: {
+          ...current.measurements,
+          hydrometry: hydrometryStations
+        },
+        cfr: {
+          ...(current.cfr || {}),
+          fetchedAt: payload.fetchedAt,
+          populatedStations: payload.counts?.realtime || 0,
+          attemptedStations: payload.counts?.stations || hydrometryStations.length,
+          mode: "official-hydrometry-api"
+        },
+        fetchedAt: payload.fetchedAt || current.fetchedAt,
+        warning: current.warning === "CFR Toscana non ha restituito dati idrometrici leggibili per le stazioni richieste. Open-Meteo non fornisce livelli dei fiumi."
+          ? null
+          : current.warning
+      }));
+      setPanelConfigs((current) => current.map((config) => {
+        if (config.type !== "hydrometry") return config;
+        const validIds = new Set(hydrometryStations.map((station) => station.id));
+        const nextIds = config.stationIds.filter((stationId) => validIds.has(stationId));
+        hydrometryStations.some((station) => {
+          if (nextIds.length >= 3) return true;
+          if (!nextIds.includes(station.id)) nextIds.push(station.id);
+          return false;
+        });
+        return { ...config, stationIds: nextIds.slice(0, 3) };
+      }));
+      setChartStationIds((current) => {
+        const validIds = new Set(hydrometryStations.map((station) => station.id));
+        const nextIds = current.filter((stationId) => validIds.has(stationId));
+        hydrometryStations.some((station) => {
+          if (nextIds.length >= 3) return true;
+          if (!nextIds.includes(station.id)) nextIds.push(station.id);
+          return false;
+        });
+        return nextIds.slice(0, 3);
+      });
+    } catch {
+      setObservationData((current) => ({
+        ...current,
+        warning: current.warning || "Idrometria ufficiale CFR non raggiungibile in questo momento."
+      }));
     }
   }
 
@@ -748,7 +851,7 @@ export default function DashboardPage() {
     }
   }
 
-  const selectedObservationQuery = useMemo(() => buildSelectedObservationQuery(panelConfigs, chartStationIds), [panelConfigs, chartStationIds]);
+  const selectedObservationQuery = useMemo(() => buildSelectedObservationQuery(panelConfigs), [panelConfigs]);
 
   async function loadSelectedObservationData(selectedQuery) {
     if (!selectedQuery) return;
@@ -835,6 +938,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadObservationData();
+    loadHydrometryData();
     loadWeatherData();
     loadMeteoHubData();
   }, []);
@@ -847,6 +951,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadObservationData();
+      loadHydrometryData();
       loadWeatherData();
       loadSelectedObservationData(selectedObservationQuery);
       loadClientOpenMeteoData();
@@ -856,6 +961,10 @@ export default function DashboardPage() {
   }, [selectedObservationQuery]);
 
   const hydrometryStations = observationData.measurements.hydrometry || [];
+  const stationCatalogs = useMemo(() => ({
+    ...STATIONS_BY_TYPE,
+    hydrometry: hydrometryCatalog
+  }), [hydrometryCatalog]);
   const highestHydroStatus = useMemo(() => {
     if (hydrometryStations.some((station) => getStationStatus(station) === "Rosso")) return "Rosso";
     if (hydrometryStations.some((station) => getStationStatus(station) === "Giallo")) return "Giallo";
@@ -898,6 +1007,7 @@ export default function DashboardPage() {
         <MobileMeasurementPanel
           config={panelConfigs[0]}
           measurements={observationData.measurements}
+          stationCatalogs={stationCatalogs}
           onChange={(nextConfig) => {
             setPanelConfigs((current) => current.map((item, index) => index === 0 ? nextConfig : item));
           }}
@@ -910,6 +1020,7 @@ export default function DashboardPage() {
               index={index}
               config={config}
               measurements={observationData.measurements}
+              stationCatalogs={stationCatalogs}
               onChange={(nextConfig) => {
                 setPanelConfigs((current) => current.map((item) => item.id === config.id ? nextConfig : item));
               }}

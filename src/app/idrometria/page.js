@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Database, History, MapPin, RefreshCcw, Waves } from "lucide-react";
+import { AlertTriangle, Database, History, RefreshCcw, Waves } from "lucide-react";
 import AppNav from "@/components/AppNav";
 
 function formatTime(value) {
@@ -42,44 +42,6 @@ function SourceMatrix({ items }) {
             ))}
           </tbody>
         </table>
-      </div>
-    </section>
-  );
-}
-
-function StationList({ stations, selectedId, onSelect }) {
-  return (
-    <section className="panel overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-emergency-line px-4 py-3">
-        <div className="flex items-center gap-3">
-          <MapPin className="h-5 w-5 text-sky-300" />
-          <div>
-            <h2 className="section-title">Anagrafica stazioni</h2>
-            <p className="muted">Idrometri attivi in provincia di Firenze, integrati con anagrafica SIR quando disponibile.</p>
-          </div>
-        </div>
-        <span className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-1 text-sm text-sky-100">{stations.length}</span>
-      </div>
-      <div className="max-h-[32rem] overflow-auto">
-        {stations.map((station) => (
-          <button
-            key={station.station_id}
-            type="button"
-            onClick={() => onSelect(station.station_id)}
-            className={"grid w-full gap-2 border-b border-emergency-line px-4 py-3 text-left hover:bg-white/[0.04] " +
-              (selectedId === station.station_id ? "bg-sky-400/10" : "")}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-slate-500">{station.station_code}</p>
-                <h3 className="text-sm font-semibold text-slate-100">{station.station_name}</h3>
-              </div>
-              <span className="rounded-full border border-emergency-line px-2 py-1 text-xs text-slate-300">{station.basin || "bacino n.d."}</span>
-            </div>
-            <p className="text-xs text-slate-400">{station.municipality || "Comune n.d."} · zona {station.alert_zone || "n.d."}</p>
-            <p className="text-xs text-slate-500">lat {station.latitude ?? "n.d."}, lon {station.longitude ?? "n.d."}</p>
-          </button>
-        ))}
       </div>
     </section>
   );
@@ -131,7 +93,7 @@ function RealtimeTable({ rows }) {
   );
 }
 
-function HistoricalPanel({ station, rows, loading, error, onLoad }) {
+function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loading, error, onLoad }) {
   return (
     <section className="panel overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-emergency-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -142,14 +104,28 @@ function HistoricalPanel({ station, rows, loading, error, onLoad }) {
             <p className="muted">Serie storica collegata alla stazione selezionata, da caricare solo su richiesta.</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onLoad}
-          disabled={!station || loading}
-          className="inline-flex items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {loading ? "Caricamento..." : "Carica storico"}
-        </button>
+        <div className="flex flex-col gap-2 sm:min-w-[22rem]">
+          <select
+            value={selectedId || ""}
+            onChange={(event) => onSelect(event.target.value)}
+            className="w-full rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+          >
+            <option value="">Seleziona stazione</option>
+            {stations.map((item) => (
+              <option key={item.station_id} value={item.station_id}>
+                {item.station_code} - {item.station_name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={onLoad}
+            disabled={!station || loading}
+            className="inline-flex items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Caricamento..." : "Carica storico"}
+          </button>
+        </div>
       </div>
       <div className="p-4">
         <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 text-sm">
@@ -257,6 +233,12 @@ export default function IdrometriaPage() {
     [payload, selectedStationId]
   );
 
+  function handleHistoricalStationChange(stationId) {
+    setSelectedStationId(stationId);
+    setHistoricalError(null);
+    setPayload((current) => current ? { ...current, historicalMeasurements: [] } : current);
+  }
+
   return (
     <>
       <AppNav />
@@ -304,15 +286,21 @@ export default function IdrometriaPage() {
             </div>
           </section>
 
-          <SourceMatrix items={payload?.sourceMatrix || []} />
-
-          <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-            <StationList stations={payload?.stations || []} selectedId={selectedStationId} onSelect={setSelectedStationId} />
-            <div className="flex flex-col gap-5">
-              <RealtimeTable rows={payload?.realtimeMeasurements || []} />
-              <HistoricalPanel station={selectedStation} rows={payload?.historicalMeasurements || []} loading={historicalLoading} error={historicalError} onLoad={() => loadHistorical(selectedStationId)} />
-            </div>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <RealtimeTable rows={payload?.realtimeMeasurements || []} />
+            <HistoricalPanel
+              station={selectedStation}
+              stations={payload?.stations || []}
+              selectedId={selectedStationId}
+              onSelect={handleHistoricalStationChange}
+              rows={payload?.historicalMeasurements || []}
+              loading={historicalLoading}
+              error={historicalError}
+              onLoad={() => loadHistorical(selectedStationId)}
+            />
           </section>
+
+          <SourceMatrix items={payload?.sourceMatrix || []} />
         </div>
       </main>
     </>
