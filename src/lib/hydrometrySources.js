@@ -122,6 +122,25 @@ function normalizeDateTime(value) {
   return Number.isFinite(iso) ? new Date(iso).toISOString() : null;
 }
 
+function normalizeSolarDateTime(value) {
+  const text = cleanText(value);
+  const italian = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})[.:](\d{2})/);
+  if (!italian) return normalizeDateTime(value);
+
+  const [, day, month, year, hour, minute] = italian;
+  // CFR dichiara "ora solare": UTC+1. Salvando l istante in UTC, la UI italiana
+  // lo visualizza automaticamente come ora legale quando la data cade in DST.
+  return new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - 1,
+    Number(minute),
+    0,
+    0
+  )).toISOString();
+}
+
 function firstField(object, names) {
   for (const name of names) {
     if (object?.[name] !== undefined && object?.[name] !== null && object?.[name] !== "") return object[name];
@@ -280,9 +299,20 @@ function normalizeNameKey(value) {
     .trim();
 }
 
+function normalizeHeaderKey(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/Δ/g, "delta")
+    .replace(/δ/g, "delta")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9.]+/g, " ")
+    .trim();
+}
+
 function getCfrPageMeasurementTime(text) {
   const match = String(text || "").match(/riferiti\s+al\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}[.:]\d{2})/i);
-  return match ? normalizeDateTime(match[1]) : null;
+  return match ? normalizeSolarDateTime(match[1]) : null;
 }
 
 function discoverCfrPageLinks(html) {
@@ -311,7 +341,7 @@ function findStationForCfrRow({ stationText, codeText }, stations) {
 
 function pickHeaderValue(row, headers, patterns) {
   for (let index = 0; index < headers.length; index += 1) {
-    const header = normalizeNameKey(headers[index]);
+    const header = normalizeHeaderKey(headers[index]);
     if (patterns.some((pattern) => pattern.test(header))) return row[index];
   }
   return null;
@@ -319,18 +349,9 @@ function pickHeaderValue(row, headers, patterns) {
 
 function pickHeaderValueExcept(row, headers, includePatterns, excludePatterns = []) {
   for (let index = 0; index < headers.length; index += 1) {
-    const header = normalizeNameKey(headers[index]);
+    const header = normalizeHeaderKey(headers[index]);
     if (excludePatterns.some((pattern) => pattern.test(header))) continue;
     if (includePatterns.some((pattern) => pattern.test(header))) return row[index];
-  }
-  return null;
-}
-
-function findFirstPlausibleLevel(row, skipIndexes = new Set()) {
-  for (let index = 0; index < row.length; index += 1) {
-    if (skipIndexes.has(index)) continue;
-    const level = parseHydrometricMeters(row[index]);
-    if (Number.isFinite(level)) return level;
   }
   return null;
 }
@@ -342,14 +363,15 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const station = findStationForCfrRow({ stationText, codeText }, stations);
   if (!station) return null;
 
-  const stationIndex = row.findIndex((value) => normalizeNameKey(value) === normalizeNameKey(stationText));
-  const codeIndex = row.findIndex((value) => cleanText(value) === cleanText(codeText));
-  const skipIndexes = new Set([stationIndex, codeIndex].filter((index) => index >= 0));
-  const levelText = pickHeaderValueExcept(row, headers, [/altezza/, /idrometr/, /^livello$/], [/livello\s*[12]/, /soglia/, /portata/]);
+  const levelText = pickHeaderValueExcept(row, headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/, /portata/]);
   const flowText = pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/]);
-  const warningText = pickHeaderValueExcept(row, headers, [/livello\s*1/, /soglia\s*1/, /prima\s*soglia/], []);
-  const dangerText = pickHeaderValueExcept(row, headers, [/livello\s*2/, /soglia\s*2/, /seconda\s*soglia/], []);
-  const level = parseHydrometricMeters(levelText) ?? findFirstPlausibleLevel(row, skipIndexes);
+  const warningText = pickHeaderValueExcept(row, headers, [/liv\.?\s*1/, /livello\s*1/], []);
+  const dangerText = pickHeaderValueExcept(row, headers, [/liv\.?\s*2/, /livello\s*2/], []);
+  const deltaH1Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*1/, /variaz.*\bh1\b/]);
+  const deltaH3Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*3/, /variaz.*\bh3\b/]);
+  const deltaH6Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*6/, /variaz.*\bh6\b/]);
+  const measurementText = pickHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/]);
+  const level = parseHydrometricMeters(levelText);
   const flow = parseFlowValue(flowText);
   const warning_m = parseHydrometricMeters(warningText);
   const danger_m = parseHydrometricMeters(dangerText);
@@ -363,16 +385,62 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
     basin: station.basin,
     latitude: station.latitude,
     longitude: station.longitude,
-    measurement_time: measurementTime,
-    level_m: Number.isFinite(level) ? level : null,
+    measurement_time: normalizeSolarDateTime(measurementText) || measurementTime,
+    level_m: level,
     flow_mc_s: Number.isFinite(flow) ? flow : null,
     warning_m: Number.isFinite(warning_m) ? warning_m : null,
     danger_m: Number.isFinite(danger_m) ? danger_m : null,
+    delta_h1_m: parseHydrometricMeters(deltaH1Text),
+    delta_h3_m: parseHydrometricMeters(deltaH3Text),
+    delta_h6_m: parseHydrometricMeters(deltaH6Text),
     trend: null,
     source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
     source_url: sourceUrl,
     validated: false
   };
+}
+
+function combineHeaderRows(headerRows) {
+  const width = Math.max(0, ...headerRows.map((row) => row.length));
+  return Array.from({ length: width }, (_, columnIndex) => {
+    const parts = headerRows
+      .map((row) => cleanText(row[columnIndex]))
+      .filter(Boolean);
+    return [...new Set(parts)].join(" ");
+  });
+}
+
+function buildHeaderRows($, trs) {
+  const carries = [];
+  return trs.map((tr) => {
+    const row = [];
+    let columnIndex = 0;
+
+    $(tr).find("th").each((_, th) => {
+      while (carries[columnIndex]?.remaining > 0) {
+        row[columnIndex] = carries[columnIndex].text;
+        carries[columnIndex].remaining -= 1;
+        columnIndex += 1;
+      }
+
+      const text = cleanText($(th).text());
+      const colspan = Math.max(1, Number($(th).attr("colspan")) || 1);
+      const rowspan = Math.max(1, Number($(th).attr("rowspan")) || 1);
+      for (let offset = 0; offset < colspan; offset += 1) {
+        row[columnIndex + offset] = text;
+        if (rowspan > 1) carries[columnIndex + offset] = { text, remaining: rowspan - 1 };
+      }
+      columnIndex += colspan;
+    });
+
+    while (carries[columnIndex]?.remaining > 0) {
+      row[columnIndex] = carries[columnIndex].text;
+      carries[columnIndex].remaining -= 1;
+      columnIndex += 1;
+    }
+
+    return row;
+  });
 }
 
 function parseCfrHtmlTables(html, stations, sourceUrl) {
@@ -381,15 +449,16 @@ function parseCfrHtmlTables(html, stations, sourceUrl) {
   const rows = [];
 
   $("table").each((_, table) => {
-    let headers = [];
+    const headerTrs = [];
     $(table).find("tr").each((__, tr) => {
-      const ths = $(tr).find("th").map((___, th) => cleanText($(th).text())).get();
+      const ths = $(tr).find("th");
       if (ths.length) {
-        headers = ths;
+        headerTrs.push(tr);
         return;
       }
       const cells = $(tr).find("td").map((___, td) => cleanText($(td).text())).get();
       if (!cells.length) return;
+      const headers = combineHeaderRows(buildHeaderRows($, headerTrs));
       const normalized = normalizeCfrBulkRow(cells, headers, stations, sourceUrl, measurementTime);
       if (normalized) rows.push(normalized);
     });
@@ -412,17 +481,29 @@ export async function getHydrometryRealtimeBulk({ stations } = {}) {
     const html = await fetchText(HYDROMETRY_SOURCES.cfrRealtime.url, {
       timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000)
     });
+    const discoveredLinks = discoverCfrPageLinks(html).filter((link) => /xls|xlsx|excel/i.test(link)).slice(0, 5);
     const tableRows = parseCfrHtmlTables(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
+    const excelResults = await Promise.allSettled(discoveredLinks.map(async (link) => {
+      const exportText = await fetchText(link, {
+        timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000),
+        headers: { accept: "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/html,*/*;q=0.8" }
+      });
+      return parseCfrHtmlTables(exportText, stations || [], link);
+    }));
+    const excelRows = excelResults
+      .filter((result) => result.status === "fulfilled")
+      .flatMap((result) => result.value);
     const arrayRows = parseCfrBulkArrayRows(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
     const byStation = new Map();
-    [...tableRows, ...arrayRows].forEach((row) => byStation.set(row.station_id, row));
+    [...tableRows, ...excelRows, ...arrayRows].forEach((row) => byStation.set(row.station_id, row));
     return {
       rows: [...byStation.values()],
       diagnostics: {
         mode: "cfr-page-bulk",
         tableRows: tableRows.length,
+        excelRows: excelRows.length,
         arrayRows: arrayRows.length,
-        discoveredLinks: discoverCfrPageLinks(html).filter((link) => /xls|xlsx|excel/i.test(link)).slice(0, 5)
+        discoveredLinks
       }
     };
   } catch (error) {

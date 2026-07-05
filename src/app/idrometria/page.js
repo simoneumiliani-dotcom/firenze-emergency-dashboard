@@ -41,14 +41,25 @@ function getStationLabel(station) {
   return river + station.station_name;
 }
 
-function buildFallbackTrendPoints(realtime) {
+function buildRealtimeTrendPoints(realtime) {
   const value = Number(realtime?.level_m);
   if (!Number.isFinite(value)) return [];
   const baseTime = realtime?.measurement_time ? new Date(realtime.measurement_time).getTime() : Date.now();
-  return [5, 4, 3, 2, 1, 0].map((hoursAgo, index) => ({
-    measurement_time: new Date(baseTime - hoursAgo * 60 * 60 * 1000).toISOString(),
-    level_m: Number((value + Math.sin(index * 0.8) * 0.03).toFixed(2))
-  }));
+  const points = [
+    { hoursAgo: 6, delta: Number(realtime?.delta_h6_m) },
+    { hoursAgo: 3, delta: Number(realtime?.delta_h3_m) },
+    { hoursAgo: 1, delta: Number(realtime?.delta_h1_m) }
+  ]
+    .filter((point) => Number.isFinite(point.delta))
+    .map((point) => ({
+      measurement_time: new Date(baseTime - point.hoursAgo * 60 * 60 * 1000).toISOString(),
+      level_m: Number((value - point.delta).toFixed(2))
+    }));
+
+  return [
+    ...points,
+    { measurement_time: new Date(baseTime).toISOString(), level_m: value }
+  ];
 }
 
 function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selectedId, onSelect }) {
@@ -61,7 +72,7 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
   const stationHistoricalRows = (historicalRows || [])
     .filter((row) => row.station_id === selectedStation?.station_id)
     .filter((row) => Number.isFinite(Number(row.level_m)));
-  const rawRows = stationHistoricalRows.length ? stationHistoricalRows.slice(-48) : buildFallbackTrendPoints(selectedRealtime);
+  const rawRows = stationHistoricalRows.length ? stationHistoricalRows.slice(-48) : buildRealtimeTrendPoints(selectedRealtime);
   const currentLevel = Number(selectedRealtime?.level_m ?? rawRows[rawRows.length - 1]?.level_m);
   const levelOne = Number.isFinite(Number(selectedRealtime?.warning_m))
     ? Number(selectedRealtime.warning_m)
@@ -159,8 +170,14 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
                 <p className="mt-1 font-semibold text-slate-950">{Number.isFinite(currentLevel) ? currentLevel.toFixed(2) + " m" : "n.d."}</p>
                 <p className="text-xs text-slate-600">{formatTime(selectedRealtime?.measurement_time)}</p>
               </div>
+              <div className="rounded border border-slate-300 bg-slate-50 p-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Variazioni livello</p>
+                <p className="mt-1">Δh1: {Number.isFinite(Number(selectedRealtime?.delta_h1_m)) ? Number(selectedRealtime.delta_h1_m).toFixed(2) + " m" : "n.d."}</p>
+                <p>Δh3: {Number.isFinite(Number(selectedRealtime?.delta_h3_m)) ? Number(selectedRealtime.delta_h3_m).toFixed(2) + " m" : "n.d."}</p>
+                <p>Δh6: {Number.isFinite(Number(selectedRealtime?.delta_h6_m)) ? Number(selectedRealtime.delta_h6_m).toFixed(2) + " m" : "n.d."}</p>
+              </div>
               <p className="text-xs text-slate-600">
-                Realtime CFR non validato. Se lo storico SIR della stazione e&apos; caricato, il grafico usa la serie storica; altrimenti mostra l&apos;andamento operativo corrente.
+                Realtime CFR non validato. Se lo storico SIR della stazione e&apos; caricato, il grafico usa la serie storica; altrimenti ricostruisce l&apos;andamento da attuale, Δh1, Δh3 e Δh6.
               </p>
             </div>
           </div>
@@ -227,6 +244,9 @@ function RealtimeTable({ rows }) {
               <th className="px-4 py-3">Stazione</th>
               <th className="px-4 py-3">Livello</th>
               <th className="px-4 py-3">Portata</th>
+              <th className="px-4 py-3">Δh1</th>
+              <th className="px-4 py-3">Δh3</th>
+              <th className="px-4 py-3">Δh6</th>
               <th className="px-4 py-3">Ora misura</th>
               <th className="px-4 py-3">Validato</th>
             </tr>
@@ -237,12 +257,15 @@ function RealtimeTable({ rows }) {
                 <td className="px-4 py-3 font-medium text-slate-100">{row.station_name}</td>
                 <td className="px-4 py-3 text-sky-100">{row.level_m ?? "n.d."} m</td>
                 <td className="px-4 py-3 text-slate-300">{row.flow_mc_s ?? "n.d."} mc/s</td>
+                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h1_m)) ? Number(row.delta_h1_m).toFixed(2) + " m" : "n.d."}</td>
+                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h3_m)) ? Number(row.delta_h3_m).toFixed(2) + " m" : "n.d."}</td>
+                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h6_m)) ? Number(row.delta_h6_m).toFixed(2) + " m" : "n.d."}</td>
                 <td className="px-4 py-3 text-slate-400">{formatTime(row.measurement_time)}</td>
                 <td className="px-4 py-3 text-orange-100">no</td>
               </tr>
             )) : (
               <tr>
-                <td className="px-4 py-4 text-slate-400" colSpan={5}>Realtime non disponibile nel caricamento corrente.</td>
+                <td className="px-4 py-4 text-slate-400" colSpan={8}>Realtime non disponibile nel caricamento corrente.</td>
               </tr>
             )}
           </tbody>

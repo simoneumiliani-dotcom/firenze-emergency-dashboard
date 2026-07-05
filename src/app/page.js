@@ -234,6 +234,9 @@ function normalizeHydrometryForDashboard(payload) {
         riverName: station.river_name,
         basin: station.basin,
         flow: realtime?.flow_mc_s ?? null,
+        delta_h1_m: realtime?.delta_h1_m ?? null,
+        delta_h3_m: realtime?.delta_h3_m ?? null,
+        delta_h6_m: realtime?.delta_h6_m ?? null,
         source_url: realtime?.source_url || station.source_url
       }
     };
