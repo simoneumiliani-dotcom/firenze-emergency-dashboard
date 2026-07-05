@@ -337,10 +337,17 @@ function findStationForCfrRow({ stationText, codeText }, stations) {
 
   const key = normalizeNameKey(stationText);
   if (!key) return null;
-  return stations.find((station) => {
-    const stationKey = normalizeNameKey(station.station_name);
-    return stationKey === key || stationKey.includes(key) || key.includes(stationKey);
-  }) || null;
+  const exactMatch = stations.find((station) => normalizeNameKey(station.station_name) === key);
+  if (exactMatch) return exactMatch;
+
+  const partialMatches = stations
+    .filter((station) => {
+      const stationKey = normalizeNameKey(station.station_name);
+      return stationKey && (stationKey.includes(key) || key.includes(stationKey));
+    })
+    .sort((a, b) => normalizeNameKey(b.station_name).length - normalizeNameKey(a.station_name).length);
+
+  return partialMatches.length === 1 ? partialMatches[0] : null;
 }
 
 function findStationFromRow(row, stations) {
@@ -352,11 +359,22 @@ function findStationFromRow(row, stations) {
     if (byCode) return byCode;
   }
 
+  const exactCellMatch = row
+    .map((cell) => normalizeNameKey(cell))
+    .filter(Boolean)
+    .map((cellKey) => stations.find((station) => normalizeNameKey(station.station_name) === cellKey))
+    .find(Boolean);
+  if (exactCellMatch) return exactCellMatch;
+
   const rowKey = normalizeNameKey(joined);
-  return stations.find((station) => {
-    const stationKey = normalizeNameKey(station.station_name);
-    return stationKey && rowKey.includes(stationKey);
-  }) || null;
+  const partialMatches = stations
+    .filter((station) => {
+      const stationKey = normalizeNameKey(station.station_name);
+      return stationKey && rowKey.includes(stationKey);
+    })
+    .sort((a, b) => normalizeNameKey(b.station_name).length - normalizeNameKey(a.station_name).length);
+
+  return partialMatches[0] || null;
 }
 
 function pickHeaderValue(row, headers, patterns) {
@@ -395,20 +413,17 @@ function hasUsableHeaders(headers) {
 }
 
 function getFallbackCfrValues(row, station) {
-  const stationKey = normalizeNameKey(station?.station_name);
-  const values = row
-    .map((cell, index) => ({ cell, index, text: cleanText(cell), value: parseHydrometricMeters(cell) }))
-    .filter((item) => Number.isFinite(item.value))
-    .filter((item) => !/^TOS\d+/i.test(item.text))
-    .filter((item) => !/\d{2}\/\d{2}\/\d{4}/.test(item.text))
-    .filter((item) => !stationKey || !normalizeNameKey(item.text).includes(stationKey));
+  const codeIndex = row.findIndex((cell) => /^TOS\d+/i.test(cleanText(cell)));
+  const firstDataIndex = codeIndex >= 0 ? codeIndex + 5 : Math.max(0, row.length - 8);
+  const dataCells = row.slice(firstDataIndex);
 
-  // Ordine export CFR senza intestazioni: liv.2, liv.1, attuale livello,
-  // attuale portata, delta h1, delta h3, delta h6, Data.
-  const danger = values[0]?.value ?? null;
-  const warning = values[1]?.value ?? null;
-  const level = values[2]?.value ?? null;
-  const flow = parseFlowValue(values[3]?.cell);
+  // Ordine export CFR senza intestazioni: Codice, Fiume, Stazione, Provincia,
+  // Zona, liv.2, liv.1, attuale livello, attuale portata, delta h1, delta h3,
+  // delta h6, Data.
+  const danger = parseHydrometricMeters(dataCells[0]);
+  const warning = parseHydrometricMeters(dataCells[1]);
+  const level = parseHydrometricMeters(dataCells[2]);
+  const flow = parseFlowValue(dataCells[3]);
   const dateCell = row.find((cell) => /\d{2}\/\d{2}\/\d{4}\s+\d{2}[.:]\d{2}/.test(cleanText(cell)));
 
   return {
@@ -416,9 +431,9 @@ function getFallbackCfrValues(row, station) {
     warning,
     danger,
     flow,
-    deltaH1: values[4]?.value ?? null,
-    deltaH3: values[5]?.value ?? null,
-    deltaH6: values[6]?.value ?? null,
+    deltaH1: parseHydrometricMeters(dataCells[4]),
+    deltaH3: parseHydrometricMeters(dataCells[5]),
+    deltaH6: parseHydrometricMeters(dataCells[6]),
     measurementText: dateCell || null
   };
 }
