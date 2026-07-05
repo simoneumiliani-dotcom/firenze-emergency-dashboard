@@ -24,7 +24,7 @@ export const HYDROMETRY_SOURCES = {
       "https://www.cfr.toscana.it/monitoraggio/dettaglio.php",
       "http://www.cfr.toscana.it/monitoraggio/dettaglio.php"
     ],
-    format: "HTML/JavaScript; eventuale export Excel se pubblicato nella pagina",
+    format: "HTML tabellare ed eventuale export Excel pubblicato nella pagina stazioni.php?type=idro",
     sourceType: "cfr_realtime"
   }
 };
@@ -625,9 +625,9 @@ export function buildHydrometrySourceMatrix() {
     },
     {
       source: HYDROMETRY_SOURCES.cfrRealtime.name,
-      content: "Livelli e portate operative in tempo reale",
-      format: "HTML/JavaScript dettaglio stazione",
-      applicationUse: "Dato realtime non validato, da visualizzare con etichetta esplicita"
+      content: "Livelli, soglie, portate, variazioni e ultimo dato operativo in tempo reale",
+      format: "HTML/Excel dalla pagina stazioni.php?type=idro",
+      applicationUse: "Dato realtime non validato; campi mappati da liv.1, liv.2, attuale, Portata, delta h1, delta h3, delta h6, Ult.dati"
     }
   ];
 }
