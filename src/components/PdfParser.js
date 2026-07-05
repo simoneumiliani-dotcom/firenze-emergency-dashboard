@@ -396,11 +396,13 @@ export default function PdfParser({ onAlertDetected }) {
 
           const next = { ...archive.current, archivePersistent: archive.persistent };
           writeJsonStorage(LOCAL_CURRENT_KEY, next);
-          setResult((current) => current || next);
-          if (next.pdfUrl) {
-            setPdfUrl(next.pdfUrl);
-            setViewerOpen(true);
+          setResult(next);
+          if (objectUrlRef.current) {
+            URL.revokeObjectURL(objectUrlRef.current);
+            objectUrlRef.current = null;
           }
+          setPdfUrl(next.pdfUrl || null);
+          setViewerOpen(Boolean(next.pdfUrl));
           onAlertDetected?.(next);
         })
         .catch(() => {});
@@ -495,19 +497,67 @@ export default function PdfParser({ onAlertDetected }) {
     }
   }, [onAlertDetected]);
 
+  async function hydrateArchivedBulletin(item, pdfBlob) {
+    if ((item.issue && item.validity) || !pdfBlob) return item;
+
+    try {
+      const text = await extractPdfText(pdfBlob);
+      const detection = getBestAlertLevel(text);
+      const issueDetails = getBulletinIssueDetails(text);
+      const validityDetails = getBulletinValidityDetails(text);
+      const enriched = {
+        ...item,
+        ...detection,
+        issue: item.issue || issueDetails.label,
+        issuedAt: item.issuedAt || issueDetails.issuedAt,
+        validity: item.validity || validityDetails.label,
+        validFrom: item.validFrom || validityDetails.validFrom,
+        validTo: item.validTo || validityDetails.validTo,
+        textPreview: item.textPreview || buildRelevantExtract(text, detection.matches),
+        textTerms: item.textTerms?.length
+          ? item.textTerms
+          : [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
+      };
+
+      setArchive((items) => {
+        const nextArchive = pruneLocalArchive([enriched, ...items.filter((entry) => entry.id !== enriched.id)]);
+        writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
+        return nextArchive;
+      });
+      fetch("/api/bulletins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(enriched)
+      }).catch(() => null);
+      return enriched;
+    } catch {
+      return item;
+    }
+  }
+
   async function openArchivedBulletin(item) {
-    const pdfBlob = await loadPdfBlob(item.id);
+    let pdfBlob = await loadPdfBlob(item.id);
+    if (!pdfBlob && item.pdfUrl) {
+      try {
+        const response = await fetch(item.pdfUrl);
+        if (response.ok) pdfBlob = await response.blob();
+      } catch {
+        pdfBlob = null;
+      }
+    }
+
     const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : item.pdfUrl || null;
+    const nextItem = await hydrateArchivedBulletin(item, pdfBlob);
 
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = restoredPdfUrl?.startsWith("blob:") ? restoredPdfUrl : null;
-    setResult(item);
+    setResult(nextItem);
     setStatus("done");
     setPdfUrl(restoredPdfUrl);
     setViewerOpen(Boolean(restoredPdfUrl));
     setExtractOpen(false);
     setArchiveOpen(false);
-    onAlertDetected?.(item);
+    onAlertDetected?.(nextItem);
   }
 
   return (
