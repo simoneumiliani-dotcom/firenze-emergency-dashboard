@@ -18,6 +18,10 @@ export const HYDROMETRY_SOURCES = {
     name: "CFR Toscana - Idrometria",
     url: "https://www.cfr.toscana.it/monitoraggio/stazioni.php?type=idro",
     detailUrl: "https://www.cfr.toscana.it/monitoraggio/dettaglio.php",
+    detailUrls: [
+      "https://www.cfr.toscana.it/monitoraggio/dettaglio.php",
+      "http://www.cfr.toscana.it/monitoraggio/dettaglio.php"
+    ],
     format: "HTML/JavaScript",
     sourceType: "cfr_realtime"
   }
@@ -120,7 +124,9 @@ function getFeatureCoordinates(feature, fallbackFeature = null) {
 
 function getHistoricalHydrometrySource(feature) {
   const consistency = feature?.properties?.Consistenza || {};
-  const entry = Object.entries(consistency).find(([label]) => /IDROMETRIA/i.test(label));
+  const entry = Object.entries(consistency).find(([label, details]) =>
+    /IDROMETRIA|IDROMETRI|LIVELLI/i.test(label) || /IDST=idro/i.test(details?.SorgenteDati || "")
+  );
   if (!entry) return { historical_label: null, historical_url: null, historical_years: [] };
   const [label, details] = entry;
   return {
@@ -192,7 +198,7 @@ function parseQuotedArrayItems(rawItems) {
 export function parseCfrRealtimeDetail(html, station) {
   const rows = [...String(html || "").matchAll(/\w+\[\d+\]\s*=\s*new\s+Array\((.*?)\);/g)]
     .map((match) => parseQuotedArrayItems(match[1]))
-    .filter((items) => items.length >= 3);
+    .filter((items) => items.length >= 4);
   const latest = rows[rows.length - 1];
   const previous = rows.length > 1 ? rows[rows.length - 2] : null;
   if (!latest) return null;
@@ -224,14 +230,22 @@ export function parseCfrRealtimeDetail(html, station) {
 }
 
 async function fetchCfrRealtimeForStation(station) {
-  const query = new URLSearchParams({
-    id: station.station_id,
-    type: "idro",
-    _: String(Date.now())
-  });
-  const url = HYDROMETRY_SOURCES.cfrRealtime.detailUrl + "?" + query.toString();
-  const html = await fetchText(url, { timeoutMs: Number(process.env.HYDROMETRY_CFR_TIMEOUT_MS || 5000) });
-  return parseCfrRealtimeDetail(html, { ...station, source_url: url });
+  const query = "id=" + encodeURIComponent(station.station_id) + "&type=idro&" + Date.now();
+  const bases = HYDROMETRY_SOURCES.cfrRealtime.detailUrls || [HYDROMETRY_SOURCES.cfrRealtime.detailUrl];
+
+  for (const base of bases) {
+    const separator = base.includes("?") ? "&" : "?";
+    const url = base + separator + query;
+    try {
+      const html = await fetchText(url, { timeoutMs: Number(process.env.HYDROMETRY_CFR_TIMEOUT_MS || 5000) });
+      const parsed = parseCfrRealtimeDetail(html, { ...station, source_url: url });
+      if (parsed) return { ...parsed, source_url: url };
+    } catch {
+      // Prova il prossimo schema/protocollo CFR.
+    }
+  }
+
+  return null;
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {

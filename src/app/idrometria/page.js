@@ -191,7 +191,10 @@ export default function IdrometriaPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || data?.error || "Errore idrometria");
       setPayload(data);
-      if (!stationId && data.stations?.[0]?.station_id) setSelectedStationId(data.stations[0].station_id);
+      if (!stationId && data.stations?.length) {
+        const firstHistorical = data.stations.find((station) => station.historical_url) || data.stations[0];
+        setSelectedStationId(firstHistorical.station_id);
+      }
     } catch (err) {
       setError(err?.message || String(err));
     } finally {

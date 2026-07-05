@@ -6,9 +6,41 @@ import {
   getHydrometryRealtime,
   getHydrometryStations
 } from "@/lib/hydrometrySources";
+import { getObservationData } from "@/lib/observationData";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+function normalizeObservationRealtime(station, row) {
+  if (!row || row.value === null || row.value === undefined) return null;
+  return {
+    station_id: station.station_id,
+    station_code: station.station_code,
+    station_name: station.station_name,
+    river_name: station.river_name,
+    basin: station.basin,
+    latitude: station.latitude,
+    longitude: station.longitude,
+    measurement_time: row.updatedAt || null,
+    level_m: Number(row.value),
+    flow_mc_s: null,
+    trend: row.trend || null,
+    source_type: "cfr_realtime",
+    source_url: row.extra?.source_url || HYDROMETRY_SOURCES.cfrRealtime.detailUrl,
+    validated: false
+  };
+}
+
+async function getRealtimeFallback(stations, limit) {
+  const selectedStations = stations.slice(0, Math.max(1, Number(limit) || 12));
+  const selected = selectedStations.map((station) => "hydrometry:" + station.station_id).join(",");
+  if (!selected) return [];
+  const payload = await getObservationData({ selected, realtime: true });
+  const rows = payload?.measurements?.hydrometry || [];
+  return selectedStations
+    .map((station) => normalizeObservationRealtime(station, rows.find((row) => row.id === station.station_id)))
+    .filter(Boolean);
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -20,9 +52,12 @@ export async function GET(request) {
 
   try {
     const stations = await getHydrometryStations({ province });
-    const realtimeMeasurements = realtime
+    let realtimeMeasurements = realtime
       ? await getHydrometryRealtime({ stations, limit: realtimeLimit })
       : [];
+    if (realtime && realtimeMeasurements.length === 0) {
+      realtimeMeasurements = await getRealtimeFallback(stations, realtimeLimit);
+    }
     const selectedHistoricalStation = historicalStationId
       ? stations.find((station) => station.station_id === historicalStationId)
       : null;
