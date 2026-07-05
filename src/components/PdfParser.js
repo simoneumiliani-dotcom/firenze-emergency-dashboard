@@ -87,22 +87,31 @@ const MONTHS_IT = {
   dicembre: 11
 };
 
+function buildIsoDate({ year, month, day, hour, minute }) {
+  const date = new Date(Number(year), Number(month), Number(day), Number(hour), Number(minute), 0, 0);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function parseItalianDateText(value) {
-  const source = String(value || "").trim();
-  const textDate = source.match(/(\d{1,2})[.:](\d{2})\s+di\s+[A-Za-zÀ-ÿ]+,?\s+(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
+  const source = String(value || "").replace(/\s+/g, " ").trim();
+  const textDate = source.match(/(\d{1,2})[.:](\d{2})\s+di\s+(?:[A-Za-zÀ-ÿ]+,?\s+)?(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
   if (textDate) {
     const [, hour, minute, day, monthName, year] = textDate;
     const month = MONTHS_IT[monthName.toLowerCase()];
     if (month === undefined) return null;
-    const date = new Date(Number(year), month, Number(day), Number(hour), Number(minute), 0, 0);
-    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+    return buildIsoDate({ year, month, day, hour, minute });
   }
 
   const numericDate = source.match(/(\d{1,2})[.:](\d{2})\s+del\s+(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/i);
   if (numericDate) {
     const [, hour, minute, day, month, year] = numericDate;
-    const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
-    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+    return buildIsoDate({ year, month: Number(month) - 1, day, hour, minute });
+  }
+
+  const numericDateFirst = source.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4}).{0,40}?ore\s+(\d{1,2})[.:](\d{2})/i);
+  if (numericDateFirst) {
+    const [, day, month, year, hour, minute] = numericDateFirst;
+    return buildIsoDate({ year, month: Number(month) - 1, day, hour, minute });
   }
 
   return null;
@@ -117,14 +126,44 @@ function getBulletinDatePattern() {
 function getBulletinIssueDetails(text) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   const datePart = getBulletinDatePattern();
-  const match = normalized.match(new RegExp("Emess[ao]\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
-  if (!match) return { label: null, issuedAt: null };
+  const clockPart = "\\d{1,2}[.:]\\d{2}";
+  const numericDayPart = "\\d{1,2}[\\/.-]\\d{1,2}[\\/.-]\\d{4}";
+  const textualDayPart = "(?:[A-Za-zÀ-ÿ]+,?\\s+)?\\d{1,2}\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4}";
+  const patterns = [
+    {
+      regex: new RegExp("Emess[ao]\\s+alle\\s+ore\\s+(" + datePart + ")", "i"),
+      build: (match) => match[1].trim()
+    },
+    {
+      regex: new RegExp("Emess[ao]\\s+(?:il\\s+)?(" + numericDayPart + ")\\s+alle\\s+ore\\s+(" + clockPart + ")", "i"),
+      build: (match) => match[2].trim() + " del " + match[1].trim()
+    },
+    {
+      regex: new RegExp("(?:Emissione|Emess[ao])[^0-9]{0,80}(?:ore\\s+)?(" + clockPart + ")\\s*(?:del\\s+)?(" + numericDayPart + ")", "i"),
+      build: (match) => match[1].trim() + " del " + match[2].trim()
+    },
+    {
+      regex: new RegExp("(?:Emissione|Emess[ao])[^0-9]{0,80}(" + numericDayPart + ")[^0-9]{0,40}(?:ore\\s+)?(" + clockPart + ")", "i"),
+      build: (match) => match[2].trim() + " del " + match[1].trim()
+    },
+    {
+      regex: new RegExp("(?:Emissione|Emess[ao])\\s+(?:di\\s+)?(" + textualDayPart + ")[^0-9]{0,40}(?:alle\\s+)?ore\\s+(" + clockPart + ")", "i"),
+      build: (match) => match[2].trim() + " di " + match[1].trim()
+    }
+  ];
 
-  const issueText = match[1].trim();
-  return {
-    label: "Emesso alle ore " + issueText,
-    issuedAt: parseItalianDateText(issueText)
-  };
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern.regex);
+    if (match) {
+      const issueText = pattern.build(match);
+      return {
+        label: "Emesso alle ore " + issueText,
+        issuedAt: parseItalianDateText(issueText)
+      };
+    }
+  }
+
+  return { label: null, issuedAt: null };
 }
 
 function getBulletinValidityDetails(text) {
