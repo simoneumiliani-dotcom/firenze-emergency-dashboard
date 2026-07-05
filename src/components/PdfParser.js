@@ -5,7 +5,7 @@ import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCl
 
 const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
 const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
-const BULLETIN_RETENTION_MONTHS = 6;
+const BULLETIN_ARCHIVE_LIMIT = 5;
 const PDF_DB_NAME = "firenze-bulletin-pdfs";
 const PDF_DB_STORE = "pdfs";
 
@@ -142,17 +142,6 @@ function getBulletinValidityDetails(text) {
   };
 }
 
-function addMonths(date, months) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function isRecentBulletin(item) {
-  const reference = item?.validTo || item?.uploadedAt;
-  const date = reference ? new Date(reference) : null;
-  return date && Number.isFinite(date.getTime()) && date >= addMonths(new Date(), -BULLETIN_RETENTION_MONTHS);
-}
 
 function isCurrentBulletin(item) {
   if (!item?.validTo) return false;
@@ -162,8 +151,9 @@ function isCurrentBulletin(item) {
 
 function pruneLocalArchive(items) {
   return [...(Array.isArray(items) ? items : [])]
-    .filter(isRecentBulletin)
-    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0));
+    .filter((item) => item?.id)
+    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0))
+    .slice(0, BULLETIN_ARCHIVE_LIMIT);
 }
 
 function readJsonStorage(key, fallback) {
@@ -334,7 +324,7 @@ export default function PdfParser({ onAlertDetected }) {
       removeOldPdfBlobs(localArchive.map((item) => item.id));
 
       const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
-      if (localCurrent && isCurrentBulletin(localCurrent) && isRecentBulletin(localCurrent)) {
+      if (localCurrent && isCurrentBulletin(localCurrent)) {
         const pdfBlob = await loadPdfBlob(localCurrent.id);
         const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : localCurrent.pdfUrl || null;
 
@@ -503,7 +493,7 @@ export default function PdfParser({ onAlertDetected }) {
           <div>
             <h2 className="section-title">Adozione Stato di Allerta Regionale</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Carica il PDF ufficiale, consulta quello valido o richiama l'archivio dei bollettini degli ultimi 6 mesi.
+              Carica il PDF ufficiale, consulta quello valido o richiama l&apos;archivio degli ultimi 5 bollettini.
             </p>
           </div>
         </div>
@@ -535,7 +525,7 @@ export default function PdfParser({ onAlertDetected }) {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-100">Archivio bollettini</p>
-              <p className="text-xs text-slate-400">Ultimi 6 mesi, con PDF consultabile quando disponibile.</p>
+              <p className="text-xs text-slate-400">Ultimi 5 bollettini, con PDF consultabile quando disponibile.</p>
             </div>
             <button type="button" onClick={() => setArchiveOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
           </div>

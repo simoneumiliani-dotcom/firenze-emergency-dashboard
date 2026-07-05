@@ -1,5 +1,5 @@
 const BULLETIN_ARCHIVE_KEY = process.env.BULLETIN_ARCHIVE_KEY || "firenze:bulletins:v1";
-export const BULLETIN_RETENTION_MONTHS = Number(process.env.BULLETIN_RETENTION_MONTHS || 6);
+export const BULLETIN_ARCHIVE_LIMIT = Number(process.env.BULLETIN_ARCHIVE_LIMIT || 5);
 
 function hasPersistentStore() {
   return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
@@ -9,15 +9,6 @@ function getKvUrl(path) {
   return process.env.KV_REST_API_URL.replace(/\/+$/, "") + path;
 }
 
-function addMonths(date, months) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function getRetentionCutoff(now = new Date()) {
-  return addMonths(now, -BULLETIN_RETENTION_MONTHS);
-}
 
 function getReferenceDate(bulletin) {
   const value = bulletin?.validTo || bulletin?.uploadedAt || bulletin?.parsedAt;
@@ -31,14 +22,11 @@ export function isBulletinCurrent(bulletin, now = new Date()) {
   return Number.isFinite(validTo.getTime()) && validTo.getTime() >= now.getTime();
 }
 
-export function pruneBulletinArchive(items, now = new Date()) {
-  const cutoff = getRetentionCutoff(now);
+export function pruneBulletinArchive(items) {
   return [...(Array.isArray(items) ? items : [])]
-    .filter((item) => {
-      const date = getReferenceDate(item);
-      return date && date.getTime() >= cutoff.getTime();
-    })
-    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0));
+    .filter((item) => item?.id && getReferenceDate(item))
+    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0))
+    .slice(0, BULLETIN_ARCHIVE_LIMIT);
 }
 
 function normalizeArchive(payload) {
@@ -47,7 +35,7 @@ function normalizeArchive(payload) {
   const current = pruned.find((item) => isBulletinCurrent(item)) || null;
   return {
     version: 1,
-    retentionMonths: BULLETIN_RETENTION_MONTHS,
+    archiveLimit: BULLETIN_ARCHIVE_LIMIT,
     current,
     items: pruned,
     updatedAt: new Date().toISOString()
