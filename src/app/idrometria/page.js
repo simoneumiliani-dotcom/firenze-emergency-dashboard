@@ -282,6 +282,11 @@ export default function IdrometriaPage() {
 
           {error && <div className="rounded-lg border border-emergency-red/50 bg-emergency-red/10 px-4 py-3 text-sm text-red-100">{error}</div>}
           {loading && <div className="rounded-lg border border-emergency-line bg-emergency-panel px-4 py-3 text-sm text-slate-300">Caricamento dati idrometrici...</div>}
+          {payload?.realtimeDiagnostics?.bulk?.discoveredLinks?.length ? (
+            <div className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
+              Export CFR rilevato: {payload.realtimeDiagnostics.bulk.discoveredLinks.join(", ")}
+            </div>
+          ) : null}
 
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
@@ -291,7 +296,7 @@ export default function IdrometriaPage() {
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Realtime CFR</p>
               <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.realtime ?? 0}</p>
-              <p className="mt-1 text-xs text-slate-400">Tentate: {payload?.realtimeDiagnostics?.attemptedStations ?? 0}</p>
+              <p className="mt-1 text-xs text-slate-400">Bulk CFR: {payload?.realtimeDiagnostics?.bulkRows ?? 0}</p>
             </div>
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Storico caricato</p>

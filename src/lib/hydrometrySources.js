@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 export const HYDROMETRY_SOURCES = {
   activeHydrometers: {
     name: "Regione Toscana - Idrometri",
@@ -22,7 +24,7 @@ export const HYDROMETRY_SOURCES = {
       "https://www.cfr.toscana.it/monitoraggio/dettaglio.php",
       "http://www.cfr.toscana.it/monitoraggio/dettaglio.php"
     ],
-    format: "HTML/JavaScript",
+    format: "HTML/JavaScript; eventuale export Excel se pubblicato nella pagina",
     sourceType: "cfr_realtime"
   }
 };
@@ -237,6 +239,147 @@ export function parseCfrRealtimeDetail(html, station) {
     source_url: HYDROMETRY_SOURCES.cfrRealtime.detailUrl,
     validated: false
   };
+}
+
+
+function normalizeNameKey(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getCfrPageMeasurementTime(text) {
+  const match = String(text || "").match(/riferiti\s+al\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}[.:]\d{2})/i);
+  return match ? normalizeDateTime(match[1]) : null;
+}
+
+function discoverCfrPageLinks(html) {
+  const $ = cheerio.load(html || "");
+  return $("a")
+    .map((_, element) => $(element).attr("href"))
+    .get()
+    .filter(Boolean)
+    .map((href) => new URL(href, HYDROMETRY_SOURCES.cfrRealtime.url).toString());
+}
+
+function findStationForCfrRow({ stationText, codeText }, stations) {
+  const code = cleanText(codeText);
+  if (code) {
+    const byCode = stations.find((station) => station.station_id === code || station.station_code === code);
+    if (byCode) return byCode;
+  }
+
+  const key = normalizeNameKey(stationText);
+  if (!key) return null;
+  return stations.find((station) => {
+    const stationKey = normalizeNameKey(station.station_name);
+    return stationKey === key || stationKey.includes(key) || key.includes(stationKey);
+  }) || null;
+}
+
+function pickHeaderValue(row, headers, patterns) {
+  for (let index = 0; index < headers.length; index += 1) {
+    const header = normalizeNameKey(headers[index]);
+    if (patterns.some((pattern) => pattern.test(header))) return row[index];
+  }
+  return null;
+}
+
+function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime) {
+  if (!row?.length) return null;
+  const stationText = pickHeaderValue(row, headers, [/stazione/, /nome/, /denominazione/]) || row[1] || row[0];
+  const codeText = pickHeaderValue(row, headers, [/codice/, /^id$/]) || (/^TOS\d+/i.test(row[0]) ? row[0] : null);
+  const station = findStationForCfrRow({ stationText, codeText }, stations);
+  if (!station) return null;
+
+  const numericValues = row.map(parseNumber).filter(Number.isFinite);
+  const level = parseNumber(pickHeaderValue(row, headers, [/livello/, /idrometr/])) ?? numericValues[0] ?? null;
+  const flow = parseNumber(pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/])) ?? numericValues.find((value) => value !== level) ?? null;
+  if (!Number.isFinite(level) && !Number.isFinite(flow)) return null;
+
+  return {
+    station_id: station.station_id,
+    station_code: station.station_code,
+    station_name: station.station_name,
+    river_name: station.river_name,
+    basin: station.basin,
+    latitude: station.latitude,
+    longitude: station.longitude,
+    measurement_time: measurementTime,
+    level_m: Number.isFinite(level) ? level : null,
+    flow_mc_s: Number.isFinite(flow) ? flow : null,
+    trend: null,
+    source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
+    source_url: sourceUrl,
+    validated: false
+  };
+}
+
+function parseCfrHtmlTables(html, stations, sourceUrl) {
+  const $ = cheerio.load(html || "");
+  const measurementTime = getCfrPageMeasurementTime($("body").text());
+  const rows = [];
+
+  $("table").each((_, table) => {
+    let headers = [];
+    $(table).find("tr").each((__, tr) => {
+      const ths = $(tr).find("th").map((___, th) => cleanText($(th).text())).get();
+      if (ths.length) {
+        headers = ths;
+        return;
+      }
+      const cells = $(tr).find("td").map((___, td) => cleanText($(td).text())).get();
+      if (!cells.length) return;
+      const normalized = normalizeCfrBulkRow(cells, headers, stations, sourceUrl, measurementTime);
+      if (normalized) rows.push(normalized);
+    });
+  });
+
+  return rows;
+}
+
+function parseCfrBulkArrayRows(html, stations, sourceUrl) {
+  const text = String(html || "");
+  const measurementTime = getCfrPageMeasurementTime(text);
+  return [...text.matchAll(/\w+\[\d+\]\s*=\s*new\s+Array\((.*?)\);/g)]
+    .map((match) => parseQuotedArrayItems(match[1]))
+    .map((row) => normalizeCfrBulkRow(row, [], stations, sourceUrl, measurementTime))
+    .filter(Boolean);
+}
+
+export async function getHydrometryRealtimeBulk({ stations } = {}) {
+  try {
+    const html = await fetchText(HYDROMETRY_SOURCES.cfrRealtime.url, {
+      timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000)
+    });
+    const tableRows = parseCfrHtmlTables(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
+    const arrayRows = parseCfrBulkArrayRows(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
+    const byStation = new Map();
+    [...tableRows, ...arrayRows].forEach((row) => byStation.set(row.station_id, row));
+    return {
+      rows: [...byStation.values()],
+      diagnostics: {
+        mode: "cfr-page-bulk",
+        tableRows: tableRows.length,
+        arrayRows: arrayRows.length,
+        discoveredLinks: discoverCfrPageLinks(html).filter((link) => /xls|xlsx|excel/i.test(link)).slice(0, 5)
+      }
+    };
+  } catch (error) {
+    return {
+      rows: [],
+      diagnostics: {
+        mode: "cfr-page-bulk-error",
+        error: error?.message || String(error),
+        tableRows: 0,
+        arrayRows: 0,
+        discoveredLinks: []
+      }
+    };
+  }
 }
 
 async function fetchCfrRealtimeForStation(station) {

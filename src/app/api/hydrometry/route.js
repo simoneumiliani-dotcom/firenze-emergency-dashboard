@@ -4,6 +4,7 @@ import {
   buildHydrometrySourceMatrix,
   getHydrometryHistorical,
   getHydrometryRealtime,
+  getHydrometryRealtimeBulk,
   getHydrometryStations
 } from "@/lib/hydrometrySources";
 import { getObservationData } from "@/lib/observationData";
@@ -47,6 +48,7 @@ export async function GET(request) {
   const province = searchParams.get("province") || "FI";
   const realtime = searchParams.get("realtime") !== "0";
   const realtimeLimitParam = searchParams.get("limit");
+  const detailFallbackRequested = searchParams.get("detailFallback") === "1";
   const historicalRequested = searchParams.get("historical") === "1";
   const historicalStationId = historicalRequested ? searchParams.get("historicalStationId") : null;
   const historicalLimit = Number(searchParams.get("historicalLimit") || 120);
@@ -56,15 +58,19 @@ export async function GET(request) {
     const realtimeLimit = realtimeLimitParam === "all"
       ? stations.length
       : Math.min(stations.length, Math.max(1, Number(realtimeLimitParam || stations.length) || stations.length));
-    const directRealtime = realtime
+    const bulkRealtime = realtime
+      ? await getHydrometryRealtimeBulk({ stations })
+      : { rows: [], diagnostics: null };
+    const detailRealtime = realtime && detailFallbackRequested && bulkRealtime.rows.length === 0
       ? await getHydrometryRealtime({ stations, limit: realtimeLimit })
       : [];
-    const fallbackRealtime = realtime
+    const fallbackRealtime = realtime && bulkRealtime.rows.length === 0
       ? await getRealtimeFallback(stations, realtimeLimit)
       : [];
     const realtimeByStation = new Map();
     fallbackRealtime.forEach((row) => realtimeByStation.set(row.station_id, row));
-    directRealtime.forEach((row) => realtimeByStation.set(row.station_id, row));
+    detailRealtime.forEach((row) => realtimeByStation.set(row.station_id, row));
+    bulkRealtime.rows.forEach((row) => realtimeByStation.set(row.station_id, row));
     const realtimeMeasurements = [...realtimeByStation.values()];
     const selectedHistoricalStation = historicalStationId
       ? stations.find((station) => station.station_id === historicalStationId)
@@ -95,7 +101,9 @@ export async function GET(request) {
       },
       realtimeDiagnostics: {
         attemptedStations: realtime ? realtimeLimit : 0,
-        directRows: directRealtime.length,
+        bulkRows: bulkRealtime.rows.length,
+        bulk: bulkRealtime.diagnostics,
+        detailRows: detailRealtime.length,
         fallbackRows: fallbackRealtime.length,
         mergedRows: realtimeMeasurements.length
       },
