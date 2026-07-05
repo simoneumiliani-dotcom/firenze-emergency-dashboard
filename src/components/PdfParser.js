@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCircle } from "lucide-react";
+import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCircle } from "lucide-react";
 
 const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
 const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
@@ -87,21 +87,49 @@ const MONTHS_IT = {
   dicembre: 11
 };
 
-function parseItalianValidityDate(value) {
-  const match = String(value || "").match(/(\d{1,2})[.:](\d{2})\s+di\s+[A-Za-zÀ-ÿ]+,?\s+(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
-  if (!match) return null;
+function parseItalianDateText(value) {
+  const source = String(value || "").trim();
+  const textDate = source.match(/(\d{1,2})[.:](\d{2})\s+di\s+[A-Za-zÀ-ÿ]+,?\s+(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
+  if (textDate) {
+    const [, hour, minute, day, monthName, year] = textDate;
+    const month = MONTHS_IT[monthName.toLowerCase()];
+    if (month === undefined) return null;
+    const date = new Date(Number(year), month, Number(day), Number(hour), Number(minute), 0, 0);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
 
-  const [, hour, minute, day, monthName, year] = match;
-  const month = MONTHS_IT[monthName.toLowerCase()];
-  if (month === undefined) return null;
+  const numericDate = source.match(/(\d{1,2})[.:](\d{2})\s+del\s+(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/i);
+  if (numericDate) {
+    const [, hour, minute, day, month, year] = numericDate;
+    const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
 
-  const date = new Date(Number(year), month, Number(day), Number(hour), Number(minute), 0, 0);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  return null;
+}
+
+function getBulletinDatePattern() {
+  const textual = "\\d{1,2}[.:]\\d{2}\\s+di\\s+[A-Za-zÀ-ÿ]+,?\\s+\\d{1,2}\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4}";
+  const numeric = "\\d{1,2}[.:]\\d{2}\\s+del\\s+\\d{1,2}[\\/.-]\\d{1,2}[\\/.-]\\d{4}";
+  return "(?:" + textual + "|" + numeric + ")";
+}
+
+function getBulletinIssueDetails(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  const datePart = getBulletinDatePattern();
+  const match = normalized.match(new RegExp("Emess[ao]\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
+  if (!match) return { label: null, issuedAt: null };
+
+  const issueText = match[1].trim();
+  return {
+    label: "Emesso alle ore " + issueText,
+    issuedAt: parseItalianDateText(issueText)
+  };
 }
 
 function getBulletinValidityDetails(text) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  const datePart = "\\d{1,2}[.:]\\d{2}\\s+di\\s+[A-Za-zÀ-ÿ]+,?\\s+\\d{1,2}\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4}";
+  const datePart = getBulletinDatePattern();
   const match = normalized.match(new RegExp("Valido\\s+dalle\\s+ore\\s+(" + datePart + ")\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
   if (!match) return { label: null, validFrom: null, validTo: null };
 
@@ -109,8 +137,8 @@ function getBulletinValidityDetails(text) {
   const toText = match[2].trim();
   return {
     label: "Valido dalle ore " + fromText + " alle ore " + toText,
-    validFrom: parseItalianValidityDate(fromText),
-    validTo: parseItalianValidityDate(toText)
+    validFrom: parseItalianDateText(fromText),
+    validTo: parseItalianDateText(toText)
   };
 }
 
@@ -269,6 +297,16 @@ async function extractPdfText(file) {
   return pageTexts.join("\n");
 }
 
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function PdfParser({ onAlertDetected }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
@@ -276,6 +314,8 @@ export default function PdfParser({ onAlertDetected }) {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archive, setArchive] = useState([]);
   const objectUrlRef = useRef(null);
 
   useEffect(() => {
@@ -289,6 +329,7 @@ export default function PdfParser({ onAlertDetected }) {
 
     async function restoreCurrentBulletin() {
       const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []));
+      setArchive(localArchive);
       writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
       removeOldPdfBlobs(localArchive.map((item) => item.id));
 
@@ -316,8 +357,16 @@ export default function PdfParser({ onAlertDetected }) {
       fetch("/api/bulletins", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
         .then((archive) => {
-          if (cancelled || !archive?.current || !isCurrentBulletin(archive.current)) return;
+          if (cancelled || !archive) return;
+          const remoteArchive = pruneLocalArchive(archive.items || []);
+          if (remoteArchive.length) {
+            setArchive(remoteArchive);
+            writeJsonStorage(LOCAL_ARCHIVE_KEY, remoteArchive);
+          }
+          if (!archive.current || !isCurrentBulletin(archive.current)) return;
+
           const next = { ...archive.current, archivePersistent: archive.persistent };
+          writeJsonStorage(LOCAL_CURRENT_KEY, next);
           setResult((current) => current || next);
           if (next.pdfUrl) {
             setPdfUrl(next.pdfUrl);
@@ -364,7 +413,9 @@ export default function PdfParser({ onAlertDetected }) {
     try {
       const text = await extractPdfText(file);
       const detection = getBestAlertLevel(text);
+      const issueDetails = getBulletinIssueDetails(text);
       const validityDetails = getBulletinValidityDetails(text);
+      const pdfDataUrl = await fileToDataUrl(file);
       const uploadedAt = new Date().toISOString();
       const payload = {
         ...detection,
@@ -372,20 +423,24 @@ export default function PdfParser({ onAlertDetected }) {
         fileName: file.name,
         parsedAt: new Date().toLocaleString("it-IT"),
         uploadedAt,
+        issue: issueDetails.label,
+        issuedAt: issueDetails.issuedAt,
         validity: validityDetails.label,
         validFrom: validityDetails.validFrom,
         validTo: validityDetails.validTo,
+        pdfUrl: pdfDataUrl,
         textPreview: buildRelevantExtract(text, detection.matches),
         textTerms: [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
       };
       const savedPdf = await savePdfBlob(payload.id, file);
-      const localPayload = { ...payload, hasLocalPdf: savedPdf };
+      const localPayload = { ...payload, pdfUrl: null, hasLocalPdf: savedPdf };
       const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []);
       const nextArchive = pruneLocalArchive([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
       writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
       writeJsonStorage(LOCAL_CURRENT_KEY, localPayload);
       removeOldPdfBlobs(nextArchive.map((item) => item.id));
 
+      setArchive(nextArchive);
       setResult(localPayload);
       setStatus("done");
       setViewerOpen(true);
@@ -397,6 +452,9 @@ export default function PdfParser({ onAlertDetected }) {
         body: JSON.stringify(payload)
       })
         .then((response) => (response.ok ? response.json() : null))
+        .then((remoteArchive) => {
+          if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
+        })
         .catch(() => null);
     } catch (error) {
       setStatus("error");
@@ -407,6 +465,21 @@ export default function PdfParser({ onAlertDetected }) {
       });
     }
   }, [onAlertDetected]);
+
+  async function openArchivedBulletin(item) {
+    const pdfBlob = await loadPdfBlob(item.id);
+    const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : item.pdfUrl || null;
+
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = restoredPdfUrl?.startsWith("blob:") ? restoredPdfUrl : null;
+    setResult(item);
+    setStatus("done");
+    setPdfUrl(restoredPdfUrl);
+    setViewerOpen(Boolean(restoredPdfUrl));
+    setExtractOpen(false);
+    setArchiveOpen(false);
+    onAlertDetected?.(item);
+  }
 
   return (
     <section className={`rounded-lg border p-4 shadow-glow transition ${borderClass}`}>
@@ -428,24 +501,64 @@ export default function PdfParser({ onAlertDetected }) {
             <UploadCloud className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="section-title">Caricamento bollettino PDF</h2>
+            <h2 className="section-title">Adozione Stato di Allerta Regionale</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Trascina il PDF ufficiale o selezionalo per estrarre automaticamente criticita e zone fiorentine.
+              Carica il PDF ufficiale, consulta quello valido o richiama l'archivio dei bollettini degli ultimi 6 mesi.
             </p>
           </div>
         </div>
 
-        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20">
-          <FileText className="h-4 w-4" />
-          Seleziona PDF
-          <input
-            type="file"
-            accept="application/pdf"
-            className="sr-only"
-            onChange={(event) => handleFile(event.target.files?.[0])}
-          />
-        </label>
+        <div className="flex flex-wrap gap-2 md:justify-end">
+          <button
+            type="button"
+            onClick={() => setArchiveOpen((current) => !current)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
+          >
+            <Archive className="h-4 w-4" />
+            Archivio
+          </button>
+          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20">
+            <FileText className="h-4 w-4" />
+            Seleziona PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              className="sr-only"
+              onChange={(event) => handleFile(event.target.files?.[0])}
+            />
+          </label>
+        </div>
       </div>
+
+      {archiveOpen && (
+        <div className="mt-4 rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-100">Archivio bollettini</p>
+              <p className="text-xs text-slate-400">Ultimi 6 mesi, con PDF consultabile quando disponibile.</p>
+            </div>
+            <button type="button" onClick={() => setArchiveOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
+          </div>
+          {archive.length ? (
+            <div className="grid gap-2">
+              {archive.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openArchivedBulletin(item)}
+                  className="rounded-lg border border-emergency-line bg-black/10 px-3 py-2 text-left hover:bg-white/[0.04]"
+                >
+                  <span className="block text-sm font-medium text-slate-100">{item.fileName}</span>
+                  <span className="mt-1 block text-xs text-slate-400">{item.issue || "Emissione non rilevata"}</span>
+                  <span className="mt-1 block text-xs text-sky-100">{item.validity || "Validita non rilevata"}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Nessun bollettino archiviato.</p>
+          )}
+        </div>
+      )}
 
       {status !== "idle" && (
         <div className="mt-4 rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
@@ -464,6 +577,7 @@ export default function PdfParser({ onAlertDetected }) {
                     {result.fileName}
                   </button>
                   <p className="text-xs text-slate-400">{result.reason}</p>
+                  {result.issue && <p className="mt-1 text-xs font-medium text-slate-200">{result.issue}</p>}
                   {result.validity && <p className="mt-1 text-xs font-medium text-sky-100">{result.validity}</p>}
                 </div>
               </div>

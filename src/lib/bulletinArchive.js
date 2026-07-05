@@ -101,6 +101,8 @@ function buildBulletinRecord(input) {
     level: input.level || "Verde",
     matches: Array.isArray(input.matches) ? input.matches : [],
     reason: input.reason || null,
+    issue: input.issue || null,
+    issuedAt: input.issuedAt || null,
     validity: input.validity || null,
     validFrom: input.validFrom || null,
     validTo: input.validTo || null,
