@@ -302,6 +302,8 @@ function normalizeNameKey(value) {
 function normalizeHeaderKey(value) {
   return cleanText(value)
     .toLowerCase()
+    .replace(/\u0394/g, "delta")
+    .replace(/\u03b4/g, "delta")
     .replace(/Δ/g, "delta")
     .replace(/δ/g, "delta")
     .normalize("NFD")
@@ -374,9 +376,22 @@ function pickHeaderValueExcept(row, headers, includePatterns, excludePatterns = 
   return null;
 }
 
+function getHeaderIndexes(headers, includePatterns, excludePatterns = []) {
+  return headers
+    .map((header, index) => ({ header: normalizeHeaderKey(header), index }))
+    .filter(({ header }) => !excludePatterns.some((pattern) => pattern.test(header)))
+    .filter(({ header }) => includePatterns.some((pattern) => pattern.test(header)))
+    .map(({ index }) => index);
+}
+
+function getFirstHeaderValue(row, headers, includePatterns, excludePatterns = []) {
+  const [index] = getHeaderIndexes(headers, includePatterns, excludePatterns);
+  return index === undefined ? null : row[index];
+}
+
 function hasUsableHeaders(headers) {
   const joined = normalizeHeaderKey(headers.join(" "));
-  return /attuale|liv\.?\s*1|livello\s*1|portata|ult\.?\s*dati|variaz/.test(joined);
+  return /attuale|liv\.?\s*1|livello\s*1|portata|ult\.?\s*dati|\bdata\b|variaz|delta\s*h\s*[136]|deltah[136]/.test(joined);
 }
 
 function getFallbackCfrValues(row, station) {
@@ -388,20 +403,23 @@ function getFallbackCfrValues(row, station) {
     .filter((item) => !/\d{2}\/\d{2}\/\d{4}/.test(item.text))
     .filter((item) => !stationKey || !normalizeNameKey(item.text).includes(stationKey));
 
-  // Ordine CFR senza intestazioni: liv.1, liv.2, attuale, poi variazioni e/o portata.
-  const warning = values[0]?.value ?? null;
-  const danger = values[1]?.value ?? null;
-  const level = values[2]?.value ?? values[0]?.value ?? null;
-  const afterLevel = values.slice(3);
+  // Ordine export CFR senza intestazioni: liv.2, liv.1, attuale livello,
+  // attuale portata, delta h1, delta h3, delta h6, Data.
+  const danger = values[0]?.value ?? null;
+  const warning = values[1]?.value ?? null;
+  const level = values[2]?.value ?? null;
+  const flow = parseFlowValue(values[3]?.cell);
+  const dateCell = row.find((cell) => /\d{2}\/\d{2}\/\d{4}\s+\d{2}[.:]\d{2}/.test(cleanText(cell)));
 
   return {
     level,
     warning,
     danger,
-    flow: parseFlowValue(afterLevel.find((item) => Math.abs(item.value) > 30)?.cell),
-    deltaH1: afterLevel[0]?.value ?? null,
-    deltaH3: afterLevel[1]?.value ?? null,
-    deltaH6: afterLevel[2]?.value ?? null
+    flow,
+    deltaH1: values[4]?.value ?? null,
+    deltaH3: values[5]?.value ?? null,
+    deltaH6: values[6]?.value ?? null,
+    measurementText: dateCell || null
   };
 }
 
@@ -413,14 +431,19 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   if (!station) return null;
 
   const fallbackValues = hasUsableHeaders(headers) ? null : getFallbackCfrValues(row, station);
-  const levelText = pickHeaderValueExcept(row, headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/, /portata/]);
-  const flowText = pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/]);
-  const warningText = pickHeaderValueExcept(row, headers, [/liv\.?\s*1/, /livello\s*1/], []);
-  const dangerText = pickHeaderValueExcept(row, headers, [/liv\.?\s*2/, /livello\s*2/], []);
-  const deltaH1Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*1/, /variaz.*\bh1\b/]);
-  const deltaH3Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*3/, /variaz.*\bh3\b/]);
-  const deltaH6Text = pickHeaderValue(row, headers, [/variaz.*delta\s*h\s*6/, /variaz.*\bh6\b/]);
-  const measurementText = pickHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/]);
+  const actualIndexes = getHeaderIndexes(headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/]);
+  const levelIndex = actualIndexes.find((index) => !/portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes[0];
+  const flowIndex = actualIndexes.find((index) => /portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes.find((index) => index !== levelIndex);
+  const levelText = levelIndex === undefined ? null : row[levelIndex];
+  const flowText = flowIndex === undefined
+    ? pickHeaderValue(row, headers, [/portata/, /mc s/, /mc\/s/])
+    : row[flowIndex];
+  const warningText = getFirstHeaderValue(row, headers, [/liv\.?\s*1/, /livello\s*1/]);
+  const dangerText = getFirstHeaderValue(row, headers, [/liv\.?\s*2/, /livello\s*2/]);
+  const deltaH1Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*1/, /variaz.*deltah1/, /^delta\s*h\s*1$/, /^deltah1$/, /^h\s*1$/]);
+  const deltaH3Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*3/, /variaz.*deltah3/, /^delta\s*h\s*3$/, /^deltah3$/, /^h\s*3$/]);
+  const deltaH6Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*6/, /variaz.*deltah6/, /^delta\s*h\s*6$/, /^deltah6$/, /^h\s*6$/]);
+  const measurementText = getFirstHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/, /^data$/]) || fallbackValues?.measurementText;
   const level = parseHydrometricMeters(levelText) ?? fallbackValues?.level;
   const flow = parseFlowValue(flowText) ?? fallbackValues?.flow;
   const warning_m = parseHydrometricMeters(warningText) ?? fallbackValues?.warning;
@@ -545,7 +568,7 @@ export async function getHydrometryRealtimeBulk({ stations } = {}) {
       .flatMap((result) => result.value);
     const arrayRows = parseCfrBulkArrayRows(html, stations || [], HYDROMETRY_SOURCES.cfrRealtime.url);
     const byStation = new Map();
-    [...tableRows, ...excelRows, ...arrayRows].forEach((row) => byStation.set(row.station_id, row));
+    [...arrayRows, ...tableRows, ...excelRows].forEach((row) => byStation.set(row.station_id, row));
     return {
       rows: [...byStation.values()],
       diagnostics: {
