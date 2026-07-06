@@ -427,10 +427,31 @@ function hasUsableHeaders(headers) {
   return /attuale|liv\.?\s*1|livello\s*1|portata|ult\.?\s*dati|\bdata\b|variaz|delta\s*h\s*[136]|deltah[136]/.test(joined);
 }
 
-function getFallbackCfrValues(row, station) {
+function isNumericCell(value) {
+  return /^-?\d+(?:[.,]\d+)?/.test(cleanText(value));
+}
+
+function findStationCellIndex(row, station) {
+  const stationKey = normalizeNameKey(station?.station_name);
+  if (!stationKey) return -1;
+
+  return row.findIndex((cell) => {
+    const cellKey = normalizeNameKey(cell);
+    return cellKey === stationKey || cellKey.includes(stationKey) || stationKey.includes(cellKey);
+  });
+}
+
+function getPositionalCfrValues(row, station) {
   const codeIndex = row.findIndex((cell) => /^TOS\d+/i.test(cleanText(cell)));
-  if (codeIndex < 0) return null;
-  const dataCells = codeIndex >= 0 ? row.slice(codeIndex + 5) : row;
+  const stationIndex = findStationCellIndex(row, station);
+  const searchStart = codeIndex >= 0
+    ? codeIndex + 5
+    : stationIndex >= 0
+      ? stationIndex + 1
+      : 0;
+  const dataStart = row.findIndex((cell, index) => index >= searchStart && isNumericCell(cell));
+  if (dataStart < 0) return null;
+  const dataCells = row.slice(dataStart);
 
   // Ordine export CFR senza intestazioni: Codice, Fiume, Stazione, Provincia,
   // Zona, liv.2, liv.1, attuale livello, attuale portata, delta h1, delta h3,
@@ -441,7 +462,7 @@ function getFallbackCfrValues(row, station) {
   const flow = parseFlowValue(dataCells[3]);
   const dateCell = row.find((cell) => /(?:\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{2})\s+\d{2}[.:]\d{2}/.test(cleanText(cell)));
 
-  return {
+  const values = {
     level,
     warning,
     danger,
@@ -451,6 +472,7 @@ function getFallbackCfrValues(row, station) {
     deltaH6: parseHydrometricMeters(dataCells[6]),
     measurementText: dateCell || null
   };
+  return Number.isFinite(values.level) ? values : null;
 }
 
 function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime) {
@@ -460,8 +482,8 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const station = findStationForCfrRow({ stationText, codeText }, stations) || findStationFromRow(row, stations);
   if (!station) return null;
 
-  const positionalValues = getFallbackCfrValues(row, station);
-  const fallbackValues = positionalValues || (hasUsableHeaders(headers) ? null : getFallbackCfrValues(row, station));
+  const positionalValues = getPositionalCfrValues(row, station);
+  const fallbackValues = positionalValues || (hasUsableHeaders(headers) ? null : getPositionalCfrValues(row, station));
   const actualIndexes = getHeaderIndexes(headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/]);
   const levelIndex = actualIndexes.find((index) => !/portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes[0];
   const flowIndex = actualIndexes.find((index) => /portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes.find((index) => index !== levelIndex);
@@ -494,9 +516,9 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
     flow_mc_s: Number.isFinite(flow) ? flow : null,
     warning_m: Number.isFinite(warning_m) ? warning_m : null,
     danger_m: Number.isFinite(danger_m) ? danger_m : null,
-    delta_h1_m: parseHydrometricMeters(deltaH1Text) ?? fallbackValues?.deltaH1 ?? null,
-    delta_h3_m: parseHydrometricMeters(deltaH3Text) ?? fallbackValues?.deltaH3 ?? null,
-    delta_h6_m: parseHydrometricMeters(deltaH6Text) ?? fallbackValues?.deltaH6 ?? null,
+    delta_h1_m: fallbackValues?.deltaH1 ?? parseHydrometricMeters(deltaH1Text) ?? null,
+    delta_h3_m: fallbackValues?.deltaH3 ?? parseHydrometricMeters(deltaH3Text) ?? null,
+    delta_h6_m: fallbackValues?.deltaH6 ?? parseHydrometricMeters(deltaH6Text) ?? null,
     trend: null,
     source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
     source_url: sourceUrl,
