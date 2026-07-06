@@ -69,7 +69,14 @@ export async function fetchJson(url, options = {}) {
     ...options,
     headers: { accept: "application/json,application/geo+json,*/*;q=0.8", ...(options.headers || {}) }
   });
-  return JSON.parse(text);
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new Error("Risposta JSON vuota da " + url);
+  if (trimmed.startsWith("<")) throw new Error("La fonte non ha restituito JSON valido: " + url);
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    throw new Error("JSON non leggibile da " + url);
+  }
 }
 
 async function fetchBuffer(url, { headers = {}, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
@@ -334,7 +341,43 @@ export function buildHydrometryStationMapDiagnostics(stations = []) {
   };
 }
 
-export function getHydrometryHistoricalCatalog({ province = "FI" } = {}) {
+function getMapEntryByCode(stationCode) {
+  return (hydrometryStationMap.stations || []).find((entry) => entry.cfr_code === stationCode) || null;
+}
+
+function normalizeHistoricalCatalogStation(feature) {
+  const properties = feature?.properties || {};
+  const stationCode = cleanText(properties.Codice || properties.codice || properties.id_stazione);
+  if (!stationCode) return null;
+
+  const historical = getHistoricalHydrometrySource(feature, null);
+  if (!historical.historical_url || historical.historical_inferred) return null;
+
+  const mapEntry = getMapEntryByCode(stationCode);
+  const coordinates = getFeatureCoordinates(feature);
+
+  return {
+    station_id: stationCode,
+    station_code: stationCode,
+    station_name: cleanText(properties.Nome || properties.nome || mapEntry?.cfr_name || stationCode),
+    river_name: cleanText(mapEntry?.cfr_river) || null,
+    province: cleanText(properties.Provincia || properties.provincia || mapEntry?.cfr_province) || null,
+    alert_zone: cleanText(mapEntry?.cfr_zone) || null,
+    latitude: coordinates.latitude ?? mapEntry?.latitude ?? null,
+    longitude: coordinates.longitude ?? mapEntry?.longitude ?? null,
+    historical_label: historical.historical_label,
+    historical_url: historical.historical_url,
+    historical_years: historical.historical_years || [],
+    catalog_status: "cataloged",
+    validated_source: "sir-json-stations-consistenza",
+    source_type: HYDROMETRY_SOURCES.stationArchive.sourceType,
+    source_url: historical.historical_url,
+    validated: true,
+    historical_inferred: false
+  };
+}
+
+function getStaticHydrometryHistoricalCatalog({ province = "FI" } = {}) {
   return (hydrometryHistoricalCatalog.stations || [])
     .filter((station) => !province || station.province === province)
     .map((station) => ({
@@ -344,6 +387,22 @@ export function getHydrometryHistoricalCatalog({ province = "FI" } = {}) {
       validated: true,
       historical_inferred: false
     }));
+}
+
+export async function getHydrometryHistoricalCatalog({ province = "FI" } = {}) {
+  try {
+    const archivePayload = await fetchJson(HYDROMETRY_SOURCES.stationArchive.dataUrl);
+    const dynamicCatalog = (archivePayload?.features || [])
+      .map(normalizeHistoricalCatalogStation)
+      .filter(Boolean)
+      .filter((station) => !province || station.province === province);
+
+    return dynamicCatalog.length
+      ? dynamicCatalog
+      : getStaticHydrometryHistoricalCatalog({ province });
+  } catch {
+    return getStaticHydrometryHistoricalCatalog({ province });
+  }
 }
 
 export async function getHydrometryStations({ province = "FI" } = {}) {
@@ -983,7 +1042,20 @@ export function parseHistoricalHydrometry(payload, station, sourceUrl) {
 
 export async function getHydrometryHistorical({ station, limit = 120 } = {}) {
   if (!station?.historical_url) return [];
-  const payload = await fetchJson(station.historical_url);
+  const text = await fetchText(station.historical_url, {
+    headers: { accept: "application/json,text/plain,*/*;q=0.8" }
+  });
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new Error("SIR non ha restituito dati storici JSON per questa stazione.");
+  if (trimmed.startsWith("<")) throw new Error("SIR ha restituito una pagina HTML invece dei dati storici JSON.");
+
+  let payload;
+  try {
+    payload = JSON.parse(trimmed);
+  } catch {
+    throw new Error("SIR ha restituito dati storici in un formato non leggibile dalla dashboard.");
+  }
+
   return parseHistoricalHydrometry(payload, station, station.historical_url).slice(-Math.max(1, Number(limit) || 120));
 }
 

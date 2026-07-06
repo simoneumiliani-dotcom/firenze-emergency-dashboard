@@ -23,7 +23,7 @@ export async function GET(request) {
 
   try {
     const stations = await getHydrometryStations({ province });
-    const historicalCatalog = getHydrometryHistoricalCatalog({ province });
+    const historicalCatalog = await getHydrometryHistoricalCatalog({ province });
     const realtimeLimit = realtimeLimitParam === "all"
       ? stations.length
       : Math.min(stations.length, Math.max(1, Number(realtimeLimitParam || stations.length) || stations.length));
