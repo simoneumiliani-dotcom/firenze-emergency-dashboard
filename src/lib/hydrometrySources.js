@@ -429,6 +429,7 @@ function hasUsableHeaders(headers) {
 
 function getFallbackCfrValues(row, station) {
   const codeIndex = row.findIndex((cell) => /^TOS\d+/i.test(cleanText(cell)));
+  if (codeIndex < 0) return null;
   const dataCells = codeIndex >= 0 ? row.slice(codeIndex + 5) : row;
 
   // Ordine export CFR senza intestazioni: Codice, Fiume, Stazione, Provincia,
@@ -459,7 +460,8 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const station = findStationForCfrRow({ stationText, codeText }, stations) || findStationFromRow(row, stations);
   if (!station) return null;
 
-  const fallbackValues = hasUsableHeaders(headers) ? null : getFallbackCfrValues(row, station);
+  const positionalValues = getFallbackCfrValues(row, station);
+  const fallbackValues = positionalValues || (hasUsableHeaders(headers) ? null : getFallbackCfrValues(row, station));
   const actualIndexes = getHeaderIndexes(headers, [/attuale/], [/liv\.?\s*[12]/, /livello\s*[12]/, /soglia/]);
   const levelIndex = actualIndexes.find((index) => !/portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes[0];
   const flowIndex = actualIndexes.find((index) => /portata/.test(normalizeHeaderKey(headers[index]))) ?? actualIndexes.find((index) => index !== levelIndex);
@@ -472,11 +474,11 @@ function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime)
   const deltaH1Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*1/, /variaz.*deltah1/, /^delta\s*h\s*1$/, /^deltah1$/, /^h\s*1$/]);
   const deltaH3Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*3/, /variaz.*deltah3/, /^delta\s*h\s*3$/, /^deltah3$/, /^h\s*3$/]);
   const deltaH6Text = getFirstHeaderValue(row, headers, [/variaz.*delta\s*h\s*6/, /variaz.*deltah6/, /^delta\s*h\s*6$/, /^deltah6$/, /^h\s*6$/]);
-  const measurementText = getFirstHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/, /^data$/]) || fallbackValues?.measurementText;
-  const level = parseHydrometricMeters(levelText) ?? fallbackValues?.level;
-  const flow = parseFlowValue(flowText) ?? fallbackValues?.flow;
-  const warning_m = parseHydrometricMeters(warningText) ?? fallbackValues?.warning;
-  const danger_m = parseHydrometricMeters(dangerText) ?? fallbackValues?.danger;
+  const measurementText = fallbackValues?.measurementText || getFirstHeaderValue(row, headers, [/ult\.?\s*dati/, /ultimo\s*dato/, /ultimi\s*dati/, /^data$/]);
+  const level = fallbackValues?.level ?? parseHydrometricMeters(levelText);
+  const flow = fallbackValues?.flow ?? parseFlowValue(flowText);
+  const warning_m = fallbackValues?.warning ?? parseHydrometricMeters(warningText);
+  const danger_m = fallbackValues?.danger ?? parseHydrometricMeters(dangerText);
   if (!Number.isFinite(level)) return null;
 
   return {
