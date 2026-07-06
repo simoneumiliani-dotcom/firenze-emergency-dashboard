@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { inflateRawSync } from "node:zlib";
+import hydrometryStationMap from "@/data/hydrometryStationMap.json";
 
 export const HYDROMETRY_SOURCES = {
   activeHydrometers: {
@@ -259,18 +260,94 @@ export function parseActiveHydrometersGeoJson(payload, archivePayload = null, { 
     .filter((station) => !province || station.province === province);
 }
 
+function buildHistoricalUrl(stationCode) {
+  return stationCode
+    ? "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=" + encodeURIComponent(stationCode)
+    : null;
+}
+
+function normalizeMapStation(entry, opendataStation = null) {
+  const stationCode = cleanText(entry.cfr_code);
+  const latitude = Number.isFinite(opendataStation?.latitude) ? opendataStation.latitude : entry.latitude ?? null;
+  const longitude = Number.isFinite(opendataStation?.longitude) ? opendataStation.longitude : entry.longitude ?? null;
+  const historicalUrl = opendataStation?.historical_url || buildHistoricalUrl(stationCode);
+
+  return {
+    station_id: stationCode,
+    station_code: stationCode,
+    station_name: cleanText(entry.cfr_name || entry.opendata_name || opendataStation?.station_name),
+    river_name: cleanText(entry.cfr_river || opendataStation?.river_name) || null,
+    basin: cleanText(opendataStation?.basin || entry.cfr_zone) || null,
+    municipality: cleanText(opendataStation?.municipality) || null,
+    province: cleanText(entry.cfr_province || opendataStation?.province) || null,
+    alert_zone: cleanText(entry.cfr_zone || opendataStation?.alert_zone) || null,
+    latitude,
+    longitude,
+    zero_hydrometric_m: opendataStation?.zero_hydrometric_m ?? null,
+    altitude_m: opendataStation?.altitude_m ?? null,
+    historical_label: opendataStation?.historical_label || (historicalUrl ? "IDROMETRIA - endpoint SIR candidato" : null),
+    historical_url: historicalUrl,
+    historical_years: opendataStation?.historical_years || [],
+    historical_inferred: opendataStation?.historical_inferred ?? !opendataStation?.historical_url,
+    source_type: opendataStation ? HYDROMETRY_SOURCES.activeHydrometers.sourceType : HYDROMETRY_SOURCES.cfrRealtime.sourceType,
+    source_url: opendataStation?.source_url || HYDROMETRY_SOURCES.cfrRealtime.url,
+    cfr_station_source_url: HYDROMETRY_SOURCES.cfrRealtime.url,
+    cfr_raw_name: cleanText(entry.cfr_raw_name) || null,
+    match_type: entry.match_type || (opendataStation ? "exact_code" : "cfr_only"),
+    opendata_has_hydrometry: Boolean(entry.opendata_has_hydrometry),
+    validated: Boolean(opendataStation)
+  };
+}
+
+export function buildHydrometryStationsFromMap(opendataStations = [], { province = "FI" } = {}) {
+  const opendataByCode = new Map((opendataStations || [])
+    .filter((station) => station?.station_id || station?.station_code)
+    .map((station) => [station.station_id || station.station_code, station]));
+
+  return (hydrometryStationMap.stations || [])
+    .filter((entry) => entry.active !== false)
+    .filter((entry) => !province || entry.cfr_province === province)
+    .map((entry) => normalizeMapStation(entry, opendataByCode.get(entry.cfr_code)))
+    .filter((station) => station.station_id);
+}
+
+export function buildHydrometryStationMapDiagnostics(stations = []) {
+  const counts = (stations || []).reduce((accumulator, station) => {
+    const key = station.match_type || "unknown";
+    accumulator[key] = (accumulator[key] || 0) + 1;
+    return accumulator;
+  }, {});
+
+  return {
+    source: hydrometryStationMap.primarySource,
+    generatedAt: hydrometryStationMap.generatedAt,
+    totalConfigured: (hydrometryStationMap.stations || []).length,
+    returnedStations: stations.length,
+    matchTypes: counts,
+    catalogCodeOnlyStations: stations
+      .filter((station) => station.match_type === "catalog_code_only")
+      .map((station) => ({ station_id: station.station_id, station_name: station.station_name })),
+    cfrOnlyStations: stations
+      .filter((station) => station.match_type === "cfr_only")
+      .map((station) => ({ station_id: station.station_id, station_name: station.station_name }))
+  };
+}
+
 export async function getHydrometryStations({ province = "FI" } = {}) {
   const [activePayload, archivePayload] = await Promise.allSettled([
     fetchJson(HYDROMETRY_SOURCES.activeHydrometers.dataUrl),
     fetchJson(HYDROMETRY_SOURCES.stationArchive.dataUrl)
   ]);
 
-  if (activePayload.status !== "fulfilled") throw activePayload.reason;
-  return parseActiveHydrometersGeoJson(
-    activePayload.value,
-    archivePayload.status === "fulfilled" ? archivePayload.value : null,
-    { province }
-  );
+  const opendataStations = activePayload.status === "fulfilled"
+    ? parseActiveHydrometersGeoJson(
+      activePayload.value,
+      archivePayload.status === "fulfilled" ? archivePayload.value : null,
+      { province }
+    )
+    : [];
+
+  return buildHydrometryStationsFromMap(opendataStations, { province });
 }
 
 function parseQuotedArrayItems(rawItems) {

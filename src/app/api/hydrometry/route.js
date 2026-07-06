@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   HYDROMETRY_SOURCES,
+  buildHydrometryStationMapDiagnostics,
   buildHydrometrySourceMatrix,
   getHydrometryHistorical,
   getHydrometryRealtimeBulk,
@@ -57,6 +58,7 @@ export async function GET(request) {
         realtime: realtimeMeasurements.length,
         historical: historicalMeasurements.length
       },
+      stationMapDiagnostics: buildHydrometryStationMapDiagnostics(stations),
       realtimeDiagnostics: {
         attemptedStations: realtime ? realtimeLimit : 0,
         bulkRows: bulkRealtime.rows.length,
