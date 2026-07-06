@@ -41,6 +41,17 @@ function getStationLabel(station) {
   return river + station.station_name;
 }
 
+function hasHistoricalDataCandidate(station) {
+  return Boolean(station?.historical_url) &&
+    (station.historical_inferred === false || station.opendata_has_hydrometry === true);
+}
+
+function getHistoricalStationCandidates(stations, unavailableIds = new Set()) {
+  return (stations || []).filter((station) =>
+    hasHistoricalDataCandidate(station) && !unavailableIds.has(station.station_id)
+  );
+}
+
 function buildRealtimeTrendPoints(realtime) {
   const value = Number(realtime?.level_m);
   if (!Number.isFinite(value)) return [];
@@ -276,6 +287,8 @@ function RealtimeTable({ rows }) {
 }
 
 function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loading, error, onLoad }) {
+  const hasStations = stations.length > 0;
+
   return (
     <section className="panel overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-emergency-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -283,16 +296,17 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
           <History className="h-5 w-5 text-sky-300" />
           <div>
             <h2 className="section-title">Storico SIR</h2>
-            <p className="muted">Serie storica collegata alla stazione selezionata, da caricare solo su richiesta.</p>
+            <p className="muted">Sono mostrate solo le stazioni con dati storici disponibili o verificabili.</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:min-w-[22rem]">
           <select
             value={selectedId || ""}
             onChange={(event) => onSelect(event.target.value)}
+            disabled={!hasStations}
             className="w-full rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
           >
-            <option value="">Seleziona stazione</option>
+            <option value="">{hasStations ? "Seleziona stazione" : "Nessuna stazione con storico"}</option>
             {stations.map((item) => (
               <option key={item.station_id} value={item.station_id}>
                 {item.station_code} - {item.station_name}
@@ -302,7 +316,7 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
           <button
             type="button"
             onClick={onLoad}
-            disabled={!station || loading}
+            disabled={!station || loading || !hasStations}
             className="inline-flex items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Caricamento..." : "Carica storico"}
@@ -313,6 +327,7 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
         <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 text-sm">
           <p className="font-semibold text-slate-100">{station?.station_name || "Nessuna stazione selezionata"}</p>
           <p className="mt-1 text-slate-400">Risorsa storico: {station?.historical_url || "non disponibile"}</p>
+          <p className="mt-1 text-xs text-slate-500">Stazioni disponibili nel menu: {stations.length}</p>
         </div>
         {error && <div className="mt-4 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-sm text-orange-100">{error}</div>}
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-emergency-line">
@@ -352,6 +367,7 @@ export default function IdrometriaPage() {
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [error, setError] = useState(null);
   const [historicalError, setHistoricalError] = useState(null);
+  const [unavailableHistoricalIds, setUnavailableHistoricalIds] = useState(() => new Set());
 
   async function loadData() {
     setLoading(true);
@@ -366,8 +382,9 @@ export default function IdrometriaPage() {
         historicalMeasurements: current?.historicalMeasurements || []
       }));
       if (!selectedStationId && data.stations?.length) {
-        const firstHistorical = data.stations.find((station) => station.historical_url) || data.stations[0];
-        setSelectedStationId(firstHistorical.station_id);
+        const historicalCandidates = getHistoricalStationCandidates(data.stations, unavailableHistoricalIds);
+        const firstHistorical = historicalCandidates[0] || null;
+        setSelectedStationId(firstHistorical?.station_id || null);
       }
       if (!selectedTrendStationId && data.stations?.length) {
         const firstRealtime = data.realtimeMeasurements?.[0]?.station_id;
@@ -400,12 +417,21 @@ export default function IdrometriaPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || data?.error || "Storico non disponibile");
       if (data.historicalError) throw new Error(data.historicalError);
+      const historicalMeasurements = data.historicalMeasurements || [];
+      if (!historicalMeasurements.length) {
+        setUnavailableHistoricalIds((current) => {
+          const next = new Set(current);
+          next.add(stationId);
+          return next;
+        });
+        throw new Error("Nessun dato storico disponibile per questa stazione.");
+      }
       setPayload((current) => ({
         ...(current || data),
-        historicalMeasurements: data.historicalMeasurements || [],
+        historicalMeasurements,
         counts: {
           ...(current?.counts || data.counts || {}),
-          historical: data.historicalMeasurements?.length || 0
+          historical: historicalMeasurements.length
         }
       }));
     } catch (err) {
@@ -415,11 +441,26 @@ export default function IdrometriaPage() {
     }
   }
 
+  const historicalStations = useMemo(
+    () => getHistoricalStationCandidates(payload?.stations || [], unavailableHistoricalIds),
+    [payload, unavailableHistoricalIds]
+  );
+
   const selectedStation = useMemo(
-    () => payload?.stations?.find((station) => station.station_id === selectedStationId) || null,
-    [payload, selectedStationId]
+    () => historicalStations.find((station) => station.station_id === selectedStationId) || null,
+    [historicalStations, selectedStationId]
   );
   const selectedTrendId = selectedTrendStationId || selectedStationId || payload?.stations?.[0]?.station_id || "";
+
+  useEffect(() => {
+    if (!historicalStations.length) {
+      if (selectedStationId) setSelectedStationId(null);
+      return;
+    }
+    if (!selectedStationId || !historicalStations.some((station) => station.station_id === selectedStationId)) {
+      setSelectedStationId(historicalStations[0].station_id);
+    }
+  }, [historicalStations, selectedStationId]);
 
   function handleHistoricalStationChange(stationId) {
     setSelectedStationId(stationId);
@@ -486,7 +527,7 @@ export default function IdrometriaPage() {
             <RealtimeTable rows={payload?.realtimeMeasurements || []} />
             <HistoricalPanel
               station={selectedStation}
-              stations={payload?.stations || []}
+              stations={historicalStations}
               selectedId={selectedStationId}
               onSelect={handleHistoricalStationChange}
               rows={payload?.historicalMeasurements || []}
