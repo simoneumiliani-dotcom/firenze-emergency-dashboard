@@ -1,0 +1,171 @@
+{
+  "generatedAt": "2026-07-06T22:00:00+02:00",
+  "area": "Provincia/Citta Metropolitana di Firenze",
+  "purpose": "Catalogo separato per la consultazione dello storico SIR idrometrico.",
+  "sourcePolicy": {
+    "realtime": "CFR Toscana stazioni.php?type=idro, dato operativo non validato",
+    "historical": "SIR/OpenData, solo stazioni catalogate come idrometriche"
+  },
+  "notes": [
+    "Il catalogo storico e' intenzionalmente distinto dall'elenco realtime CFR.",
+    "Le stazioni non presenti qui restano visibili nel realtime, ma non nel selettore Storico SIR."
+  ],
+  "stations": [
+    {
+      "station_id": "TOS01004591",
+      "station_code": "TOS01004591",
+      "station_name": "Incisa Valle",
+      "river_name": "Arno",
+      "province": "FI",
+      "alert_zone": "A2",
+      "latitude": 43.654,
+      "longitude": 11.449,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004591",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004621",
+      "station_code": "TOS01004621",
+      "station_name": "S. Piero a Sieve-Sieve",
+      "river_name": "Sieve",
+      "province": "FI",
+      "alert_zone": "M",
+      "latitude": 43.963,
+      "longitude": 11.323,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004621",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004659",
+      "station_code": "TOS01004659",
+      "station_name": "Nave di Rosano",
+      "river_name": "Arno",
+      "province": "FI",
+      "alert_zone": "A3",
+      "latitude": 43.77,
+      "longitude": 11.426,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004659",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004725",
+      "station_code": "TOS01004725",
+      "station_name": "Strada in Chianti",
+      "river_name": "Ema",
+      "province": "FI",
+      "alert_zone": "A3",
+      "latitude": 43.656,
+      "longitude": 11.295,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004725",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004784",
+      "station_code": "TOS01004784",
+      "station_name": "Calenzano",
+      "river_name": "Marina",
+      "province": "FI",
+      "alert_zone": "B",
+      "latitude": 43.854,
+      "longitude": 11.166,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004784",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004811",
+      "station_code": "TOS01004811",
+      "station_name": "Ponte a Signa",
+      "river_name": "Arno",
+      "province": "FI",
+      "alert_zone": "B",
+      "latitude": 43.784,
+      "longitude": 11.095,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004811",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004915",
+      "station_code": "TOS01004915",
+      "station_name": "Montespertoli",
+      "river_name": "Virginio",
+      "province": "FI",
+      "alert_zone": "A5",
+      "latitude": 43.644,
+      "longitude": 11.073,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004915",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004921",
+      "station_code": "TOS01004921",
+      "station_name": "Turbone",
+      "river_name": "Pesa",
+      "province": "FI",
+      "alert_zone": "A4",
+      "latitude": 43.674,
+      "longitude": 11.01,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004921",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004941",
+      "station_code": "TOS01004941",
+      "station_name": "Empoli",
+      "river_name": "Arno",
+      "province": "FI",
+      "alert_zone": "A4",
+      "latitude": 43.718,
+      "longitude": 10.947,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004941",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004967",
+      "station_code": "TOS01004967",
+      "station_name": "Certaldo",
+      "river_name": "Elsa",
+      "province": "FI",
+      "alert_zone": "A5",
+      "latitude": 43.548,
+      "longitude": 11.041,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004967",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS01004971",
+      "station_code": "TOS01004971",
+      "station_name": "Castelfiorentino",
+      "river_name": "Elsa",
+      "province": "FI",
+      "alert_zone": "A5",
+      "latitude": 43.609,
+      "longitude": 10.969,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS01004971",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    },
+    {
+      "station_id": "TOS30250000",
+      "station_code": "TOS30250000",
+      "station_name": "Marradi",
+      "river_name": "Lamone",
+      "province": "FI",
+      "alert_zone": "R2",
+      "latitude": 44.073,
+      "longitude": 11.613,
+      "historical_url": "https://www.sir.toscana.it/archivio/dati.php?IDST=idro&D=json&IDS=TOS30250000",
+      "catalog_status": "cataloged",
+      "validated_source": "local-opendata-hydrometry-match"
+    }
+  ]
+}

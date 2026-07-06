@@ -4,6 +4,7 @@ import {
   buildHydrometryStationMapDiagnostics,
   buildHydrometrySourceMatrix,
   getHydrometryHistorical,
+  getHydrometryHistoricalCatalog,
   getHydrometryRealtimeBulk,
   getHydrometryStations
 } from "@/lib/hydrometrySources";
@@ -22,6 +23,7 @@ export async function GET(request) {
 
   try {
     const stations = await getHydrometryStations({ province });
+    const historicalCatalog = getHydrometryHistoricalCatalog({ province });
     const realtimeLimit = realtimeLimitParam === "all"
       ? stations.length
       : Math.min(stations.length, Math.max(1, Number(realtimeLimitParam || stations.length) || stations.length));
@@ -32,7 +34,7 @@ export async function GET(request) {
     bulkRealtime.rows.forEach((row) => realtimeByStation.set(row.station_id, row));
     const realtimeMeasurements = [...realtimeByStation.values()];
     const selectedHistoricalStation = historicalStationId
-      ? stations.find((station) => station.station_id === historicalStationId)
+      ? historicalCatalog.find((station) => station.station_id === historicalStationId)
       : null;
     let historicalMeasurements = [];
     let historicalError = null;
@@ -50,13 +52,15 @@ export async function GET(request) {
       sources: HYDROMETRY_SOURCES,
       sourceMatrix: buildHydrometrySourceMatrix(),
       stations,
+      historicalCatalog,
       realtimeMeasurements,
       historicalMeasurements,
       historicalError,
       counts: {
         stations: stations.length,
         realtime: realtimeMeasurements.length,
-        historical: historicalMeasurements.length
+        historical: historicalMeasurements.length,
+        historicalCatalog: historicalCatalog.length
       },
       stationMapDiagnostics: buildHydrometryStationMapDiagnostics(stations),
       realtimeDiagnostics: {

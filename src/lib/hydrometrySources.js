@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { inflateRawSync } from "node:zlib";
+import hydrometryHistoricalCatalog from "@/data/hydrometryHistoricalCatalog.json";
 import hydrometryStationMap from "@/data/hydrometryStationMap.json";
 
 export const HYDROMETRY_SOURCES = {
@@ -331,6 +332,18 @@ export function buildHydrometryStationMapDiagnostics(stations = []) {
       .filter((station) => station.match_type === "cfr_only")
       .map((station) => ({ station_id: station.station_id, station_name: station.station_name }))
   };
+}
+
+export function getHydrometryHistoricalCatalog({ province = "FI" } = {}) {
+  return (hydrometryHistoricalCatalog.stations || [])
+    .filter((station) => !province || station.province === province)
+    .map((station) => ({
+      ...station,
+      source_type: HYDROMETRY_SOURCES.stationArchive.sourceType,
+      source_url: station.historical_url,
+      validated: true,
+      historical_inferred: false
+    }));
 }
 
 export async function getHydrometryStations({ province = "FI" } = {}) {

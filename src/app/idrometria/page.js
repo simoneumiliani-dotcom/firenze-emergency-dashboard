@@ -41,17 +41,6 @@ function getStationLabel(station) {
   return river + station.station_name;
 }
 
-function hasHistoricalDataCandidate(station) {
-  return Boolean(station?.historical_url) &&
-    (station.historical_inferred === false || station.opendata_has_hydrometry === true);
-}
-
-function getHistoricalStationCandidates(stations, unavailableIds = new Set()) {
-  return (stations || []).filter((station) =>
-    hasHistoricalDataCandidate(station) && !unavailableIds.has(station.station_id)
-  );
-}
-
 function buildRealtimeTrendPoints(realtime) {
   const value = Number(realtime?.level_m);
   if (!Number.isFinite(value)) return [];
@@ -296,7 +285,7 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
           <History className="h-5 w-5 text-sky-300" />
           <div>
             <h2 className="section-title">Storico SIR</h2>
-            <p className="muted">Sono mostrate solo le stazioni con dati storici disponibili o verificabili.</p>
+            <p className="muted">Catalogo storico separato: solo stazioni SIR idrometriche catalogate.</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:min-w-[22rem]">
@@ -327,7 +316,7 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
         <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 text-sm">
           <p className="font-semibold text-slate-100">{station?.station_name || "Nessuna stazione selezionata"}</p>
           <p className="mt-1 text-slate-400">Risorsa storico: {station?.historical_url || "non disponibile"}</p>
-          <p className="mt-1 text-xs text-slate-500">Stazioni disponibili nel menu: {stations.length}</p>
+          <p className="mt-1 text-xs text-slate-500">Catalogo storico SIR: {stations.length} stazioni</p>
         </div>
         {error && <div className="mt-4 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-sm text-orange-100">{error}</div>}
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-emergency-line">
@@ -367,7 +356,6 @@ export default function IdrometriaPage() {
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [error, setError] = useState(null);
   const [historicalError, setHistoricalError] = useState(null);
-  const [unavailableHistoricalIds, setUnavailableHistoricalIds] = useState(() => new Set());
 
   async function loadData() {
     setLoading(true);
@@ -381,9 +369,8 @@ export default function IdrometriaPage() {
         ...data,
         historicalMeasurements: current?.historicalMeasurements || []
       }));
-      if (!selectedStationId && data.stations?.length) {
-        const historicalCandidates = getHistoricalStationCandidates(data.stations, unavailableHistoricalIds);
-        const firstHistorical = historicalCandidates[0] || null;
+      if (!selectedStationId && data.historicalCatalog?.length) {
+        const firstHistorical = data.historicalCatalog[0] || null;
         setSelectedStationId(firstHistorical?.station_id || null);
       }
       if (!selectedTrendStationId && data.stations?.length) {
@@ -419,11 +406,6 @@ export default function IdrometriaPage() {
       if (data.historicalError) throw new Error(data.historicalError);
       const historicalMeasurements = data.historicalMeasurements || [];
       if (!historicalMeasurements.length) {
-        setUnavailableHistoricalIds((current) => {
-          const next = new Set(current);
-          next.add(stationId);
-          return next;
-        });
         throw new Error("Nessun dato storico disponibile per questa stazione.");
       }
       setPayload((current) => ({
@@ -441,10 +423,7 @@ export default function IdrometriaPage() {
     }
   }
 
-  const historicalStations = useMemo(
-    () => getHistoricalStationCandidates(payload?.stations || [], unavailableHistoricalIds),
-    [payload, unavailableHistoricalIds]
-  );
+  const historicalStations = payload?.historicalCatalog || [];
 
   const selectedStation = useMemo(
     () => historicalStations.find((station) => station.station_id === selectedStationId) || null,
@@ -512,6 +491,7 @@ export default function IdrometriaPage() {
             <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Storico caricato</p>
               <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.historical ?? 0}</p>
+              <p className="mt-1 text-xs text-slate-400">Catalogo SIR: {payload?.counts?.historicalCatalog ?? 0}</p>
             </div>
           </section>
 
