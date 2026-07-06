@@ -422,6 +422,50 @@ function getFirstHeaderValue(row, headers, includePatterns, excludePatterns = []
   return index === undefined ? null : row[index];
 }
 
+function inferCfrRowFields(row, headers) {
+  const codeIndex = row.findIndex((cell) => /^TOS\d+/i.test(cleanText(cell)));
+  const codeText = pickHeaderValue(row, headers, [/codice/, /^id$/]) || (codeIndex >= 0 ? row[codeIndex] : null);
+  const codeMatch = cleanText(codeText).match(/TOS\d+/i);
+  const code = codeMatch ? codeMatch[0].toUpperCase() : cleanText(codeText);
+
+  return {
+    code,
+    river: pickHeaderValue(row, headers, [/fiume/, /corso\s*acqua/]) || (codeIndex >= 0 ? row[codeIndex + 1] : null),
+    stationName: pickHeaderValue(row, headers, [/stazione/, /nome/, /denominazione/]) || (codeIndex >= 0 ? row[codeIndex + 2] : null),
+    province: pickHeaderValue(row, headers, [/provincia/]) || (codeIndex >= 0 ? row[codeIndex + 3] : null),
+    zone: pickHeaderValue(row, headers, [/^zona$/]) || (codeIndex >= 0 ? row[codeIndex + 4] : null)
+  };
+}
+
+function buildCfrOnlyStation(fields, stations) {
+  const province = cleanText(fields.province);
+  const allowedProvinces = new Set((stations || []).map((station) => cleanText(station.province)).filter(Boolean));
+  if (allowedProvinces.size && province && !allowedProvinces.has(province)) return null;
+
+  const code = cleanText(fields.code);
+  const stationName = cleanText(fields.stationName).replace(/\s*\((?:GPRS|RADIO)\)\s*$/i, "");
+  if (!code && !stationName) return null;
+
+  const generatedCode = "CFR-" + normalizeNameKey(stationName || code).replace(/\s+/g, "-").toUpperCase();
+  return {
+    station_id: code || generatedCode,
+    station_code: code || generatedCode,
+    station_name: stationName || code,
+    river_name: cleanText(fields.river) || null,
+    basin: cleanText(fields.zone) || null,
+    municipality: null,
+    province: province || null,
+    alert_zone: cleanText(fields.zone) || null,
+    latitude: null,
+    longitude: null,
+    historical_url: null,
+    historical_inferred: false,
+    source_type: HYDROMETRY_SOURCES.cfrRealtime.sourceType,
+    source_url: HYDROMETRY_SOURCES.cfrRealtime.url,
+    validated: false
+  };
+}
+
 function hasUsableHeaders(headers) {
   const joined = normalizeHeaderKey(headers.join(" "));
   return /attuale|liv\.?\s*1|livello\s*1|portata|ult\.?\s*dati|\bdata\b|variaz|delta\s*h\s*[136]|deltah[136]/.test(joined);
@@ -477,9 +521,15 @@ function getPositionalCfrValues(row, station) {
 
 function normalizeCfrBulkRow(row, headers, stations, sourceUrl, measurementTime) {
   if (!row?.length) return null;
-  const stationText = pickHeaderValue(row, headers, [/stazione/, /nome/, /denominazione/]) || row[1] || row[0];
-  const codeText = pickHeaderValue(row, headers, [/codice/, /^id$/]) || (/^TOS\d+/i.test(row[0]) ? row[0] : null);
-  const station = findStationForCfrRow({ stationText, codeText }, stations) || findStationFromRow(row, stations);
+  const fields = inferCfrRowFields(row, headers);
+  const stationText = fields.stationName || row[1] || row[0];
+  const codeText = fields.code || (/^TOS\d+/i.test(row[0]) ? row[0] : null);
+  const hasOfficialCode = /^TOS\d+/i.test(cleanText(codeText));
+  const station = hasOfficialCode
+    ? findStationForCfrRow({ stationText: null, codeText }, stations) || buildCfrOnlyStation(fields, stations)
+    : findStationForCfrRow({ stationText, codeText }, stations) ||
+      findStationFromRow(row, stations) ||
+      buildCfrOnlyStation(fields, stations);
   if (!station) return null;
 
   const positionalValues = getPositionalCfrValues(row, station);
