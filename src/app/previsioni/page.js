@@ -122,17 +122,6 @@ function MetricCard({ icon: Icon, label, value, detail }) {
   );
 }
 
-function SourceBadge({ source }) {
-  if (!source) return null;
-  return (
-    <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{source.label}</p>
-      <p className="mt-1 font-semibold text-slate-100">{source.model}</p>
-      <p className="mt-1 text-xs text-slate-400">Quota modello: {source.elevation ?? "n.d."} m</p>
-    </div>
-  );
-}
-
 function ForecastControls({ selectedId, setSelectedId, custom, setCustom, days, setDays, onRefresh, loading }) {
   function selectMunicipality(id) {
     setSelectedId(id);
@@ -217,7 +206,7 @@ function SummarySection({ payload }) {
   const summary = primary?.summary24h || {};
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[1.4fr_.8fr]">
+    <section>
       <div className="panel p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -236,14 +225,6 @@ function SummarySection({ payload }) {
           <MetricCard icon={Thermometer} label="Temperatura" value={(summary.minTemperature ?? "n.d.") + " / " + (summary.maxTemperature ?? "n.d.") + " C"} detail="Minima e massima su 24 ore" />
           <MetricCard icon={Snowflake} label="Neve" value={(summary.snow24h ?? "n.d.") + " cm"} detail="Indicatore utile per Appennino e quote alte" />
         </div>
-      </div>
-
-      <div className="panel p-4">
-        <h2 className="section-title">Fonti previsionali</h2>
-        <div className="mt-3 grid gap-3">
-          {(payload?.sources || []).map((source) => <SourceBadge key={source.id} source={source} />)}
-        </div>
-        <p className="mt-3 text-xs text-slate-400">Ultimo aggiornamento dashboard: {formatDateTime(payload?.fetchedAt)}</p>
       </div>
     </section>
   );
@@ -462,6 +443,10 @@ export default function ForecastPage() {
               </div>
             </div>
           </section>
+
+          <footer className="pb-6 text-xs text-slate-500">
+            Fonti previsionali: Open-Meteo e ItaliaMeteo ICON-2I. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+          </footer>
         </div>
       </main>
     </>
