@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CloudRain,
   Crosshair,
+  ExternalLink,
   LocateFixed,
   MapPin,
   RefreshCcw,
@@ -337,12 +338,137 @@ function DailyTable({ payload }) {
   );
 }
 
+function RadarSection({ radarPayload, loading }) {
+  const openMeteo = radarPayload?.openMeteo;
+  const meteoHub = radarPayload?.meteoHub;
+  const rows = (openMeteo?.rows || []).slice(0, 28);
+  const summary = openMeteo?.summary || {};
+
+  return (
+    <section className="panel overflow-hidden">
+      <div className="border-b border-emergency-line px-4 py-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <Crosshair className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
+            <div>
+              <h2 className="section-title">Radar precipitazioni</h2>
+              <p className="muted">
+                Open-Meteo fornisce nowcasting a 15 minuti sulla coordinata selezionata; MeteoHub viene verificato come canale radar asincrono.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-xs text-slate-400">
+            Ultimo aggiornamento: {formatDateTime(radarPayload?.fetchedAt)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[1.4fr_0.9fr]">
+        <div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MetricCard
+              icon={CloudRain}
+              label="Pioggia prossime 3h"
+              value={(summary.totalNext3h ?? "n.d.") + " mm"}
+              detail="Somma dei valori Open-Meteo a 15 minuti"
+            />
+            <MetricCard
+              icon={CloudRain}
+              label="Picco 15 min"
+              value={(summary.maxPrecipitation ?? "n.d.") + " mm"}
+              detail="Intensita massima prevista sul punto"
+            />
+            <MetricCard
+              icon={AlertTriangle}
+              label="Indice fulmini"
+              value={summary.maxLightningPotential ?? "n.d."}
+              detail="Lightning potential index Open-Meteo"
+            />
+          </div>
+
+          <div className="mt-4 overflow-x-auto pb-2">
+            <div className="h-64 min-w-[44rem]">
+              {rows.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+                    <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
+                    <XAxis dataKey="hour" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                    <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
+                    <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
+                    <Bar dataKey="precipitation" name="Precipitazione 15 min" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-lg border border-emergency-line bg-emergency-panel2 text-sm text-slate-400">
+                  {loading ? "Caricamento radar..." : "Dati radar/nowcasting non disponibili."}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <aside className="flex flex-col gap-3">
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Open-Meteo</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {openMeteo?.available ? "Nowcasting 15 minuti disponibile" : "Dato non disponibile"}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              Non e una immagine radar grezza: e una serie numerica ad alta frequenza utile per leggere intensita e tendenza locale delle precipitazioni.
+            </p>
+            {openMeteo?.sourceUrl && (
+              <a
+                href={openMeteo.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-sky-200 hover:text-white"
+              >
+                Apri chiamata Open-Meteo
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">MeteoHub</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {meteoHub?.available ? "Connessione verificata" : "Radar non pronto"}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{meteoHub?.note || "Verifica MeteoHub in attesa."}</p>
+            {!!meteoHub?.requests?.length && (
+              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                {meteoHub.requests.map((request) => (
+                  <li key={request.id || request.name} className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
+                    <span className="font-semibold text-slate-100">{request.name}</span>
+                    <span className="ml-2 text-slate-400">{request.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <a
+              href={meteoHub?.sourceUrl || "https://meteohub.agenziaitaliameteo.it"}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-sky-200 hover:text-white"
+            >
+              Apri MeteoHub
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
 export default function ForecastPage() {
   const [selectedId, setSelectedId] = useState("firenze");
   const [custom, setCustom] = useState({ lat: "43.7696", lng: "11.2558" });
   const [days, setDays] = useState(3);
   const [payload, setPayload] = useState(null);
+  const [radarPayload, setRadarPayload] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const selectedMunicipality = MUNICIPALITIES.find((item) => item.id === selectedId) || MUNICIPALITIES[0];
@@ -370,12 +496,35 @@ export default function ForecastPage() {
     }
   }
 
+  async function loadRadar() {
+    if (!coordinatesValid) return;
+    setRadarLoading(true);
+    try {
+      const params = new URLSearchParams({ lat: String(activeLat), lng: String(activeLng) });
+      const response = await fetch("/api/radar?" + params.toString(), { cache: "no-store" });
+      const data = await response.json();
+      setRadarPayload(data);
+    } catch {
+      setRadarPayload({
+        fetchedAt: new Date().toISOString(),
+        openMeteo: null,
+        meteoHub: { available: false, note: "Radar non raggiungibile in questo momento." }
+      });
+    } finally {
+      setRadarLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadForecast();
+    loadRadar();
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(loadForecast, DATA_REFRESH_INTERVAL_MS);
+    const timer = window.setInterval(() => {
+      loadForecast();
+      loadRadar();
+    }, DATA_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [activeLat, activeLng, days, coordinatesValid]);
 
@@ -425,6 +574,7 @@ export default function ForecastPage() {
               <SummarySection payload={payload} />
               <ForecastCharts payload={payload} />
               <DailyTable payload={payload} />
+              <RadarSection radarPayload={radarPayload} loading={radarLoading} />
             </>
           ) : (
             <section className="panel flex min-h-60 items-center justify-center p-6 text-sm text-slate-400">
