@@ -10,7 +10,6 @@ import {
   CloudRain,
   Droplets,
   Gauge,
-  RefreshCcw,
   Snowflake,
   Thermometer,
   Waves,
@@ -37,15 +36,6 @@ const MapDashboard = dynamic(() => import("@/components/MapDashboard"), {
 });
 
 const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-
-const WEBCAMS = [
-  { id: "firenze-centro", title: "Firenze Centro", area: "Arno e centro storico", imageUrl: "https://images.unsplash.com/photo-1541370976299-4d24ebbc9077?auto=format&fit=crop&w=900&q=80" },
-  { id: "ponte-vecchio", title: "Ponte Vecchio", area: "Vista urbana Arno", imageUrl: "https://images.unsplash.com/photo-1551621955-fa07d5389353?auto=format&fit=crop&w=900&q=80" },
-  { id: "mugello", title: "Mugello", area: "Appennino fiorentino", imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80" },
-  { id: "consuma", title: "Passo della Consuma", area: "Viabilita montana", imageUrl: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=900&q=80" },
-  { id: "valdarno", title: "Valdarno", area: "Bacino Arno", imageUrl: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=900&q=80" },
-  { id: "bisenzio", title: "Ombrone Bisenzio", area: "Nord ovest provincia", imageUrl: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=900&q=80" }
-];
 
 const ALERT_STYLE = {
   Verde: "border-emergency-green/60 bg-emergency-green/10 text-emergency-green",
@@ -172,27 +162,6 @@ function getOpenMeteoClientUrl(station) {
     forecast_days: "1"
   });
   return "https://api.open-meteo.com/v1/forecast?" + params.toString();
-}
-
-function normalizeWeatherData(payload) {
-  return {
-    source: payload?.source || "Open-Meteo",
-    fetchedAt: payload?.fetchedAt || null,
-    warning: payload?.warning || null,
-    locations: payload?.locations || []
-  };
-}
-
-function normalizeMeteoHubData(payload) {
-  return {
-    source: payload?.source || "MeteoHub",
-    connected: Boolean(payload?.connected),
-    authenticated: Boolean(payload?.authenticated),
-    fetchedAt: payload?.fetchedAt || null,
-    warning: payload?.warning || null,
-    note: payload?.note || null,
-    requests: payload?.requests || []
-  };
 }
 
 function formatShortTime(value) {
@@ -509,148 +478,9 @@ function MobileMeasurementPanel({ config, onChange, measurements, stationCatalog
   );
 }
 
-function WebcamGrid() {
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    setReloadKey(Date.now());
-    const timer = window.setInterval(() => setReloadKey(Date.now()), 120000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <section className="panel p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="section-title">Webcam strategiche</h2>
-          <p className="muted">Lista modificabile nel codice con refresh automatico ogni 2 minuti.</p>
-        </div>
-        <RefreshCcw className="h-5 w-5 text-sky-300" />
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        {WEBCAMS.map((webcam) => (
-          <WebcamCard key={webcam.id} webcam={webcam} reloadKey={reloadKey} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function WeatherForecastPanel({ weatherData }) {
-  return (
-    <section className="panel overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-emergency-line px-4 py-3">
-        <div>
-          <h2 className="section-title">Previsioni orarie Open-Meteo</h2>
-          <p className="muted">Pioggia, vento, temperatura e umidita per Firenze e comuni limitrofi.</p>
-        </div>
-        <CloudRain className="h-5 w-5 text-sky-300" />
-      </div>
-      {weatherData.warning ? (
-        <div className="px-4 py-3 text-sm text-orange-100">{weatherData.warning}</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-emergency-line text-sm">
-            <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
-              <tr>
-                <th className="px-4 py-3">Comune</th>
-                <th className="px-4 py-3">Pioggia</th>
-                <th className="px-4 py-3">Vento</th>
-                <th className="px-4 py-3">Temperatura</th>
-                <th className="px-4 py-3">Umidita</th>
-                <th className="px-4 py-3">Ora</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emergency-line">
-              {weatherData.locations.map((location) => (
-                <tr key={location.id} className="hover:bg-white/[0.03]">
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-100">{location.name}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-200">{location.current.precipitation} mm</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-200">{location.current.windSpeed} km/h</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-200">{location.current.temperature} C</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-200">{location.current.humidity}%</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-400">{location.current.time?.slice(11, 16) || "n.d."}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function MeteoHubPanel({ meteoHubData }) {
-  return (
-    <section className="panel overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-emergency-line px-4 py-3">
-        <div>
-          <h2 className="section-title">MeteoHub Agenzia ItaliaMeteo</h2>
-          <p className="muted">Stato portale, autenticazione e richieste di estrazione dati configurate.</p>
-        </div>
-        <CloudRain className="h-5 w-5 text-sky-300" />
-      </div>
-      <div className="p-4">
-        <div className={`rounded-lg border px-3 py-2 text-sm ${meteoHubData.connected ? "border-emergency-green/50 bg-emergency-green/10 text-green-100" : "border-emergency-orange/50 bg-emergency-orange/10 text-orange-100"}`}>
-          {meteoHubData.connected ? "Connessione MeteoHub autenticata." : meteoHubData.warning || "MeteoHub non collegato."}
-        </div>
-        {meteoHubData.note && <p className="mt-3 text-sm text-slate-400">{meteoHubData.note}</p>}
-        {!!meteoHubData.requests.length && (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-emergency-line text-sm">
-              <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">Richiesta</th>
-                  <th className="px-3 py-2">Stato</th>
-                  <th className="px-3 py-2">Dataset</th>
-                  <th className="px-3 py-2">Output</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-emergency-line">
-                {meteoHubData.requests.map((request, index) => (
-                  <tr key={request.id || index}>
-                    <td className="px-3 py-2 text-slate-100">{request.name}</td>
-                    <td className="px-3 py-2 text-slate-300">{request.status}</td>
-                    <td className="px-3 py-2 text-slate-400">{Array.isArray(request.dataset) ? request.dataset.join(", ") : request.dataset || "n.d."}</td>
-                    <td className="px-3 py-2 text-slate-400">{request.fileoutput || "n.d."}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function WebcamCard({ webcam, reloadKey }) {
-  const [failed, setFailed] = useState(false);
-  const separator = webcam.imageUrl.includes("?") ? "&" : "?";
-  const src = `${webcam.imageUrl}${separator}t=${reloadKey}`;
-
-  return (
-    <article className="overflow-hidden rounded-lg border border-emergency-line bg-emergency-panel2">
-      <div className="aspect-video bg-slate-900">
-        {failed ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-xs text-slate-400">Webcam non disponibile</div>
-        ) : (
-          <img src={src} alt={webcam.title} className="h-full w-full object-cover" onError={() => setFailed(true)} />
-        )}
-      </div>
-      <div className="p-3">
-        <h3 className="truncate text-sm font-semibold text-slate-100">{webcam.title}</h3>
-        <p className="truncate text-xs text-slate-400">{webcam.area}</p>
-      </div>
-    </article>
-  );
-}
-
 export default function DashboardPage() {
   const [alert, setAlert] = useState({ level: "Verde", matches: [], fileName: null });
   const [observationData, setObservationData] = useState(normalizeObservationData(null));
-  const [weatherData, setWeatherData] = useState(normalizeWeatherData(null));
-  const [meteoHubData, setMeteoHubData] = useState(normalizeMeteoHubData(null));
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [hydrometryCatalog, setHydrometryCatalog] = useState(STATIONS_BY_TYPE.hydrometry || []);
 
@@ -715,26 +545,6 @@ export default function DashboardPage() {
         ...current,
         warning: current.warning || "Idrometria ufficiale CFR non raggiungibile in questo momento."
       }));
-    }
-  }
-
-  async function loadWeatherData() {
-    try {
-      const response = await fetch("/api/weather-data", { cache: "no-store" });
-      const payload = await response.json();
-      setWeatherData(normalizeWeatherData(payload));
-    } catch (error) {
-      setWeatherData(normalizeWeatherData({ warning: "Fonte Open-Meteo non raggiungibile." }));
-    }
-  }
-
-  async function loadMeteoHubData() {
-    try {
-      const response = await fetch("/api/meteohub-data", { cache: "no-store" });
-      const payload = await response.json();
-      setMeteoHubData(normalizeMeteoHubData(payload));
-    } catch (error) {
-      setMeteoHubData(normalizeMeteoHubData({ warning: "MeteoHub non raggiungibile." }));
     }
   }
 
@@ -826,8 +636,6 @@ export default function DashboardPage() {
   useEffect(() => {
     loadObservationData();
     loadHydrometryData();
-    loadWeatherData();
-    loadMeteoHubData();
   }, []);
 
   useEffect(() => {
@@ -839,7 +647,6 @@ export default function DashboardPage() {
     const timer = window.setInterval(() => {
       loadObservationData();
       loadHydrometryData();
-      loadWeatherData();
       loadSelectedObservationData(selectedObservationQuery);
       loadClientOpenMeteoData();
     }, DATA_REFRESH_INTERVAL_MS);
@@ -914,12 +721,6 @@ export default function DashboardPage() {
             />
           ))}
         </section>
-
-        <WeatherForecastPanel weatherData={weatherData} />
-
-        <MeteoHubPanel meteoHubData={meteoHubData} />
-
-        <WebcamGrid />
 
         <footer className="pb-6 text-xs text-slate-500">
           Fonti osservazioni: Open Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
