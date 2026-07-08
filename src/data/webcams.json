@@ -12,10 +12,11 @@
       "category": "fiume-centro",
       "provider": "SkylineWebcams",
       "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
-      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
+      "embedMode": "external",
+      "embedUrl": null,
       "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
       "requiresLogin": false,
-      "notes": "Pagina live pubblica; se l'incorporamento viene bloccato dal provider, usare il link fonte."
+      "notes": "Pagina live pubblica consultabile senza login; il provider non espone uno stream incorporabile stabile."
     },
     {
       "id": "firenze-duomo",
@@ -25,10 +26,11 @@
       "category": "centro-storico",
       "provider": "SkylineWebcams",
       "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
-      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
+      "embedMode": "external",
+      "embedUrl": null,
       "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
       "requiresLogin": false,
-      "notes": "Vista pubblica sul Duomo di Firenze."
+      "notes": "Vista pubblica sul Duomo di Firenze consultabile senza login."
     },
     {
       "id": "firenze-santa-maria-novella",
@@ -38,10 +40,12 @@
       "category": "centro-storico",
       "provider": "SkylineWebcams",
       "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
-      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
+      "embedMode": "image",
+      "embedUrl": "https://embed.skylinewebcams.com/img/982.jpg",
+      "previewUrl": "https://embed.skylinewebcams.com/img/982.jpg",
       "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
       "requiresLogin": false,
-      "notes": "Vista pubblica sulla Basilica di Santa Maria Novella."
+      "notes": "Anteprima pubblica incorporabile da SkylineWebcams; click sulla card per aprire la live completa."
     },
     {
       "id": "firenze-lungarno",
@@ -51,10 +55,11 @@
       "category": "fiume-centro",
       "provider": "SkylineWebcams",
       "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
-      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
+      "embedMode": "external",
+      "embedUrl": null,
       "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
       "requiresLogin": false,
-      "notes": "Vista pubblica sul Lungarno e Ponte Vecchio."
+      "notes": "Vista pubblica sul Lungarno e Ponte Vecchio consultabile senza login."
     },
     {
       "id": "firenze-centro-storico",
@@ -64,10 +69,11 @@
       "category": "centro-storico",
       "provider": "SkylineWebcams",
       "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
-      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
+      "embedMode": "external",
+      "embedUrl": null,
       "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
       "requiresLogin": false,
-      "notes": "Vista pubblica del centro storico; utile come segnale turistico/urbano."
+      "notes": "Vista pubblica del centro storico consultabile senza login."
     }
   ]
 }
