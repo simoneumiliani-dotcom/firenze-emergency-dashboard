@@ -200,7 +200,7 @@ export default function WebcamPage() {
           </section>
 
           <div className="rounded-lg border border-emergency-line bg-emergency-panel/70 px-4 py-3 text-xs text-slate-400">
-            Alcuni provider possono limitare l'incorporamento in pagine esterne: in quel caso usa il pulsante "Apri fonte" per consultare la webcam pubblica senza login.
+            Alcuni provider possono limitare l&apos;incorporamento in pagine esterne: in quel caso usa il pulsante &quot;Apri fonte&quot; per consultare la webcam pubblica senza login.
           </div>
 
           <footer className="pb-6 text-xs text-slate-500">
