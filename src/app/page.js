@@ -8,7 +8,6 @@ import {
   ArrowDown,
   ArrowUp,
   CloudRain,
-  Database,
   Droplets,
   Gauge,
   RefreshCcw,
@@ -277,29 +276,16 @@ function SourceStatusPanel({ observationData }) {
 
   return (
     <section className="panel p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-400/40 bg-sky-400/10">
-            <Database className="h-5 w-5 text-sky-200" />
-          </div>
-          <div>
-            <h2 className="section-title">Fonti dati aggiornate</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              Open Meteo costituisce la fonte primaria per pluviometria, termometria, anemometria, igrometria e nivometria. CFR Toscana resta la fonte primaria per idrometria. Aggiornamento automatico ogni 5 minuti.
-            </p>
-          </div>
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">CFR Toscana</p>
+          <p className="mt-1 font-semibold text-sky-100">Idrometria</p>
+          <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(cfrUpdatedAt)}</p>
         </div>
-        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:min-w-[34rem]">
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">CFR Toscana</p>
-            <p className="mt-1 font-semibold text-sky-100">Idrometria</p>
-            <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(cfrUpdatedAt)}</p>
-          </div>
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Open Meteo</p>
-            <p className="mt-1 font-semibold text-sky-100">Pluvio, termo, vento, umidita, neve</p>
-            <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(openMeteoUpdatedAt)}</p>
-          </div>
+        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Open Meteo</p>
+          <p className="mt-1 font-semibold text-sky-100">Pluvio, termo, vento, umidita, neve</p>
+          <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(openMeteoUpdatedAt)}</p>
         </div>
       </div>
     </section>
