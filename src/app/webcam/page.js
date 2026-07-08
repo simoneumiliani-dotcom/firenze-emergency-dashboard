@@ -10,7 +10,8 @@ const FRAME_REFRESH_MS = Number(webcamCatalog.refreshSeconds || 120) * 1000;
 const CATEGORY_LABELS = {
   all: "Tutte le webcam",
   "centro-storico": "Centro storico",
-  "fiume-centro": "Arno e centro"
+  "fiume-centro": "Arno e centro",
+  "appennino-neve": "Appennino e neve"
 };
 
 function formatDateTime(value) {
