@@ -21,6 +21,14 @@ const MINUTELY_15_FALLBACK = [
   "weather_code"
 ].join(",");
 
+const HOURLY_FALLBACK = [
+  "precipitation",
+  "rain",
+  "snowfall",
+  "weather_code",
+  "cape"
+].join(",");
+
 function numberFromParam(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -66,8 +74,8 @@ function findToken(payload) {
 
 async function fetchJson(url, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-  const { headers: optionHeaders = {}, ...restOptions } = options;
+  const { headers: optionHeaders = {}, timeoutMs = 12000, ...restOptions } = options;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       cache: "no-store",
@@ -82,59 +90,97 @@ async function fetchJson(url, options = {}) {
     } catch {
       payload = { raw: text.slice(0, 300) };
     }
-    if (!response.ok) throw new Error("HTTP " + response.status);
+    if (!response.ok) {
+      const detail = payload?.reason || payload?.error || payload?.raw || "";
+      throw new Error(("HTTP " + response.status + " " + detail).trim());
+    }
     return { payload, headers: response.headers };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function fetchOpenMeteoRadar(lat, lng) {
+function buildOpenMeteoMinutelyUrl(lat, lng, variables) {
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lng),
-    minutely_15: MINUTELY_15,
+    minutely_15: variables,
     current: "precipitation,rain,showers,snowfall,weather_code,cloud_cover",
     timezone: "Europe/Rome",
     forecast_minutely_15: "24",
     past_minutely_15: "4",
     precipitation_unit: "mm"
   });
+  return OPEN_METEO_ENDPOINT + "?" + params.toString();
+}
 
-  let url = OPEN_METEO_ENDPOINT + "?" + params.toString();
+function buildOpenMeteoHourlyUrl(lat, lng) {
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lng),
+    hourly: HOURLY_FALLBACK,
+    current: "precipitation,rain,showers,snowfall,weather_code,cloud_cover",
+    timezone: "Europe/Rome",
+    forecast_hours: "12",
+    past_hours: "1",
+    precipitation_unit: "mm"
+  });
+  return OPEN_METEO_ENDPOINT + "?" + params.toString();
+}
+
+async function fetchOpenMeteoRadar(lat, lng) {
+  let url = buildOpenMeteoMinutelyUrl(lat, lng, MINUTELY_15);
   let payload;
+  let resolution = "15 min";
+  let warning = null;
   try {
     ({ payload } = await fetchJson(url));
-  } catch {
-    params.set("minutely_15", MINUTELY_15_FALLBACK);
-    url = OPEN_METEO_ENDPOINT + "?" + params.toString();
-    ({ payload } = await fetchJson(url));
+  } catch (firstError) {
+    try {
+      url = buildOpenMeteoMinutelyUrl(lat, lng, MINUTELY_15_FALLBACK);
+      ({ payload } = await fetchJson(url));
+      warning = "Variabili temporalesche non disponibili: usata lettura precipitazioni a 15 minuti.";
+    } catch (secondError) {
+      url = buildOpenMeteoHourlyUrl(lat, lng);
+      ({ payload } = await fetchJson(url));
+      resolution = "1 ora";
+      warning = "Nowcasting a 15 minuti non disponibile: usato fallback orario Open-Meteo.";
+      if (!payload?.hourly?.time) {
+        throw new Error(secondError.message || firstError.message);
+      }
+    }
   }
-  const times = Array.isArray(payload?.minutely_15?.time) ? payload.minutely_15.time : [];
+
+  const section = resolution === "15 min" ? payload.minutely_15 : payload.hourly;
+  const times = Array.isArray(section?.time) ? section.time : [];
   const rows = times.map((time, index) => ({
     time,
     hour: String(time).slice(11, 16),
-    precipitation: payload.minutely_15?.precipitation?.[index] ?? null,
-    rain: payload.minutely_15?.rain?.[index] ?? null,
-    snowfall: payload.minutely_15?.snowfall?.[index] ?? null,
-    weatherCode: payload.minutely_15?.weather_code?.[index] ?? null,
-    cape: payload.minutely_15?.cape?.[index] ?? null,
-    lightningPotential: payload.minutely_15?.lightning_potential_index?.[index] ?? null
+    precipitation: section?.precipitation?.[index] ?? null,
+    rain: section?.rain?.[index] ?? null,
+    snowfall: section?.snowfall?.[index] ?? null,
+    weatherCode: section?.weather_code?.[index] ?? null,
+    cape: section?.cape?.[index] ?? null,
+    lightningPotential: section?.lightning_potential_index?.[index] ?? null
   }));
 
   const futureRows = rows.filter((row) => new Date(row.time).getTime() >= Date.now() - 20 * 60 * 1000);
-  const maxPrecipitation = Math.max(0, ...futureRows.map((row) => Number(row.precipitation) || 0));
-  const totalNext3h = Number(futureRows.slice(0, 12).reduce((sum, row) => sum + (Number(row.precipitation) || 0), 0).toFixed(1));
-  const maxLightningPotential = Math.max(0, ...futureRows.map((row) => Number(row.lightningPotential) || 0));
+  const analysisRows = futureRows.length ? futureRows : rows;
+  const maxPrecipitation = Math.max(0, ...analysisRows.map((row) => Number(row.precipitation) || 0));
+  const next3hItems = resolution === "15 min" ? 12 : 3;
+  const totalNext3h = Number(analysisRows.slice(0, next3hItems).reduce((sum, row) => sum + (Number(row.precipitation) || 0), 0).toFixed(1));
+  const maxLightningPotential = Math.max(0, ...analysisRows.map((row) => Number(row.lightningPotential) || 0));
 
   return {
     id: "open-meteo",
-    label: "Open-Meteo nowcasting 15 min",
+    label: "Open-Meteo nowcasting",
     sourceUrl: url,
     available: rows.length > 0,
     updatedAt: new Date().toISOString(),
+    resolution,
+    warning,
     current: payload.current || null,
-    units: payload.minutely_15_units || {},
+    units: resolution === "15 min" ? payload.minutely_15_units || {} : payload.hourly_units || {},
     summary: {
       maxPrecipitation,
       totalNext3h,
@@ -158,6 +204,7 @@ async function fetchMeteoHubRadar() {
 
   const login = await fetchJson(`${getBaseUrl()}/auth/login`, {
     method: "POST",
+    timeoutMs: 4000,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       username: process.env.METEOHUB_USERNAME,
@@ -171,7 +218,7 @@ async function fetchMeteoHubRadar() {
   if (token) headers.authorization = `Bearer ${token}`;
   if (cookie) headers.cookie = cookie;
 
-  const requests = await fetchJson(`${getBaseUrl()}/api/requests`, { headers });
+  const requests = await fetchJson(`${getBaseUrl()}/api/requests`, { headers, timeoutMs: 4000 });
   const rows = Array.isArray(requests.payload)
     ? requests.payload
     : requests.payload.requests || requests.payload.items || requests.payload.results || [];

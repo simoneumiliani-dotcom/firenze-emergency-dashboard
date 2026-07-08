@@ -353,7 +353,7 @@ function RadarSection({ radarPayload, loading }) {
             <div>
               <h2 className="section-title">Radar precipitazioni</h2>
               <p className="muted">
-                Open-Meteo fornisce nowcasting a 15 minuti sulla coordinata selezionata; MeteoHub viene verificato come canale radar asincrono.
+                Open-Meteo fornisce nowcasting sulla coordinata selezionata; MeteoHub viene verificato come canale radar asincrono senza bloccare il pannello.
               </p>
             </div>
           </div>
@@ -370,7 +370,7 @@ function RadarSection({ radarPayload, loading }) {
               icon={CloudRain}
               label="Pioggia prossime 3h"
               value={(summary.totalNext3h ?? "n.d.") + " mm"}
-              detail="Somma dei valori Open-Meteo a 15 minuti"
+              detail={"Somma valori Open-Meteo, risoluzione " + (openMeteo?.resolution || "n.d.")}
             />
             <MetricCard
               icon={CloudRain}
@@ -411,11 +411,16 @@ function RadarSection({ radarPayload, loading }) {
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Open-Meteo</p>
             <p className="mt-2 text-sm font-semibold text-slate-100">
-              {openMeteo?.available ? "Nowcasting 15 minuti disponibile" : "Dato non disponibile"}
+              {openMeteo?.available ? "Nowcasting disponibile (" + (openMeteo.resolution || "n.d.") + ")" : "Dato non disponibile"}
             </p>
             <p className="mt-2 text-xs leading-5 text-slate-400">
               Non e una immagine radar grezza: e una serie numerica ad alta frequenza utile per leggere intensita e tendenza locale delle precipitazioni.
             </p>
+            {openMeteo?.warning && (
+              <p className="mt-2 rounded-md border border-emergency-yellow/40 bg-emergency-yellow/10 px-3 py-2 text-xs text-yellow-100">
+                {openMeteo.warning}
+              </p>
+            )}
             {openMeteo?.sourceUrl && (
               <a
                 href={openMeteo.sourceUrl}
@@ -559,8 +564,11 @@ export default function ForecastPage() {
             setCustom={setCustom}
             days={days}
             setDays={setDays}
-            onRefresh={loadForecast}
-            loading={loading}
+            onRefresh={() => {
+              loadForecast();
+              loadRadar();
+            }}
+            loading={loading || radarLoading}
           />
 
           {error && (
