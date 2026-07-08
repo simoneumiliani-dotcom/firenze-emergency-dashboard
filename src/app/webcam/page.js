@@ -11,7 +11,8 @@ const CATEGORY_LABELS = {
   all: "Tutte le webcam",
   "centro-storico": "Centro storico",
   "fiume-centro": "Arno e centro",
-  "appennino-neve": "Appennino e neve"
+  "appennino-neve": "Appennino e neve",
+  "a1-autostrada": "A1 Arezzo-Bologna"
 };
 
 function formatDateTime(value) {
@@ -33,11 +34,15 @@ function WebcamCard({ webcam, status, refreshKey }) {
   const StatusIcon = statusMeta.Icon;
   const canEmbed = webcam.embedMode === "iframe" && webcam.embedUrl;
   const canShowImage = webcam.embedMode === "image" && (webcam.previewUrl || webcam.embedUrl);
+  const canShowVideo = webcam.embedMode === "video" && webcam.embedUrl;
   const frameSrc = canEmbed
     ? webcam.embedUrl + (webcam.embedUrl.includes("?") ? "&" : "?") + "dashboardRefresh=" + refreshKey
     : null;
   const imageSrc = canShowImage
     ? (webcam.previewUrl || webcam.embedUrl) + ((webcam.previewUrl || webcam.embedUrl).includes("?") ? "&" : "?") + "dashboardRefresh=" + refreshKey
+    : null;
+  const videoSrc = canShowVideo
+    ? webcam.embedUrl + (webcam.embedUrl.includes("?") ? "&" : "?") + "dashboardRefresh=" + refreshKey
     : null;
 
   return (
@@ -87,6 +92,17 @@ function WebcamCard({ webcam, status, refreshKey }) {
               <ExternalLink className="h-3.5 w-3.5" />
             </span>
           </a>
+        ) : canShowVideo ? (
+          <video
+            key={videoSrc}
+            className="h-full w-full object-cover"
+            controls
+            muted
+            playsInline
+            preload="metadata"
+          >
+            <source src={videoSrc} type={webcam.videoType || "video/mp4"} />
+          </video>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-5 text-center">
             <div className="rounded-full border border-sky-400/40 bg-sky-400/10 p-4 text-sky-200">
@@ -189,7 +205,7 @@ export default function WebcamPage() {
                 <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Webcam pubbliche</h1>
                 <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                  Catalogo di webcam consultabili senza abbonamento o registrazione, con controllo automatico di disponibilita. Le anteprime incorporabili vengono mostrate in pagina; il click apre la live completa.
+                  Catalogo di webcam consultabili senza abbonamento o registrazione, con controllo automatico di disponibilita. Anteprime e video incorporabili vengono mostrati in pagina; il click apre la live completa quando disponibile.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:min-w-[20rem]">
@@ -252,7 +268,7 @@ export default function WebcamPage() {
           </section>
 
           <div className="rounded-lg border border-emergency-line bg-emergency-panel/70 px-4 py-3 text-xs text-slate-400">
-            SkylineWebcams espone immagini di anteprima incorporabili per alcune webcam: la dashboard le aggiorna automaticamente e mantiene il link alla pagina live pubblica.
+            La pagina supporta immagini SkylineWebcams e video MP4 diretti Autostrade: quando una sorgente non espone stream incorporabili, resta disponibile il link alla fonte pubblica.
           </div>
 
           <footer className="pb-6 text-xs text-slate-500">
