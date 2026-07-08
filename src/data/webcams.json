@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-07-08T21:30:00+02:00",
+  "area": "Provincia/Citta Metropolitana di Firenze",
+  "policy": "Solo webcam pubbliche consultabili senza abbonamento o registrazione.",
+  "refreshSeconds": 120,
+  "items": [
+    {
+      "id": "firenze-ponte-vecchio",
+      "title": "Firenze - Ponte Vecchio",
+      "municipality": "Firenze",
+      "area": "Centro storico / Arno",
+      "category": "fiume-centro",
+      "provider": "SkylineWebcams",
+      "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
+      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
+      "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio.html",
+      "requiresLogin": false,
+      "notes": "Pagina live pubblica; se l'incorporamento viene bloccato dal provider, usare il link fonte."
+    },
+    {
+      "id": "firenze-duomo",
+      "title": "Firenze - Piazza del Duomo",
+      "municipality": "Firenze",
+      "area": "Centro storico",
+      "category": "centro-storico",
+      "provider": "SkylineWebcams",
+      "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
+      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
+      "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/piazza-duomo-firenze.html",
+      "requiresLogin": false,
+      "notes": "Vista pubblica sul Duomo di Firenze."
+    },
+    {
+      "id": "firenze-santa-maria-novella",
+      "title": "Firenze - Santa Maria Novella",
+      "municipality": "Firenze",
+      "area": "Centro / nodo ferroviario",
+      "category": "centro-storico",
+      "provider": "SkylineWebcams",
+      "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
+      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
+      "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-santa-maria-novella.html",
+      "requiresLogin": false,
+      "notes": "Vista pubblica sulla Basilica di Santa Maria Novella."
+    },
+    {
+      "id": "firenze-lungarno",
+      "title": "Firenze - Ponte Vecchio Lungarno",
+      "municipality": "Firenze",
+      "area": "Lungarno",
+      "category": "fiume-centro",
+      "provider": "SkylineWebcams",
+      "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
+      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
+      "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/ponte-vecchio-lungarno.html",
+      "requiresLogin": false,
+      "notes": "Vista pubblica sul Lungarno e Ponte Vecchio."
+    },
+    {
+      "id": "firenze-centro-storico",
+      "title": "Firenze - Centro Storico",
+      "municipality": "Firenze",
+      "area": "Centro storico",
+      "category": "centro-storico",
+      "provider": "SkylineWebcams",
+      "sourceUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
+      "embedUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
+      "checkUrl": "https://www.skylinewebcams.com/it/webcam/italia/toscana/firenze/firenze-centro-storico.html",
+      "requiresLogin": false,
+      "notes": "Vista pubblica del centro storico; utile come segnale turistico/urbano."
+    }
+  ]
+}
