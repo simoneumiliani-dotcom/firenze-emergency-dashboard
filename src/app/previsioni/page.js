@@ -412,7 +412,7 @@ const RADAR_PRODUCTS_FALLBACK = [
 ];
 
 function buildDpcWmsImageUrl(product, time) {
-  if (!product?.wmsLayer || !time) return null;
+  if (!product?.wmsLayer) return null;
   const params = new URLSearchParams({
     service: "WMS",
     version: "1.3.0",
@@ -427,6 +427,7 @@ function buildDpcWmsImageUrl(product, time) {
     crs: "EPSG:3857",
     bbox: "1046400,5190000,1402600,5590000"
   });
+  if (time) params.set("time", time);
   return (product.wmsBaseUrl || "https://radar-api.protezionecivile.it/wide/product") + "?" + params.toString();
 }
 
@@ -465,6 +466,7 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
   const restUrl = product?.restLastUrl || "https://radar-api.protezionecivile.it/api/v1/radar/dpc/SRI/it/last";
   const capabilitiesUrl = radarPayload?.services?.wmsCapabilities || product?.wmsCapabilitiesUrl || "https://radar-api.protezionecivile.it/wide/product?service=WMS&request=GetCapabilities";
   const errorMessage = radarPayload?.errors?.[0]?.message;
+  const radarTimeLabel = lastProduct?.date ? formatDateTime(lastProduct.date) : "ultimo layer WMS disponibile";
 
   return (
     <section className="panel overflow-hidden">
@@ -520,7 +522,7 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
                 {product?.wmsLayer || "Metadati REST"}
               </span>
               <span className="rounded-md border border-emergency-line bg-emergency-panel/90 px-2 py-1 text-slate-300">
-                Ora radar: {formatDateTime(lastProduct?.date)}
+                Ora radar: {radarTimeLabel}
               </span>
             </div>
 
@@ -538,10 +540,10 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
                 <CloudRain className="h-12 w-12 text-sky-300" />
                 <div>
                   <p className="font-semibold text-slate-100">
-                    {loading ? "Caricamento radar DPC..." : "Layer cartografico non configurato per questo prodotto"}
+                    {loading ? "Caricamento radar DPC..." : "Layer cartografico non disponibile per questo prodotto"}
                   </p>
                   <p className="mt-2 max-w-xl text-sm text-slate-400">
-                    Il prodotto selezionato viene interrogato via REST. Per visualizzarlo su mappa serve confermare il nome layer dalle capabilities WMS DPC.
+                    Il prodotto selezionato viene interrogato via REST. Per visualizzarlo su mappa serve un layer WMS DPC associato.
                   </p>
                 </div>
                 {errorMessage && (

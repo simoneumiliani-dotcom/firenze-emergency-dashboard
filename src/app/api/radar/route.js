@@ -100,6 +100,25 @@ async function fetchJson(url) {
   }
 }
 
+async function fetchText(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { accept: "application/xml,text/xml,text/plain,*/*" }
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(("HTTP " + response.status + " " + text.slice(0, 240)).trim());
+    }
+    return text;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function normalizeProductPayload(productConfig, payload) {
   if (!payload || typeof payload !== "object") return null;
   const normalizedDate = normalizeDpcDate(payload.date);
@@ -114,6 +133,45 @@ function normalizeProductPayload(productConfig, payload) {
     createdAt: normalizeDpcDate(payload.created_at),
     updatedAt: normalizeDpcDate(payload.updated_at),
     dataCount: Array.isArray(payload.data) ? payload.data.length : null
+  };
+}
+
+function extractWmsTimeForLayer(xml, layerName) {
+  if (!xml || !layerName) return null;
+  const layerIndex = xml.indexOf(`<Name>${layerName}</Name>`);
+  if (layerIndex < 0) return null;
+  const layerChunk = xml.slice(Math.max(0, layerIndex - 2500), layerIndex + 12000);
+  const timeMatch = layerChunk.match(/<(?:Dimension|Extent)\b[^>]*name=["']time["'][^>]*>([\s\S]*?)<\/(?:Dimension|Extent)>/i);
+  const defaultMatch = layerChunk.match(/<(?:Dimension|Extent)\b[^>]*name=["']time["'][^>]*default=["']([^"']+)["'][^>]*>/i);
+  const defaultTime = normalizeDpcDate(defaultMatch?.[1]);
+  if (defaultTime) return defaultTime;
+
+  const rawValue = timeMatch?.[1]?.trim();
+  if (!rawValue) return null;
+  const candidates = rawValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const lastCandidate = candidates[candidates.length - 1];
+  return normalizeDpcDate(lastCandidate);
+}
+
+async function fetchLatestWmsTime(product) {
+  if (!product?.wmsLayer) return null;
+  const xml = await fetchText(WMS_CAPABILITIES_URL);
+  const wmsTime = extractWmsTimeForLayer(xml, product.wmsLayer);
+  if (!wmsTime) throw new Error("WMS capabilities senza dimensione time leggibile per " + product.wmsLayer);
+  return {
+    id: null,
+    product: product.id,
+    date: wmsTime,
+    wmsTime,
+    period: null,
+    quality: null,
+    createdAt: null,
+    updatedAt: null,
+    dataCount: null,
+    sourceType: "wms_capabilities"
   };
 }
 
@@ -141,6 +199,15 @@ export async function GET(request) {
       source: "DPC Radar REST",
       message: error.message
     });
+
+    try {
+      lastProduct = await fetchLatestWmsTime(product);
+    } catch (wmsError) {
+      errors.push({
+        source: "DPC Radar WMS capabilities",
+        message: wmsError.message
+      });
+    }
   }
 
   return NextResponse.json(
