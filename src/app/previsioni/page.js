@@ -404,31 +404,31 @@ function DailyTable({ payload }) {
 }
 
 const RADAR_PRODUCTS_FALLBACK = [
-  { id: "SRI", label: "Intensita pioggia", shortLabel: "SRI", unit: "mm/h", cadence: "5 min", mapEnabled: true, wmsLayer: "rv:SRI:it:SRI_VMI" },
-  { id: "SRT", label: "Pioggia cumulata", shortLabel: "SRT", unit: "mm", cadence: "15 min", mapEnabled: false },
-  { id: "HRD", label: "Grandine rilevata", shortLabel: "HRD", unit: "classe", cadence: "5 min", mapEnabled: false },
-  { id: "POH", label: "Probabilita grandine", shortLabel: "POH", unit: "%", cadence: "5 min", mapEnabled: false },
-  { id: "LTG", label: "Fulmini", shortLabel: "LTG", unit: "conteggio", cadence: "5 min", mapEnabled: false }
+  { id: "SRI", label: "Intensita pioggia", shortLabel: "SRI", unit: "mm/h", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:sri" },
+  { id: "SRT1", label: "Pioggia cumulata 1h", shortLabel: "SRT1", unit: "mm", cadence: "30 min", mapEnabled: true, wmsLayer: "radar:srt_1" },
+  { id: "VMI", label: "Massima intensita verticale", shortLabel: "VMI", unit: "dBZ", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:vmi" },
+  { id: "POH", label: "Probabilita grandine", shortLabel: "POH", unit: "%", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:poh" },
+  { id: "VIL", label: "Acqua integrata verticale", shortLabel: "VIL", unit: "kg/m2", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:vil" }
 ];
 
 function buildDpcWmsImageUrl(product, time) {
   if (!product?.wmsLayer) return null;
   const params = new URLSearchParams({
     service: "WMS",
-    version: "1.3.0",
+    version: "1.1.1",
     request: "GetMap",
     layers: product.wmsLayer,
     styles: "",
     format: "image/png",
     transparent: "true",
-    time,
+    tiled: "true",
     width: "1100",
     height: "720",
-    crs: "EPSG:3857",
+    srs: "EPSG:3857",
     bbox: "1046400,5190000,1402600,5590000"
   });
   if (time) params.set("time", time);
-  return (product.wmsBaseUrl || "https://radar-api.protezionecivile.it/wide/product") + "?" + params.toString();
+  return (product.wmsBaseUrl || "https://radar-geowebcache.protezionecivile.it/service/wms") + "?" + params.toString();
 }
 
 function RadarLegend({ product }) {
@@ -463,10 +463,15 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
   const product = radarPayload?.product || products.find((item) => item.id === selectedProduct) || products[0];
   const lastProduct = radarPayload?.lastProduct;
   const wmsImageUrl = buildDpcWmsImageUrl(product, lastProduct?.wmsTime);
-  const restUrl = product?.restLastUrl || "https://radar-api.protezionecivile.it/api/v1/radar/dpc/SRI/it/last";
-  const capabilitiesUrl = radarPayload?.services?.wmsCapabilities || product?.wmsCapabilitiesUrl || "https://radar-api.protezionecivile.it/wide/product?service=WMS&request=GetCapabilities";
+  const [radarImageFailed, setRadarImageFailed] = useState(false);
+  const restUrl = product?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=SRI";
+  const capabilitiesUrl = radarPayload?.services?.wmsCapabilities || product?.wmsCapabilitiesUrl || "https://radar-geowebcache.protezionecivile.it/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=getcapabilities&TILED=true";
   const errorMessage = radarPayload?.errors?.[0]?.message;
   const radarTimeLabel = lastProduct?.date ? formatDateTime(lastProduct.date) : "ultimo layer WMS disponibile";
+
+  useEffect(() => {
+    setRadarImageFailed(false);
+  }, [wmsImageUrl]);
 
   return (
     <section className="panel overflow-hidden">
@@ -517,6 +522,12 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
       <div className="grid gap-4 p-4 xl:grid-cols-[1.45fr_0.75fr]">
         <div className="space-y-4">
           <div className="relative overflow-hidden rounded-lg border border-emergency-line bg-[#07101d]">
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(0deg,rgba(148,163,184,0.10)_1px,transparent_1px)] bg-[size:72px_72px]">
+              <div className="absolute left-[48%] top-[48%] rounded-md border border-sky-300/40 bg-sky-950/80 px-2 py-1 text-xs font-semibold text-sky-100">Firenze</div>
+              <div className="absolute left-[30%] top-[39%] rounded-md border border-slate-500/40 bg-slate-950/75 px-2 py-1 text-xs text-slate-200">Prato</div>
+              <div className="absolute left-[66%] top-[63%] rounded-md border border-slate-500/40 bg-slate-950/75 px-2 py-1 text-xs text-slate-200">Arezzo</div>
+              <div className="absolute left-[12%] top-[72%] rounded-md border border-slate-500/40 bg-slate-950/75 px-2 py-1 text-xs text-slate-200">Toscana</div>
+            </div>
             <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2 text-xs">
               <span className="rounded-md border border-sky-400/40 bg-sky-950/80 px-2 py-1 font-semibold text-sky-100">
                 {product?.wmsLayer || "Metadati REST"}
@@ -526,26 +537,38 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
               </span>
             </div>
 
-            {wmsImageUrl ? (
-              <a href={wmsImageUrl} target="_blank" rel="noreferrer" className="block">
+            {wmsImageUrl && !radarImageFailed ? (
+              <a href={wmsImageUrl} target="_blank" rel="noreferrer" className="relative z-[1] block">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={wmsImageUrl}
                   alt={"Radar DPC " + (product?.label || "precipitazioni")}
                   className="h-[22rem] w-full object-cover opacity-90 sm:h-[30rem]"
+                  onError={() => setRadarImageFailed(true)}
                 />
               </a>
             ) : (
-              <div className="flex h-[22rem] flex-col items-center justify-center gap-3 px-6 text-center sm:h-[30rem]">
+              <div className="relative z-[1] flex h-[22rem] flex-col items-center justify-center gap-3 px-6 text-center sm:h-[30rem]">
                 <CloudRain className="h-12 w-12 text-sky-300" />
                 <div>
                   <p className="font-semibold text-slate-100">
-                    {loading ? "Caricamento radar DPC..." : "Layer cartografico non disponibile per questo prodotto"}
+                    {loading ? "Caricamento radar DPC..." : radarImageFailed ? "Immagine WMS non caricata" : "Layer cartografico non disponibile per questo prodotto"}
                   </p>
                   <p className="mt-2 max-w-xl text-sm text-slate-400">
-                    Il prodotto selezionato viene interrogato via REST. Per visualizzarlo su mappa serve un layer WMS DPC associato.
+                    {radarImageFailed ? "Apri il link WMS per verificare se il servizio DPC ha restituito un errore XML o un layer non disponibile." : "Il prodotto selezionato viene interrogato via REST. Per visualizzarlo su mappa serve un layer WMS DPC associato."}
                   </p>
                 </div>
+                {wmsImageUrl && (
+                  <a
+                    href={wmsImageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20"
+                  >
+                    Apri immagine WMS
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
                 {errorMessage && (
                   <p className="rounded-md border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-xs text-orange-100">
                     {errorMessage}
@@ -557,7 +580,7 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
             <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-emergency-line bg-emergency-panel/90 p-3 backdrop-blur">
               <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Legenda operativa</p>
-                <p className="text-xs text-slate-400">Vista Toscana centrale, bbox EPSG:3857</p>
+                <p className="text-xs text-slate-400">Servizio WMS GeoWebCache, vista Toscana centrale</p>
               </div>
               <RadarLegend product={product} />
             </div>
@@ -613,7 +636,7 @@ function RadarSection({ radarPayload, loading, selectedProduct, onProductChange,
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20"
               >
-                REST ultimo dato
+                Ultimo prodotto
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
               <a
