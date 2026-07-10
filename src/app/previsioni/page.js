@@ -21,6 +21,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -263,7 +264,7 @@ function ForecastCharts({ payload }) {
   const dailyRows = useMemo(() => buildDailyRows(primary), [primary]);
   const rainRows = rainView === "hourly"
     ? rows.map((row) => ({ ...row, label: row.hour }))
-    : dailyRows.map((row) => ({ ...row, label: row.label }));
+    : dailyRows.map((row) => ({ ...row, label: row.label, probability: row.precipitationProbability }));
 
   if (!rows.length) return null;
 
@@ -295,13 +296,16 @@ function ForecastCharts({ payload }) {
         <div className="overflow-x-auto pb-2">
           <div className={"h-72 " + (rainView === "hourly" ? "min-w-[80rem]" : "min-w-[44rem]")}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={rainRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              <ComposedChart data={rainRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                 <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                 <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
+                <YAxis yAxisId="left" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#bae6fd" tick={{ fill: "#bae6fd", fontSize: 12 }} unit="%" />
                 <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
-                <Bar dataKey="precipitation" name={rainView === "hourly" ? "Pioggia oraria" : "Pioggia giornaliera"} fill="#38bdf8" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Legend />
+                <Bar yAxisId="left" dataKey="precipitation" name={rainView === "hourly" ? "Pioggia oraria mm" : "Pioggia giornaliera mm"} fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="probability" name="Probabilita pioggia %" stroke="#bae6fd" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8", stroke: "#e0f2fe", strokeWidth: 2 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
