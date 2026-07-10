@@ -4,10 +4,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const OPEN_METEO_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
-const ITALIA_METEO_ENDPOINTS = [
-  "https://api.open-meteo.com/v1/italia-meteo-arpae",
-  "https://api.open-meteo.com/v1/forecast"
-];
 
 const HOURLY = [
   "temperature_2m",
@@ -104,32 +100,6 @@ async function fetchOpenMeteo(options) {
     url,
     payload: await fetchJson(url)
   };
-}
-
-async function fetchItaliaMeteo(options) {
-  const errors = [];
-  const cappedDays = Math.min(options.days, 3);
-  for (const endpoint of ITALIA_METEO_ENDPOINTS) {
-    const attempts = endpoint.endsWith("/forecast")
-      ? ["italia_meteo_arpae_icon_2i", "icon_2i"]
-      : [null];
-
-    for (const model of attempts) {
-      const url = buildForecastUrl(endpoint, { ...options, days: cappedDays, model });
-      try {
-        return {
-          id: "italia-meteo",
-          label: "ItaliaMeteo ICON-2I",
-          model: model || "icon_2i",
-          url,
-          payload: await fetchJson(url)
-        };
-      } catch (error) {
-        errors.push((model || endpoint) + ": " + error.message);
-      }
-    }
-  }
-  throw new Error(errors.join("; "));
 }
 
 function getArray(payload, section, key) {
@@ -234,8 +204,6 @@ export async function GET(request) {
   const lat = numberFromParam(searchParams.get("lat"), 43.7696);
   const lng = numberFromParam(searchParams.get("lng"), 11.2558);
   const days = Math.max(1, Math.min(7, numberFromParam(searchParams.get("days"), 3)));
-  const includeItaliaMeteo = searchParams.get("italia") !== "0";
-
   const sources = [];
   const errors = [];
 
@@ -245,16 +213,8 @@ export async function GET(request) {
     errors.push({ source: "Open-Meteo", message: error.message });
   }
 
-  if (includeItaliaMeteo) {
-    try {
-      sources.push(normalizeSource(await fetchItaliaMeteo({ lat, lng, days })));
-    } catch (error) {
-      errors.push({ source: "ItaliaMeteo ICON-2I", message: error.message });
-    }
-  }
-
   return NextResponse.json({
-    source: "Open-Meteo + ItaliaMeteo ICON-2I",
+    source: "Open-Meteo",
     fetchedAt: new Date().toISOString(),
     query: { lat, lng, days },
     sources,

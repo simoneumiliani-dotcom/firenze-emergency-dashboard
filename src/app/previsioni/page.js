@@ -3,13 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Cloud,
   CloudRain,
+  CloudSun,
   Crosshair,
   ExternalLink,
   LocateFixed,
   MapPin,
+  Moon,
   RefreshCcw,
   Snowflake,
+  Sun,
   Thermometer,
   Wind
 } from "lucide-react";
@@ -91,8 +95,8 @@ function getPrimarySource(payload) {
   return payload?.sources?.find((source) => source.id === "open-meteo") || payload?.sources?.[0] || null;
 }
 
-function buildChartRows(primary, italia) {
-  const rows = (primary?.hourly || []).slice(0, 36).map((point, index) => ({
+function buildChartRows(primary) {
+  const rows = (primary?.hourly || []).map((point) => ({
     hour: point.hour,
     date: point.time,
     precipitation: point.precipitation ?? 0,
@@ -100,12 +104,33 @@ function buildChartRows(primary, italia) {
     windGust: point.windGust,
     probability: point.precipitationProbability,
     humidity: point.humidity,
-    snow: point.snowfall ?? 0,
-    italiaPrecipitation: italia?.hourly?.[index]?.precipitation ?? null,
-    italiaTemperature: italia?.hourly?.[index]?.temperature ?? null,
-    italiaWindGust: italia?.hourly?.[index]?.windGust ?? null
+    snow: point.snowfall ?? 0
   }));
   return rows;
+}
+
+function buildDailyRows(primary) {
+  return (primary?.daily || []).map((day) => ({
+    day: day.day,
+    label: formatDay(day.day),
+    weatherCode: day.weatherCode,
+    temperatureMax: day.temperatureMax,
+    temperatureMin: day.temperatureMin,
+    precipitation: day.precipitation ?? 0,
+    precipitationProbability: day.precipitationProbability ?? 0,
+    windGustMax: day.windGustMax ?? day.windSpeedMax ?? null,
+    snowfall: day.snowfall ?? 0
+  }));
+}
+
+function WeatherIcon({ code, className = "h-10 w-10" }) {
+  if ([0].includes(code)) return <Sun className={className + " text-yellow-300"} />;
+  if ([1, 2].includes(code)) return <CloudSun className={className + " text-yellow-200"} />;
+  if ([3, 45, 48].includes(code)) return <Cloud className={className + " text-slate-300"} />;
+  if ([95, 96, 99].includes(code)) return <AlertTriangle className={className + " text-emergency-yellow"} />;
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return <Snowflake className={className + " text-sky-200"} />;
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return <CloudRain className={className + " text-sky-300"} />;
+  return <CloudSun className={className + " text-slate-300"} />;
 }
 
 function MetricCard({ icon: Icon, label, value, detail }) {
@@ -233,32 +258,49 @@ function SummarySection({ payload }) {
 
 function ForecastCharts({ payload }) {
   const primary = getPrimarySource(payload);
-  const italia = payload?.sources?.find((source) => source.id === "italia-meteo") || null;
-  const rows = useMemo(() => buildChartRows(primary, italia), [primary, italia]);
+  const [rainView, setRainView] = useState("hourly");
+  const rows = useMemo(() => buildChartRows(primary), [primary]);
+  const dailyRows = useMemo(() => buildDailyRows(primary), [primary]);
+  const rainRows = rainView === "hourly"
+    ? rows.map((row) => ({ ...row, label: row.hour }))
+    : dailyRows.map((row) => ({ ...row, label: row.label }));
 
   if (!rows.length) return null;
 
   return (
     <section className="grid gap-5 xl:grid-cols-2">
       <div className="panel p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="section-title">Pioggia prevista</h2>
-            <p className="muted">Confronto Open-Meteo e ItaliaMeteo ICON-2I.</p>
+            <p className="muted">Precipitazione prevista da Open-Meteo sulla coordinata selezionata.</p>
           </div>
-          <CloudRain className="h-5 w-5 text-sky-300" />
+          <div className="inline-flex rounded-lg border border-emergency-line bg-emergency-panel2 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setRainView("hourly")}
+              className={"rounded-md px-3 py-2 font-semibold transition " + (rainView === "hourly" ? "bg-sky-400/20 text-sky-100" : "text-slate-400 hover:text-slate-100")}
+            >
+              Ogni ora
+            </button>
+            <button
+              type="button"
+              onClick={() => setRainView("daily")}
+              className={"rounded-md px-3 py-2 font-semibold transition " + (rainView === "daily" ? "bg-sky-400/20 text-sky-100" : "text-slate-400 hover:text-slate-100")}
+            >
+              Per giorno
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto pb-2">
-          <div className="h-72 min-w-[48rem]">
+          <div className={"h-72 " + (rainView === "hourly" ? "min-w-[80rem]" : "min-w-[44rem]")}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              <BarChart data={rainRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                 <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
-                <XAxis dataKey="hour" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
                 <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
-                <Legend />
-                <Bar dataKey="precipitation" name="Open-Meteo" fill="#38bdf8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="italiaPrecipitation" name="ItaliaMeteo" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="precipitation" name={rainView === "hourly" ? "Pioggia oraria" : "Pioggia giornaliera"} fill="#38bdf8" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -285,7 +327,6 @@ function ForecastCharts({ payload }) {
                 <Legend />
                 <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temperatura C" stroke="#fb923c" strokeWidth={2} dot={false} />
                 <Line yAxisId="right" type="monotone" dataKey="windGust" name="Raffiche km/h" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="italiaWindGust" name="Raffiche ItaliaMeteo" stroke="#22c55e" strokeDasharray="6 6" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -297,42 +338,62 @@ function ForecastCharts({ payload }) {
 
 function DailyTable({ payload }) {
   const primary = getPrimarySource(payload);
-  const days = primary?.daily || [];
+  const days = buildDailyRows(primary);
   if (!days.length) return null;
 
   return (
     <section className="panel overflow-hidden">
       <div className="border-b border-emergency-line px-4 py-3">
         <h2 className="section-title">Sintesi giornaliera</h2>
-        <p className="muted">Tabella compatta per tablet e desktop; su mobile scorre in orizzontale.</p>
+        <p className="muted">Vista grafica Open-Meteo con temperatura massima, minima e probabilita di pioggia.</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-[48rem] divide-y divide-emergency-line text-sm">
-          <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="px-4 py-3">Giorno</th>
-              <th className="px-4 py-3">Scenario</th>
-              <th className="px-4 py-3">Temp.</th>
-              <th className="px-4 py-3">Pioggia</th>
-              <th className="px-4 py-3">Prob.</th>
-              <th className="px-4 py-3">Vento</th>
-              <th className="px-4 py-3">Neve</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-emergency-line">
-            {days.map((day) => (
-              <tr key={day.day} className="hover:bg-white/[0.03]">
-                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-100">{formatDay(day.day)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{weatherLabel(day.weatherCode)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{day.temperatureMin ?? "n.d."} / {day.temperatureMax ?? "n.d."} C</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{day.precipitation ?? "n.d."} mm</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{day.precipitationProbability ?? "n.d."}%</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{day.windGustMax ?? day.windSpeedMax ?? "n.d."} km/h</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-300">{day.snowfall ?? "n.d."} cm</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="overflow-x-auto p-4">
+        <div className="min-w-[48rem]">
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(" + days.length + ", minmax(7rem, 1fr))" }}>
+            {days.map((day, index) => {
+              const date = new Date(day.day);
+              const dayName = index === 0 ? "Oggi" : date.toLocaleDateString("it-IT", { weekday: "short" });
+              const dateLabel = Number.isFinite(date.getTime())
+                ? date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+                : day.day;
+
+              return (
+                <article key={day.day} className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-4 text-center">
+                  <p className="text-lg font-semibold text-white">{dayName}</p>
+                  <p className="text-sm text-slate-400">{dateLabel}</p>
+                  <div className="mt-4 flex justify-center">
+                    <WeatherIcon code={day.weatherCode} />
+                  </div>
+                  <p className="mt-3 text-sm text-slate-300">{weatherLabel(day.weatherCode)}</p>
+                  <p className="mt-3 text-sm text-slate-300">
+                    <CloudRain className="mr-1 inline h-4 w-4 text-sky-300" />
+                    {day.precipitationProbability ?? "n.d."}%
+                  </p>
+                  <p className="mt-3 text-2xl font-semibold text-rose-300">max {day.temperatureMax ?? "n.d."} C</p>
+                  <p className="mt-2 text-xl font-semibold text-sky-300">min {day.temperatureMin ?? "n.d."} C</p>
+                  <div className="mt-3 flex items-center justify-center gap-2 text-xs text-slate-400">
+                    <Moon className="h-4 w-4 text-yellow-200" />
+                    notte
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={days} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+                <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
+                <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="C" />
+                <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
+                <Legend />
+                <Line type="monotone" dataKey="temperatureMax" name="Massima" stroke="#ec4899" strokeWidth={3} dot={{ r: 5, fill: "#ec4899", stroke: "#fbcfe8", strokeWidth: 2 }} />
+                <Line type="monotone" dataKey="temperatureMin" name="Minima" stroke="#38bdf8" strokeWidth={3} dot={{ r: 5, fill: "#38bdf8", stroke: "#bae6fd", strokeWidth: 2 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -544,7 +605,7 @@ export default function ForecastPage() {
                 <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Modulo previsionale</p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Previsioni meteo puntuali</h1>
                 <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                  Analisi per comune o coordinate precise con Open-Meteo e modello ItaliaMeteo ICON-2I, pensata per uso operativo su desktop, tablet e mobile.
+                  Analisi per comune o coordinate precise con Open-Meteo, pensata per uso operativo su desktop, tablet e mobile.
                 </p>
               </div>
               <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm text-slate-300">
@@ -603,7 +664,7 @@ export default function ForecastPage() {
           </section>
 
           <footer className="pb-6 text-xs text-slate-500">
-            Fonti previsionali: Open-Meteo e ItaliaMeteo ICON-2I. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+            Fonte previsionale: Open-Meteo. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
           </footer>
         </div>
       </main>
