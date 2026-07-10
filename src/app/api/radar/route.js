@@ -3,288 +3,162 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const OPEN_METEO_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+const DPC_API_BASE = "https://radar-api.protezionecivile.it";
+const DPC_REST_BASE = `${DPC_API_BASE}/api/v1/radar/dpc`;
+const DPC_WMS_BASE = `${DPC_API_BASE}/wide/product`;
+const WMS_CAPABILITIES_URL = `${DPC_WMS_BASE}?service=WMS&request=GetCapabilities`;
 
-const MINUTELY_15 = [
-  "precipitation",
-  "rain",
-  "snowfall",
-  "weather_code",
-  "cape",
-  "lightning_potential_index"
-].join(",");
-
-const MINUTELY_15_FALLBACK = [
-  "precipitation",
-  "rain",
-  "snowfall",
-  "weather_code"
-].join(",");
-
-const HOURLY_FALLBACK = [
-  "precipitation",
-  "rain",
-  "snowfall",
-  "weather_code",
-  "cape"
-].join(",");
-
-function numberFromParam(value, fallback) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function getBaseUrl() {
-  return (process.env.METEOHUB_API_BASE || "https://meteohub.agenziaitaliameteo.it").replace(/\/$/, "");
-}
-
-function hasMeteoHubCredentials() {
-  return Boolean(process.env.METEOHUB_USERNAME && process.env.METEOHUB_PASSWORD);
-}
-
-function readSetCookieHeaders(headers) {
-  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
-  const single = headers.get("set-cookie");
-  return single ? [single] : [];
-}
-
-function toCookieHeader(setCookieHeaders) {
-  return setCookieHeaders
-    .flatMap((item) => String(item).split(/,(?=\s*[^;,=]+=[^;,]+)/))
-    .map((item) => item.split(";")[0].trim())
-    .filter(Boolean)
-    .join("; ");
-}
-
-function findAuthValue(payload, matcher) {
-  if (!payload || typeof payload !== "object") return null;
-  for (const [key, value] of Object.entries(payload)) {
-    if (matcher(key) && typeof value === "string" && value.trim()) return value.trim();
+const PRODUCTS = [
+  {
+    id: "SRI",
+    dataType: "it",
+    label: "Intensita pioggia",
+    shortLabel: "SRI",
+    description: "Stima radar dell'intensita di precipitazione al suolo.",
+    cadence: "5 min",
+    unit: "mm/h",
+    wmsLayer: "rv:SRI:it:SRI_VMI",
+    mapEnabled: true
+  },
+  {
+    id: "SRT",
+    dataType: "it",
+    label: "Pioggia cumulata",
+    shortLabel: "SRT",
+    description: "Stima radar della precipitazione cumulata.",
+    cadence: "15 min",
+    unit: "mm",
+    wmsLayer: null,
+    mapEnabled: false
+  },
+  {
+    id: "HRD",
+    dataType: "it",
+    label: "Grandine rilevata",
+    shortLabel: "HRD",
+    description: "Indicatore radar di severita dei fenomeni grandinigeni.",
+    cadence: "5 min",
+    unit: "classe",
+    wmsLayer: null,
+    mapEnabled: false
+  },
+  {
+    id: "POH",
+    dataType: "it",
+    label: "Probabilita grandine",
+    shortLabel: "POH",
+    description: "Probabilita radar di grandine.",
+    cadence: "5 min",
+    unit: "%",
+    wmsLayer: null,
+    mapEnabled: false
+  },
+  {
+    id: "LTG",
+    dataType: "it",
+    label: "Fulmini",
+    shortLabel: "LTG",
+    description: "Densita o conteggio fulmini su griglia radar.",
+    cadence: "5 min",
+    unit: "conteggio",
+    wmsLayer: null,
+    mapEnabled: false
   }
-  for (const value of Object.values(payload)) {
-    const nested = findAuthValue(value, matcher);
-    if (nested) return nested;
-  }
-  return null;
+];
+
+function normalizeDpcDate(value) {
+  if (!value) return null;
+  const text = String(value);
+  const valueWithZone = /Z|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`;
+  const date = new Date(valueWithZone);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : text;
 }
 
-function findToken(payload) {
-  return findAuthValue(payload, (key) => /^(access_token|accessToken|token|jwt|id_token|idToken)$/i.test(key));
-}
-
-async function fetchJson(url, options = {}) {
+async function fetchJson(url) {
   const controller = new AbortController();
-  const { headers: optionHeaders = {}, timeoutMs = 12000, ...restOptions } = options;
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(url, {
       cache: "no-store",
       signal: controller.signal,
-      ...restOptions,
-      headers: { accept: "application/json,text/plain,*/*", ...optionHeaders }
+      headers: { accept: "application/json" }
     });
     const text = await response.text();
-    let payload = {};
+    let payload = null;
     try {
-      payload = text ? JSON.parse(text) : {};
+      payload = text ? JSON.parse(text) : null;
     } catch {
-      payload = { raw: text.slice(0, 300) };
+      payload = { raw: text.slice(0, 500) };
     }
     if (!response.ok) {
-      const detail = payload?.reason || payload?.error || payload?.raw || "";
+      const detail = payload?.message || payload?.error || payload?.raw || "";
       throw new Error(("HTTP " + response.status + " " + detail).trim());
     }
-    return { payload, headers: response.headers };
+    return payload;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function buildOpenMeteoMinutelyUrl(lat, lng, variables) {
-  const params = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lng),
-    minutely_15: variables,
-    current: "precipitation,rain,showers,snowfall,weather_code,cloud_cover",
-    timezone: "Europe/Rome",
-    forecast_minutely_15: "24",
-    past_minutely_15: "4",
-    precipitation_unit: "mm"
-  });
-  return OPEN_METEO_ENDPOINT + "?" + params.toString();
-}
-
-function buildOpenMeteoHourlyUrl(lat, lng) {
-  const params = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lng),
-    hourly: HOURLY_FALLBACK,
-    current: "precipitation,rain,showers,snowfall,weather_code,cloud_cover",
-    timezone: "Europe/Rome",
-    forecast_hours: "12",
-    past_hours: "1",
-    precipitation_unit: "mm"
-  });
-  return OPEN_METEO_ENDPOINT + "?" + params.toString();
-}
-
-async function fetchOpenMeteoRadar(lat, lng) {
-  let url = buildOpenMeteoMinutelyUrl(lat, lng, MINUTELY_15);
-  let payload;
-  let resolution = "15 min";
-  let warning = null;
-  try {
-    ({ payload } = await fetchJson(url));
-  } catch (firstError) {
-    try {
-      url = buildOpenMeteoMinutelyUrl(lat, lng, MINUTELY_15_FALLBACK);
-      ({ payload } = await fetchJson(url));
-      warning = "Variabili temporalesche non disponibili: usata lettura precipitazioni a 15 minuti.";
-    } catch (secondError) {
-      url = buildOpenMeteoHourlyUrl(lat, lng);
-      ({ payload } = await fetchJson(url));
-      resolution = "1 ora";
-      warning = "Nowcasting a 15 minuti non disponibile: usato fallback orario Open-Meteo.";
-      if (!payload?.hourly?.time) {
-        throw new Error(secondError.message || firstError.message);
-      }
-    }
-  }
-
-  const section = resolution === "15 min" ? payload.minutely_15 : payload.hourly;
-  const times = Array.isArray(section?.time) ? section.time : [];
-  const rows = times.map((time, index) => ({
-    time,
-    hour: String(time).slice(11, 16),
-    precipitation: section?.precipitation?.[index] ?? null,
-    rain: section?.rain?.[index] ?? null,
-    snowfall: section?.snowfall?.[index] ?? null,
-    weatherCode: section?.weather_code?.[index] ?? null,
-    cape: section?.cape?.[index] ?? null,
-    lightningPotential: section?.lightning_potential_index?.[index] ?? null
-  }));
-
-  const futureRows = rows.filter((row) => new Date(row.time).getTime() >= Date.now() - 20 * 60 * 1000);
-  const analysisRows = futureRows.length ? futureRows : rows;
-  const maxPrecipitation = Math.max(0, ...analysisRows.map((row) => Number(row.precipitation) || 0));
-  const next3hItems = resolution === "15 min" ? 12 : 3;
-  const totalNext3h = Number(analysisRows.slice(0, next3hItems).reduce((sum, row) => sum + (Number(row.precipitation) || 0), 0).toFixed(1));
-  const maxLightningPotential = Math.max(0, ...analysisRows.map((row) => Number(row.lightningPotential) || 0));
+function normalizeProductPayload(productConfig, payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const normalizedDate = normalizeDpcDate(payload.date);
 
   return {
-    id: "open-meteo",
-    label: "Open-Meteo nowcasting",
-    sourceUrl: url,
-    available: rows.length > 0,
-    updatedAt: new Date().toISOString(),
-    resolution,
-    warning,
-    current: payload.current || null,
-    units: resolution === "15 min" ? payload.minutely_15_units || {} : payload.hourly_units || {},
-    summary: {
-      maxPrecipitation,
-      totalNext3h,
-      maxLightningPotential
-    },
-    rows
+    id: payload.id ?? null,
+    product: payload.product || productConfig.id,
+    date: normalizedDate,
+    wmsTime: normalizedDate,
+    period: payload.period || null,
+    quality: payload.quality ?? null,
+    createdAt: normalizeDpcDate(payload.created_at),
+    updatedAt: normalizeDpcDate(payload.updated_at),
+    dataCount: Array.isArray(payload.data) ? payload.data.length : null
   };
 }
 
-async function fetchMeteoHubRadar() {
-  if (!hasMeteoHubCredentials()) {
-    return {
-      id: "meteohub",
-      label: "MeteoHub radar",
-      available: false,
-      configured: false,
-      sourceUrl: getBaseUrl(),
-      note: "Credenziali MeteoHub non configurate su Vercel."
-    };
-  }
-
-  const login = await fetchJson(`${getBaseUrl()}/auth/login`, {
-    method: "POST",
-    timeoutMs: 4000,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      username: process.env.METEOHUB_USERNAME,
-      password: process.env.METEOHUB_PASSWORD
-    })
-  });
-
-  const token = findToken(login.payload);
-  const cookie = toCookieHeader(readSetCookieHeaders(login.headers));
-  const headers = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-  if (cookie) headers.cookie = cookie;
-
-  const requests = await fetchJson(`${getBaseUrl()}/api/requests`, { headers, timeoutMs: 4000 });
-  const rows = Array.isArray(requests.payload)
-    ? requests.payload
-    : requests.payload.requests || requests.payload.items || requests.payload.results || [];
-
-  const radarRequests = rows
-    .filter((item) => JSON.stringify(item).toLowerCase().includes("radar"))
-    .slice(0, 5)
-    .map((item) => ({
-      id: item.id || item.request_id || item.task_id || null,
-      name: item.name || item.title || item.request_name || item.dataset || "Richiesta radar MeteoHub",
-      status: item.status || item.state || "n.d.",
-      dataset: item.dataset || item.dataset_name || item.dataset_names || null,
-      createdAt: item.created_at || item.creation_time || item.submitted_at || null
-    }));
-
+function serializeProduct(product) {
   return {
-    id: "meteohub",
-    label: "MeteoHub radar",
-    available: true,
-    configured: true,
-    sourceUrl: getBaseUrl(),
-    updatedAt: new Date().toISOString(),
-    authMode: token ? "bearer" : cookie ? "cookie" : "login",
-    requests: radarRequests,
-    note: radarRequests.length
-      ? "Richieste radar trovate su MeteoHub."
-      : "MeteoHub raggiunto; nessuna richiesta radar recente trovata nell'account."
+    ...product,
+    restLastUrl: `${DPC_REST_BASE}/${product.id}/${product.dataType}/last`,
+    wmsBaseUrl: DPC_WMS_BASE,
+    wmsCapabilitiesUrl: WMS_CAPABILITIES_URL
   };
 }
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const lat = numberFromParam(searchParams.get("lat"), 43.7696);
-  const lng = numberFromParam(searchParams.get("lng"), 11.2558);
+  const requestedProduct = String(searchParams.get("product") || "SRI").toUpperCase();
+  const product = PRODUCTS.find((item) => item.id === requestedProduct) || PRODUCTS[0];
   const errors = [];
-  let openMeteo = null;
-  let meteoHub = null;
+  let lastProduct = null;
 
   try {
-    openMeteo = await fetchOpenMeteoRadar(lat, lng);
+    const payload = await fetchJson(`${DPC_REST_BASE}/${product.id}/${product.dataType}/last`);
+    lastProduct = normalizeProductPayload(product, payload);
   } catch (error) {
-    errors.push({ source: "Open-Meteo", message: error.message });
+    errors.push({
+      source: "DPC Radar REST",
+      message: error.message
+    });
   }
 
-  try {
-    meteoHub = await fetchMeteoHubRadar();
-  } catch (error) {
-    meteoHub = {
-      id: "meteohub",
-      label: "MeteoHub radar",
-      available: false,
-      configured: hasMeteoHubCredentials(),
-      sourceUrl: getBaseUrl(),
-      note: error.message
-    };
-    errors.push({ source: "MeteoHub", message: error.message });
-  }
-
-  return NextResponse.json({
-    source: "Open-Meteo + MeteoHub",
-    fetchedAt: new Date().toISOString(),
-    query: { lat, lng },
-    openMeteo,
-    meteoHub,
-    errors
-  }, {
-    headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=600" }
-  });
+  return NextResponse.json(
+    {
+      source: "DPC Radar Protezione Civile",
+      fetchedAt: new Date().toISOString(),
+      product: serializeProduct(product),
+      products: PRODUCTS.map(serializeProduct),
+      lastProduct,
+      services: {
+        rest: DPC_REST_BASE,
+        wms: DPC_WMS_BASE,
+        wmsCapabilities: WMS_CAPABILITIES_URL
+      },
+      errors
+    },
+    {
+      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=600" }
+    }
+  );
 }

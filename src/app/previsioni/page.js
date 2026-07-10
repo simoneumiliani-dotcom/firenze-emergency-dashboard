@@ -403,11 +403,68 @@ function DailyTable({ payload }) {
   );
 }
 
-function RadarSection({ radarPayload, loading }) {
-  const openMeteo = radarPayload?.openMeteo;
-  const meteoHub = radarPayload?.meteoHub;
-  const rows = (openMeteo?.rows || []).slice(0, 28);
-  const summary = openMeteo?.summary || {};
+const RADAR_PRODUCTS_FALLBACK = [
+  { id: "SRI", label: "Intensita pioggia", shortLabel: "SRI", unit: "mm/h", cadence: "5 min", mapEnabled: true, wmsLayer: "rv:SRI:it:SRI_VMI" },
+  { id: "SRT", label: "Pioggia cumulata", shortLabel: "SRT", unit: "mm", cadence: "15 min", mapEnabled: false },
+  { id: "HRD", label: "Grandine rilevata", shortLabel: "HRD", unit: "classe", cadence: "5 min", mapEnabled: false },
+  { id: "POH", label: "Probabilita grandine", shortLabel: "POH", unit: "%", cadence: "5 min", mapEnabled: false },
+  { id: "LTG", label: "Fulmini", shortLabel: "LTG", unit: "conteggio", cadence: "5 min", mapEnabled: false }
+];
+
+function buildDpcWmsImageUrl(product, time) {
+  if (!product?.wmsLayer || !time) return null;
+  const params = new URLSearchParams({
+    service: "WMS",
+    version: "1.3.0",
+    request: "GetMap",
+    layers: product.wmsLayer,
+    styles: "",
+    format: "image/png",
+    transparent: "true",
+    time,
+    width: "1100",
+    height: "720",
+    crs: "EPSG:3857",
+    bbox: "1046400,5190000,1402600,5590000"
+  });
+  return (product.wmsBaseUrl || "https://radar-api.protezionecivile.it/wide/product") + "?" + params.toString();
+}
+
+function RadarLegend({ product }) {
+  const items = product?.id === "SRI"
+    ? [
+        { label: "0-1 mm/h", color: "bg-sky-300" },
+        { label: "1-5 mm/h", color: "bg-emerald-300" },
+        { label: "5-20 mm/h", color: "bg-yellow-300" },
+        { label: "> 20 mm/h", color: "bg-rose-400" }
+      ]
+    : [
+        { label: "Basso", color: "bg-sky-300" },
+        { label: "Moderato", color: "bg-yellow-300" },
+        { label: "Elevato", color: "bg-orange-400" },
+        { label: "Molto elevato", color: "bg-rose-400" }
+      ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-slate-300">
+          <span className={"h-2.5 w-5 rounded-full " + item.color} />
+          {item.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RadarSection({ radarPayload, loading, selectedProduct, onProductChange, onRefresh }) {
+  const products = radarPayload?.products?.length ? radarPayload.products : RADAR_PRODUCTS_FALLBACK;
+  const product = radarPayload?.product || products.find((item) => item.id === selectedProduct) || products[0];
+  const lastProduct = radarPayload?.lastProduct;
+  const wmsImageUrl = buildDpcWmsImageUrl(product, lastProduct?.wmsTime);
+  const restUrl = product?.restLastUrl || "https://radar-api.protezionecivile.it/api/v1/radar/dpc/SRI/it/last";
+  const capabilitiesUrl = radarPayload?.services?.wmsCapabilities || product?.wmsCapabilitiesUrl || "https://radar-api.protezionecivile.it/wide/product?service=WMS&request=GetCapabilities";
+  const errorMessage = radarPayload?.errors?.[0]?.message;
 
   return (
     <section className="panel overflow-hidden">
@@ -416,112 +473,173 @@ function RadarSection({ radarPayload, loading }) {
           <div className="flex gap-3">
             <Crosshair className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
             <div>
-              <h2 className="section-title">Radar precipitazioni</h2>
+              <h2 className="section-title">Radar DPC precipitazioni</h2>
               <p className="muted">
-                Open-Meteo fornisce nowcasting sulla coordinata selezionata; MeteoHub viene verificato come canale radar asincrono senza bloccare il pannello.
+                Mappa operativa basata sui servizi Radar-DPC della Protezione Civile: metadati REST e layer WMS dove disponibile.
               </p>
             </div>
           </div>
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-xs text-slate-400">
-            Ultimo aggiornamento: {formatDateTime(radarPayload?.fetchedAt)}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-sky-400/60 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCcw className={"h-3.5 w-3.5 " + (loading ? "animate-spin" : "")} />
+              Aggiorna radar
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 xl:grid-cols-[1.4fr_0.9fr]">
-        <div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MetricCard
-              icon={CloudRain}
-              label="Pioggia prossime 3h"
-              value={(summary.totalNext3h ?? "n.d.") + " mm"}
-              detail={"Somma valori Open-Meteo, risoluzione " + (openMeteo?.resolution || "n.d.")}
-            />
-            <MetricCard
-              icon={CloudRain}
-              label="Picco 15 min"
-              value={(summary.maxPrecipitation ?? "n.d.") + " mm"}
-              detail="Intensita massima prevista sul punto"
-            />
-            <MetricCard
-              icon={AlertTriangle}
-              label="Indice fulmini"
-              value={summary.maxLightningPotential ?? "n.d."}
-              detail="Lightning potential index Open-Meteo"
-            />
+      <div className="border-b border-emergency-line bg-emergency-panel2/60 px-4 py-3">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {products.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onProductChange(item.id)}
+              className={"shrink-0 rounded-md border px-3 py-2 text-left text-xs transition " +
+                (selectedProduct === item.id
+                  ? "border-sky-300 bg-sky-400/20 text-sky-50"
+                  : "border-emergency-line bg-emergency-panel text-slate-400 hover:text-slate-100")}
+            >
+              <span className="block font-semibold">{item.shortLabel || item.id}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[1.45fr_0.75fr]">
+        <div className="space-y-4">
+          <div className="relative overflow-hidden rounded-lg border border-emergency-line bg-[#07101d]">
+            <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-md border border-sky-400/40 bg-sky-950/80 px-2 py-1 font-semibold text-sky-100">
+                {product?.wmsLayer || "Metadati REST"}
+              </span>
+              <span className="rounded-md border border-emergency-line bg-emergency-panel/90 px-2 py-1 text-slate-300">
+                Ora radar: {formatDateTime(lastProduct?.date)}
+              </span>
+            </div>
+
+            {wmsImageUrl ? (
+              <a href={wmsImageUrl} target="_blank" rel="noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={wmsImageUrl}
+                  alt={"Radar DPC " + (product?.label || "precipitazioni")}
+                  className="h-[22rem] w-full object-cover opacity-90 sm:h-[30rem]"
+                />
+              </a>
+            ) : (
+              <div className="flex h-[22rem] flex-col items-center justify-center gap-3 px-6 text-center sm:h-[30rem]">
+                <CloudRain className="h-12 w-12 text-sky-300" />
+                <div>
+                  <p className="font-semibold text-slate-100">
+                    {loading ? "Caricamento radar DPC..." : "Layer cartografico non configurato per questo prodotto"}
+                  </p>
+                  <p className="mt-2 max-w-xl text-sm text-slate-400">
+                    Il prodotto selezionato viene interrogato via REST. Per visualizzarlo su mappa serve confermare il nome layer dalle capabilities WMS DPC.
+                  </p>
+                </div>
+                {errorMessage && (
+                  <p className="rounded-md border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-xs text-orange-100">
+                    {errorMessage}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-emergency-line bg-emergency-panel/90 p-3 backdrop-blur">
+              <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Legenda operativa</p>
+                <p className="text-xs text-slate-400">Vista Toscana centrale, bbox EPSG:3857</p>
+              </div>
+              <RadarLegend product={product} />
+            </div>
           </div>
 
-          <div className="mt-4 overflow-x-auto pb-2">
-            <div className="h-64 min-w-[44rem]">
-              {rows.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
-                    <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
-                    <XAxis dataKey="hour" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                    <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
-                    <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
-                    <Bar dataKey="precipitation" name="Precipitazione 15 min" fill="#38bdf8" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center rounded-lg border border-emergency-line bg-emergency-panel2 text-sm text-slate-400">
-                  {loading ? "Caricamento radar..." : "Dati radar/nowcasting non disponibili."}
-                </div>
-              )}
+          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
+            <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
+              <span>{formatDateTime(lastProduct?.createdAt || radarPayload?.fetchedAt)}</span>
+              <span>{formatDateTime(lastProduct?.updatedAt || radarPayload?.fetchedAt)}</span>
             </div>
+            <div className="mt-2 h-2 rounded-full bg-emergency-panel">
+              <div className="h-2 w-full rounded-full bg-gradient-to-r from-sky-500 via-yellow-300 to-rose-500" />
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Barra temporale del prodotto piu recente disponibile. La navigazione storica potra essere agganciata al download DPC per data.</p>
           </div>
         </div>
 
         <aside className="flex flex-col gap-3">
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Open-Meteo</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">
-              {openMeteo?.available ? "Nowcasting disponibile (" + (openMeteo.resolution || "n.d.") + ")" : "Dato non disponibile"}
-            </p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Non e una immagine radar grezza: e una serie numerica ad alta frequenza utile per leggere intensita e tendenza locale delle precipitazioni.
-            </p>
-            {openMeteo?.warning && (
-              <p className="mt-2 rounded-md border border-emergency-yellow/40 bg-emergency-yellow/10 px-3 py-2 text-xs text-yellow-100">
-                {openMeteo.warning}
-              </p>
-            )}
-            {openMeteo?.sourceUrl && (
-              <a
-                href={openMeteo.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-sky-200 hover:text-white"
-              >
-                Apri chiamata Open-Meteo
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
+            <p className="text-xs uppercase tracking-wide text-slate-500">Prodotto DPC</p>
+            <p className="mt-2 text-lg font-semibold text-slate-100">{product?.label || "Radar DPC"}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{product?.description || "Prodotto radar Protezione Civile."}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
+                <p className="uppercase text-slate-500">Cadenza</p>
+                <p className="mt-1 font-semibold text-slate-100">{product?.cadence || "n.d."}</p>
+              </div>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
+                <p className="uppercase text-slate-500">Unita</p>
+                <p className="mt-1 font-semibold text-slate-100">{product?.unit || "n.d."}</p>
+              </div>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
+                <p className="uppercase text-slate-500">Qualita</p>
+                <p className="mt-1 font-semibold text-slate-100">{lastProduct?.quality ?? "n.d."}</p>
+              </div>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
+                <p className="uppercase text-slate-500">Campioni</p>
+                <p className="mt-1 font-semibold text-slate-100">{lastProduct?.dataCount ?? "n.d."}</p>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">MeteoHub</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">
-              {meteoHub?.available ? "Connessione verificata" : "Radar non pronto"}
+            <p className="text-xs uppercase tracking-wide text-slate-500">Fonti ufficiali</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">Protezione Civile - Radar DPC</p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              Il pannello usa il REST per sapere quale sia il dato piu recente disponibile e il WMS per comporre la mappa. I prodotti senza layer WMS certo restano consultabili come metadati.
             </p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{meteoHub?.note || "Verifica MeteoHub in attesa."}</p>
-            {!!meteoHub?.requests?.length && (
-              <ul className="mt-3 space-y-2 text-xs text-slate-300">
-                {meteoHub.requests.map((request) => (
-                  <li key={request.id || request.name} className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
-                    <span className="font-semibold text-slate-100">{request.name}</span>
-                    <span className="ml-2 text-slate-400">{request.status}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href={restUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20"
+              >
+                REST ultimo dato
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <a
+                href={capabilitiesUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20"
+              >
+                WMS capabilities
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+            {errorMessage && (
+              <p className="mt-3 rounded-md border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-xs text-orange-100">
+                {errorMessage}
+              </p>
             )}
+          </div>
+
+          <div className="rounded-lg border border-emergency-yellow/40 bg-emergency-yellow/10 p-4 text-xs leading-5 text-yellow-100">
+            Il radar DPC e un supporto previsionale/osservativo. Per decisioni operative resta centrale il bollettino ufficiale di allerta e il monitoraggio CFR per idrometria.
             <a
-              href={meteoHub?.sourceUrl || "https://meteohub.agenziaitaliameteo.it"}
+              href="https://dpc-radar.readthedocs.io/it/latest/index.html"
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-sky-200 hover:text-white"
+              className="mt-3 inline-flex items-center gap-2 font-semibold text-sky-100 hover:text-white"
             >
-              Apri MeteoHub
+              Documentazione DPC Radar
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -537,6 +655,7 @@ export default function ForecastPage() {
   const [days, setDays] = useState(3);
   const [payload, setPayload] = useState(null);
   const [radarPayload, setRadarPayload] = useState(null);
+  const [radarProduct, setRadarProduct] = useState("SRI");
   const [loading, setLoading] = useState(false);
   const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -566,23 +685,29 @@ export default function ForecastPage() {
     }
   }
 
-  async function loadRadar() {
-    if (!coordinatesValid) return;
+  async function loadRadar(productId = radarProduct) {
     setRadarLoading(true);
     try {
-      const params = new URLSearchParams({ lat: String(activeLat), lng: String(activeLng) });
+      const params = new URLSearchParams({ product: productId });
       const response = await fetch("/api/radar?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
       setRadarPayload(data);
     } catch {
       setRadarPayload({
         fetchedAt: new Date().toISOString(),
-        openMeteo: null,
-        meteoHub: { available: false, note: "Radar non raggiungibile in questo momento." }
+        product: RADAR_PRODUCTS_FALLBACK.find((item) => item.id === productId) || RADAR_PRODUCTS_FALLBACK[0],
+        products: RADAR_PRODUCTS_FALLBACK,
+        lastProduct: null,
+        errors: [{ source: "DPC Radar", message: "Radar DPC non raggiungibile in questo momento." }]
       });
     } finally {
       setRadarLoading(false);
     }
+  }
+
+  function handleRadarProductChange(productId) {
+    setRadarProduct(productId);
+    loadRadar(productId);
   }
 
   useEffect(() => {
@@ -593,10 +718,10 @@ export default function ForecastPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadForecast();
-      loadRadar();
+      loadRadar(radarProduct);
     }, DATA_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [activeLat, activeLng, days, coordinatesValid]);
+  }, [activeLat, activeLng, days, coordinatesValid, radarProduct]);
 
   return (
     <>
@@ -631,7 +756,7 @@ export default function ForecastPage() {
             setDays={setDays}
             onRefresh={() => {
               loadForecast();
-              loadRadar();
+              loadRadar(radarProduct);
             }}
             loading={loading || radarLoading}
           />
@@ -647,7 +772,13 @@ export default function ForecastPage() {
               <SummarySection payload={payload} />
               <ForecastCharts payload={payload} />
               <DailyTable payload={payload} />
-              <RadarSection radarPayload={radarPayload} loading={radarLoading} />
+              <RadarSection
+                radarPayload={radarPayload}
+                loading={radarLoading}
+                selectedProduct={radarProduct}
+                onProductChange={handleRadarProductChange}
+                onRefresh={() => loadRadar(radarProduct)}
+              />
             </>
           ) : (
             <section className="panel flex min-h-60 items-center justify-center p-6 text-sm text-slate-400">
@@ -668,7 +799,7 @@ export default function ForecastPage() {
           </section>
 
           <footer className="pb-6 text-xs text-slate-500">
-            Fonte previsionale: Open-Meteo. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+            Fonte previsionale: Open-Meteo. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
           </footer>
         </div>
       </main>
