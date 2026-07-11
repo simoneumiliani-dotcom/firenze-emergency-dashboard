@@ -12,6 +12,16 @@ const SERVICES_DOCS_URL = "https://dpc-radar.readthedocs.io/it/latest/services.h
 
 const FALLBACK_PRODUCTS = [
   {
+    id: "VMI",
+    apiType: "VMI",
+    label: "Massima intensita verticale",
+    shortLabel: "VMI",
+    unit: "dBZ",
+    cadence: "5 min",
+    wmsLayer: "radar:vmi",
+    description: "Massimo valore di riflettivita presente sulla verticale."
+  },
+  {
     id: "SRI",
     apiType: "SRI",
     label: "Intensita pioggia",
@@ -70,16 +80,6 @@ const FALLBACK_PRODUCTS = [
     cadence: "60 min",
     wmsLayer: "radar:cum24",
     description: "Cumulata da rete a terra interpolata su ventiquattro ore."
-  },
-  {
-    id: "VMI",
-    apiType: "VMI",
-    label: "Massima intensita verticale",
-    shortLabel: "VMI",
-    unit: "dBZ",
-    cadence: "5 min",
-    wmsLayer: "radar:vmi",
-    description: "Massimo valore di riflettivita presente sulla verticale."
   },
   {
     id: "POH",
@@ -162,6 +162,25 @@ function parseDpcWsMessage(data) {
   }
 }
 
+function buildWmsPreviewUrl(product) {
+  if (!product?.wmsLayer) return WMS_CAPABILITIES_URL;
+  const params = new URLSearchParams({
+    service: "WMS",
+    version: "1.1.1",
+    request: "GetMap",
+    layers: product.wmsLayer,
+    styles: "",
+    format: "image/png",
+    transparent: "true",
+    tiled: "true",
+    width: "768",
+    height: "768",
+    srs: "EPSG:3857",
+    bbox: "1046400,5190000,1402600,5590000"
+  });
+  return (product.wmsBaseUrl || DPC_WMS_URL) + "?" + params.toString();
+}
+
 function ToggleButton({ product, active, onClick }) {
   return (
     <button
@@ -184,12 +203,13 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
     return source.filter((product) => product.wmsLayer);
   }, [radarPayload?.products]);
   const currentProduct = products.find((product) => product.id === selectedProduct || product.apiType === selectedProduct) || products[0];
-  const [activeLayers, setActiveLayers] = useState(["SRI"]);
+  const [activeLayers, setActiveLayers] = useState(["VMI"]);
   const [wsStatus, setWsStatus] = useState("non connesso");
   const [liveEvents, setLiveEvents] = useState({});
   const lastProduct = radarPayload?.lastProduct;
   const rawDownloadUrl = radarPayload?.rawDownload?.url;
-  const restUrl = currentProduct?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=SRI";
+  const restUrl = currentProduct?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=VMI";
+  const wmsPreviewUrl = buildWmsPreviewUrl(currentProduct);
   const errors = radarPayload?.errors || [];
 
   useEffect(() => {
@@ -299,7 +319,9 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
                 />
               ))}
             </div>
-            <p className="mt-3 text-xs text-slate-500">Puoi tenere attivi fino a 4 layer. Il primo layer resta sempre visibile per evitare una mappa vuota.</p>
+            <p className="mt-3 text-xs text-slate-500">
+              Puoi tenere attivi fino a 4 layer. VMI e IR sono i layer piu utili per verificare visivamente il servizio; SRI puo risultare trasparente in assenza di precipitazioni.
+            </p>
           </div>
 
           <div className="h-[28rem] overflow-hidden rounded-lg border border-emergency-line bg-[#07101d] sm:h-[34rem]">
@@ -392,6 +414,10 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
               </a>
               <a href={WMS_CAPABILITIES_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
                 WMS capabilities
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <a href={wmsPreviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
+                Test WMS diretto
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
               {rawDownloadUrl && (

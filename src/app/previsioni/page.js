@@ -690,7 +690,7 @@ export default function ForecastPage() {
   const [days, setDays] = useState(3);
   const [payload, setPayload] = useState(null);
   const [radarPayload, setRadarPayload] = useState(null);
-  const [radarProduct, setRadarProduct] = useState("SRI");
+  const [radarProduct, setRadarProduct] = useState("VMI");
   const [loading, setLoading] = useState(false);
   const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState(null);

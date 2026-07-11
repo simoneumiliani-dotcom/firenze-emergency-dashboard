@@ -10,6 +10,17 @@ const DPC_WEB_ORIGIN = "https://radar.protezionecivile.it";
 
 const PRODUCTS = [
   {
+    id: "VMI",
+    apiType: "VMI",
+    label: "Massima intensita verticale",
+    shortLabel: "VMI",
+    description: "Prodotto radar VMI usato per leggere nuclei convettivi e precipitazioni intense.",
+    cadence: "5 min",
+    unit: "dBZ",
+    wmsLayer: "radar:vmi",
+    mapEnabled: true
+  },
+  {
     id: "SRI",
     apiType: "SRI",
     label: "Intensita pioggia",
@@ -73,17 +84,6 @@ const PRODUCTS = [
     cadence: "60 min",
     unit: "mm",
     wmsLayer: "radar:cum24",
-    mapEnabled: true
-  },
-  {
-    id: "VMI",
-    apiType: "VMI",
-    label: "Massima intensita verticale",
-    shortLabel: "VMI",
-    description: "Prodotto radar VMI usato per leggere nuclei convettivi e precipitazioni intense.",
-    cadence: "5 min",
-    unit: "dBZ",
-    wmsLayer: "radar:vmi",
     mapEnabled: true
   },
   {
@@ -225,7 +225,7 @@ function serializeProduct(product) {
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const requestedProduct = String(searchParams.get("product") || "SRI").toUpperCase();
+  const requestedProduct = String(searchParams.get("product") || "VMI").toUpperCase();
   const product = PRODUCTS.find((item) => item.id === requestedProduct || item.apiType === requestedProduct) || PRODUCTS[0];
   const errors = [];
   let lastProduct = null;
