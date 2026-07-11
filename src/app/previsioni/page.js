@@ -26,6 +26,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -82,6 +83,35 @@ function formatDay(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
   return date.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function getItalianDayKey(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
+}
+
+function formatSelectedDay(value) {
+  const date = new Date(value + "T12:00:00");
+  if (!Number.isFinite(date.getTime())) return value;
+  return date.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+}
+
+function buildWindDayRows(rows, dayKey) {
+  const byHour = new Map(
+    rows
+      .filter((row) => getItalianDayKey(row.date) === dayKey)
+      .map((row) => [new Date(row.date).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }), row])
+  );
+
+  return Array.from({ length: 25 }, (_, index) => {
+    const label = String(index).padStart(2, "0") + ":00";
+    const source = byHour.get(label);
+    return {
+      hour: label,
+      windGust: source?.windGust ?? null
+    };
+  });
 }
 
 function weatherLabel(code) {
@@ -270,11 +300,23 @@ function SummarySection({ payload }) {
 function ForecastCharts({ payload }) {
   const primary = getPrimarySource(payload);
   const [rainView, setRainView] = useState("hourly");
+  const [windDayIndex, setWindDayIndex] = useState(0);
   const rows = useMemo(() => buildChartRows(primary), [primary]);
   const dailyRows = useMemo(() => buildDailyRows(primary), [primary]);
+  const windDayKeys = useMemo(() => [...new Set(rows.map((row) => getItalianDayKey(row.date)).filter(Boolean))].slice(0, 7), [rows]);
+  const selectedWindDayKey = windDayKeys[Math.min(windDayIndex, Math.max(windDayKeys.length - 1, 0))] || windDayKeys[0];
+  const windRows = useMemo(() => buildWindDayRows(rows, selectedWindDayKey), [rows, selectedWindDayKey]);
+  const windMax = Math.max(0, ...windRows.map((row) => Number(row.windGust) || 0));
+  const windDomainMax = Math.max(100, Math.ceil((windMax + 10) / 10) * 10);
   const rainRows = rainView === "hourly"
     ? rows.map((row) => ({ ...row, label: row.hour }))
     : dailyRows.map((row) => ({ ...row, label: row.label, probability: row.precipitationProbability }));
+
+  useEffect(() => {
+    if (windDayIndex > Math.max(windDayKeys.length - 1, 0)) {
+      setWindDayIndex(Math.max(windDayKeys.length - 1, 0));
+    }
+  }, [windDayIndex, windDayKeys.length]);
 
   if (!rows.length) return null;
 
@@ -322,28 +364,55 @@ function ForecastCharts({ payload }) {
       </div>
 
       <div className="panel p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="section-title">Temperatura e raffiche</h2>
-            <p className="muted">Lettura rapida per soglie operative locali.</p>
+            <h2 className="section-title">Raffiche previste</h2>
+            <p className="muted">Lettura giornaliera con soglie operative locali.</p>
           </div>
-          <Wind className="h-5 w-5 text-sky-300" />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWindDayIndex((current) => Math.max(0, current - 1))}
+              disabled={windDayIndex <= 0}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-emergency-line bg-emergency-panel2 text-sm font-semibold text-slate-200 transition hover:border-sky-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Giorno precedente"
+            >
+              {"<"}
+            </button>
+            <div className="min-w-44 rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2 text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Giorno</p>
+              <p className="text-sm font-semibold capitalize text-slate-100">{formatSelectedDay(selectedWindDayKey)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWindDayIndex((current) => Math.min(windDayKeys.length - 1, current + 1))}
+              disabled={windDayIndex >= windDayKeys.length - 1}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-emergency-line bg-emergency-panel2 text-sm font-semibold text-slate-200 transition hover:border-sky-400/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Giorno successivo"
+            >
+              {">"}
+            </button>
+            <Wind className="hidden h-5 w-5 text-sky-300 sm:block" />
+          </div>
         </div>
-        <div className="overflow-x-auto pb-2">
-          <div className="h-72 min-w-[48rem]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
-                <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
-                <XAxis dataKey="hour" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <YAxis yAxisId="left" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
-                <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temperatura C" stroke="#fb923c" strokeWidth={2} dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="windGust" name="Raffiche km/h" stroke="#a78bfa" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={windRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
+              <XAxis dataKey="hour" stroke="#94a3b8" interval={2} tick={{ fill: "#94a3b8", fontSize: 12 }} />
+              <YAxis domain={[0, windDomainMax]} stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit=" km/h" />
+              <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
+              <ReferenceLine y={50} stroke="#facc15" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
+              <ReferenceLine y={70} stroke="#fb923c" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
+              <ReferenceLine y={90} stroke="#ef4444" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
+              <Line type="monotone" dataKey="windGust" name="Raffiche km/h" stroke="#a78bfa" strokeWidth={3} dot={{ r: 3, fill: "#a78bfa", stroke: "#ddd6fe", strokeWidth: 1 }} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold">
+          <span className="inline-flex items-center gap-2 text-yellow-200"><span className="h-1 w-8 rounded-full bg-yellow-400" />soglia 50 km/h</span>
+          <span className="inline-flex items-center gap-2 text-orange-200"><span className="h-1 w-8 rounded-full bg-orange-400" />soglia 70 km/h</span>
+          <span className="inline-flex items-center gap-2 text-red-200"><span className="h-1 w-8 rounded-full bg-red-500" />soglia 90 km/h</span>
         </div>
       </div>
     </section>
