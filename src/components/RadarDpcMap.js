@@ -128,7 +128,7 @@ const FALLBACK_PRODUCTS = [
     shortLabel: "TMP",
     unit: "C",
     cadence: "60 min",
-    wmsLayer: "radar:temp",
+    wmsLayer: "radar:tmp",
     description: "Mappa temperature ottenuta da rete termometrica a terra."
   },
   {
@@ -142,6 +142,159 @@ const FALLBACK_PRODUCTS = [
     description: "Ubicazione e stato operativo dei siti radar."
   }
 ];
+
+const RADAR_LEGENDS = {
+  SRI: {
+    title: "Intensita pioggia SRI",
+    unit: "mm/h",
+    note: "Scala operativa indicativa per interpretare l'intensita istantanea della precipitazione.",
+    items: [
+      { label: "0.1 - 1", color: "#8fd3ff" },
+      { label: "1 - 5", color: "#42d77d" },
+      { label: "5 - 10", color: "#fff45a" },
+      { label: "10 - 20", color: "#ff9f2f" },
+      { label: "20 - 50", color: "#f0455d" },
+      { label: "> 50", color: "#b225b7" }
+    ]
+  },
+  SRT1: {
+    title: "Cumulata pioggia 1h",
+    unit: "mm",
+    note: "Cumulata stimata nell'ultima ora.",
+    items: [
+      { label: "0 - 1", color: "#d7f2ff" },
+      { label: "1 - 5", color: "#8fd3ff" },
+      { label: "5 - 15", color: "#42d77d" },
+      { label: "15 - 30", color: "#fff45a" },
+      { label: "30 - 60", color: "#ff9f2f" },
+      { label: "> 60", color: "#f0455d" }
+    ]
+  },
+  CUM3: {
+    title: "Cumulata pioggia 3h",
+    unit: "mm",
+    note: "Cumulata stimata sulle ultime 3 ore.",
+    items: [
+      { label: "0 - 5", color: "#d7f2ff" },
+      { label: "5 - 15", color: "#8fd3ff" },
+      { label: "15 - 30", color: "#42d77d" },
+      { label: "30 - 50", color: "#fff45a" },
+      { label: "50 - 80", color: "#ff9f2f" },
+      { label: "> 80", color: "#f0455d" }
+    ]
+  },
+  CUM6: {
+    title: "Cumulata pioggia 6h",
+    unit: "mm",
+    note: "Cumulata stimata sulle ultime 6 ore.",
+    items: [
+      { label: "0 - 5", color: "#d7f2ff" },
+      { label: "5 - 20", color: "#8fd3ff" },
+      { label: "20 - 40", color: "#42d77d" },
+      { label: "40 - 70", color: "#fff45a" },
+      { label: "70 - 100", color: "#ff9f2f" },
+      { label: "> 100", color: "#f0455d" }
+    ]
+  },
+  CUM12: {
+    title: "Cumulata pioggia 12h",
+    unit: "mm",
+    note: "Cumulata stimata sulle ultime 12 ore.",
+    items: [
+      { label: "0 - 10", color: "#d7f2ff" },
+      { label: "10 - 30", color: "#8fd3ff" },
+      { label: "30 - 60", color: "#42d77d" },
+      { label: "60 - 100", color: "#fff45a" },
+      { label: "100 - 150", color: "#ff9f2f" },
+      { label: "> 150", color: "#f0455d" }
+    ]
+  },
+  CUM24: {
+    title: "Cumulata pioggia 24h",
+    unit: "mm",
+    note: "Cumulata stimata sulle ultime 24 ore.",
+    items: [
+      { label: "0 - 10", color: "#d7f2ff" },
+      { label: "10 - 30", color: "#8fd3ff" },
+      { label: "30 - 60", color: "#42d77d" },
+      { label: "60 - 100", color: "#fff45a" },
+      { label: "100 - 200", color: "#ff9f2f" },
+      { label: "> 200", color: "#f0455d" }
+    ]
+  },
+  VMI: {
+    title: "Riflettivita VMI",
+    unit: "dBZ",
+    note: "Valori piu alti indicano nuclei convettivi e precipitazioni piu intense.",
+    items: [
+      { label: "5 - 20", color: "#8fd3ff" },
+      { label: "20 - 35", color: "#42d77d" },
+      { label: "35 - 45", color: "#fff45a" },
+      { label: "45 - 55", color: "#ff9f2f" },
+      { label: "> 55", color: "#f0455d" }
+    ]
+  },
+  TEMP: {
+    title: "Temperatura",
+    unit: "C",
+    note: "Layer termico da rete a terra interpolata. Se resta vuoto, usa Test WMS diretto per verificare la disponibilita del layer DPC.",
+    items: [
+      { label: "< 0", color: "#7dd3fc" },
+      { label: "0 - 10", color: "#38bdf8" },
+      { label: "10 - 20", color: "#22c55e" },
+      { label: "20 - 30", color: "#facc15" },
+      { label: "30 - 38", color: "#fb923c" },
+      { label: "> 38", color: "#ef4444" }
+    ]
+  },
+  POH: {
+    title: "Probabilita grandine",
+    unit: "%",
+    note: "Probabilita di grandine stimata dal prodotto POH.",
+    items: [
+      { label: "0 - 20", color: "#8fd3ff" },
+      { label: "20 - 40", color: "#42d77d" },
+      { label: "40 - 60", color: "#fff45a" },
+      { label: "60 - 80", color: "#ff9f2f" },
+      { label: "80 - 100", color: "#f0455d" }
+    ]
+  },
+  VIL: {
+    title: "Acqua integrata verticale",
+    unit: "kg/m2",
+    note: "Indicatore del contenuto d'acqua in colonna e della potenziale severita temporalesca.",
+    items: [
+      { label: "basso", color: "#8fd3ff" },
+      { label: "moderato", color: "#42d77d" },
+      { label: "alto", color: "#fff45a" },
+      { label: "molto alto", color: "#ff9f2f" },
+      { label: "estremo", color: "#f0455d" }
+    ]
+  },
+  ETM: {
+    title: "Echo top",
+    unit: "m",
+    note: "Altezza massima degli echi radar: utile per individuare celle convettive sviluppate.",
+    items: [
+      { label: "basso", color: "#8fd3ff" },
+      { label: "medio", color: "#42d77d" },
+      { label: "alto", color: "#fff45a" },
+      { label: "molto alto", color: "#ff9f2f" },
+      { label: "estremo", color: "#f0455d" }
+    ]
+  },
+  IR_108: {
+    title: "Canale IR 10.8",
+    unit: "K",
+    note: "Toni piu freddi indicano nubi piu alte e potenzialmente piu sviluppate.",
+    items: [
+      { label: "molto freddo", color: "#f8fafc" },
+      { label: "freddo", color: "#93c5fd" },
+      { label: "medio", color: "#64748b" },
+      { label: "caldo", color: "#475569" }
+    ]
+  }
+};
 
 function formatDateTime(value) {
   if (!value) return "ultimo disponibile";
@@ -194,6 +347,41 @@ function ToggleButton({ product, active, onClick }) {
       <span className="block font-semibold">{product.shortLabel || product.id}</span>
       <span>{product.label}</span>
     </button>
+  );
+}
+
+function RadarLegend({ product }) {
+  const legend = RADAR_LEGENDS[product?.id] || RADAR_LEGENDS[product?.apiType];
+  if (!legend) {
+    return (
+      <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
+        <p className="text-xs uppercase tracking-wide text-slate-500">Legenda</p>
+        <p className="mt-2 text-sm text-slate-300">Legenda non disponibile per questo prodotto.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Legenda</p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">{legend.title}</p>
+        </div>
+        <span className="rounded-md border border-emergency-line bg-emergency-panel px-2 py-1 text-xs font-semibold text-slate-300">
+          {legend.unit}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {legend.items.map((item) => (
+          <div key={item.label} className="flex items-center gap-2 text-xs text-slate-300">
+            <span className="h-3 w-8 rounded-full border border-white/20" style={{ backgroundColor: item.color }} />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{legend.note}</p>
+    </div>
   );
 }
 
@@ -384,6 +572,8 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
               </div>
             </div>
           </div>
+
+          <RadarLegend product={currentProduct} />
 
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Aggiornamenti live</p>

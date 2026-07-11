@@ -105,7 +105,7 @@ const PRODUCTS = [
     description: "Mappa temperature ottenuta da rete termometrica a terra.",
     cadence: "60 min",
     unit: "C",
-    wmsLayer: "radar:temp",
+    wmsLayer: "radar:tmp",
     mapEnabled: true
   },
   {
