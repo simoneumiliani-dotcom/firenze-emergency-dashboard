@@ -128,8 +128,9 @@ const FALLBACK_PRODUCTS = [
     shortLabel: "TMP",
     unit: "C",
     cadence: "60 min",
-    wmsLayer: "radar:tmp",
-    description: "Mappa temperature ottenuta da rete termometrica a terra."
+    wmsLayer: null,
+    mapEnabled: false,
+    description: "Prodotto temperatura disponibile via REST/download; layer WMS non confermato nelle capabilities pubbliche."
   },
   {
     id: "SITES",
@@ -388,7 +389,11 @@ function RadarLegend({ product }) {
 export default function RadarDpcMap({ radarPayload, loading, selectedProduct, onProductChange, onRefresh }) {
   const products = useMemo(() => {
     const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
-    return source.filter((product) => product.wmsLayer);
+    return source.filter((product) => product.wmsLayer && product.mapEnabled !== false);
+  }, [radarPayload?.products]);
+  const metadataOnlyProducts = useMemo(() => {
+    const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
+    return source.filter((product) => !product.wmsLayer || product.mapEnabled === false);
   }, [radarPayload?.products]);
   const currentProduct = products.find((product) => product.id === selectedProduct || product.apiType === selectedProduct) || products[0];
   const [activeLayers, setActiveLayers] = useState(["VMI"]);
@@ -597,6 +602,12 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
             <p className="mt-2 text-xs leading-5 text-slate-400">
               WMS/WMTS per la mappa, REST per conoscere l&apos;ultimo campione e scaricare il GeoTIFF grezzo quando disponibile.
             </p>
+            {!!metadataOnlyProducts.length && (
+              <div className="mt-3 rounded-md border border-emergency-orange/40 bg-emergency-orange/10 px-3 py-2 text-xs leading-5 text-orange-100">
+                Non mappati in WMS: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
+                Sono prodotti REST/download, ma non vengono mostrati sulla mappa finche il layer WMS non e confermato.
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <a href={restUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
                 REST ultimo dato

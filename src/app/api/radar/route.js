@@ -102,11 +102,11 @@ const PRODUCTS = [
     apiType: "TEMP",
     label: "Temperature",
     shortLabel: "TMP",
-    description: "Mappa temperature ottenuta da rete termometrica a terra.",
+    description: "Prodotto temperatura disponibile via REST/download; layer WMS non confermato nelle capabilities pubbliche.",
     cadence: "60 min",
     unit: "C",
-    wmsLayer: "radar:tmp",
-    mapEnabled: true
+    wmsLayer: null,
+    mapEnabled: false
   },
   {
     id: "POH",
