@@ -115,14 +115,37 @@ function buildWindDayRows(rows, dayKey) {
 }
 
 function weatherLabel(code) {
-  if (code === 0) return "Sereno";
-  if ([1, 2, 3].includes(code)) return "Variabile";
-  if ([45, 48].includes(code)) return "Nebbia";
-  if ([51, 53, 55, 56, 57].includes(code)) return "Pioviggine";
-  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "Pioggia";
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return "Neve";
-  if ([95, 96, 99].includes(code)) return "Temporali";
-  return "Meteo";
+  const labels = {
+    0: "Sereno",
+    1: "Poco nuvoloso",
+    2: "Parz. nuvoloso",
+    3: "Coperto",
+    45: "Nebbia",
+    48: "Nebbia gelata",
+    51: "Pioviggine debole",
+    53: "Pioviggine",
+    55: "Pioviggine intensa",
+    56: "Pioviggine gelata",
+    57: "Pioviggine gelata",
+    61: "Pioggia debole",
+    63: "Pioggia",
+    65: "Pioggia intensa",
+    66: "Pioggia gelata",
+    67: "Pioggia gelata",
+    71: "Neve debole",
+    73: "Neve",
+    75: "Neve intensa",
+    77: "Grani di neve",
+    80: "Rovesci deboli",
+    81: "Rovesci",
+    82: "Rovesci violenti",
+    85: "Rovesci neve",
+    86: "Rovesci neve",
+    95: "Temporale",
+    96: "Temporale grandine",
+    99: "Temporale grandine"
+  };
+  return labels[code] || "Meteo";
 }
 
 function highestHazard(sources) {
