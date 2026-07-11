@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   Cloud,
@@ -33,6 +34,15 @@ import {
 import AppNav from "@/components/AppNav";
 
 const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+const RadarDpcMap = dynamic(() => import("@/components/RadarDpcMap"), {
+  ssr: false,
+  loading: () => (
+    <section className="panel flex min-h-96 items-center justify-center p-6 text-sm text-slate-400">
+      Caricamento mappa Radar-DPC...
+    </section>
+  )
+});
 
 const MUNICIPALITIES = [
   { id: "firenze", name: "Firenze", lat: 43.7696, lng: 11.2558 },
@@ -797,7 +807,7 @@ export default function ForecastPage() {
               <SummarySection payload={payload} />
               <ForecastCharts payload={payload} />
               <DailyTable payload={payload} />
-              <RadarSection
+              <RadarDpcMap
                 radarPayload={radarPayload}
                 loading={radarLoading}
                 selectedProduct={radarProduct}

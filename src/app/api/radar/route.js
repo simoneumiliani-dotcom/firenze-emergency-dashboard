@@ -24,11 +24,55 @@ const PRODUCTS = [
     id: "SRT1",
     apiType: "SRT1",
     label: "Pioggia cumulata 1h",
-    shortLabel: "SRT1",
+    shortLabel: "SRT 1h",
     description: "Stima radar della pioggia cumulata nell'ultima ora.",
-    cadence: "30 min",
+    cadence: "5 min",
     unit: "mm",
     wmsLayer: "radar:srt_1",
+    mapEnabled: true
+  },
+  {
+    id: "CUM3",
+    apiType: "CUM3",
+    label: "Pioggia cumulata 3h",
+    shortLabel: "CUM 3h",
+    description: "Cumulata da rete a terra interpolata su tre ore.",
+    cadence: "60 min",
+    unit: "mm",
+    wmsLayer: "radar:cum3",
+    mapEnabled: true
+  },
+  {
+    id: "CUM6",
+    apiType: "CUM6",
+    label: "Pioggia cumulata 6h",
+    shortLabel: "CUM 6h",
+    description: "Cumulata da rete a terra interpolata su sei ore.",
+    cadence: "60 min",
+    unit: "mm",
+    wmsLayer: "radar:cum6",
+    mapEnabled: true
+  },
+  {
+    id: "CUM12",
+    apiType: "CUM12",
+    label: "Pioggia cumulata 12h",
+    shortLabel: "CUM 12h",
+    description: "Cumulata da rete a terra interpolata su dodici ore.",
+    cadence: "60 min",
+    unit: "mm",
+    wmsLayer: "radar:cum12",
+    mapEnabled: true
+  },
+  {
+    id: "CUM24",
+    apiType: "CUM24",
+    label: "Pioggia cumulata 24h",
+    shortLabel: "CUM 24h",
+    description: "Cumulata da rete a terra interpolata su ventiquattro ore.",
+    cadence: "60 min",
+    unit: "mm",
+    wmsLayer: "radar:cum24",
     mapEnabled: true
   },
   {
@@ -40,6 +84,28 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "dBZ",
     wmsLayer: "radar:vmi",
+    mapEnabled: true
+  },
+  {
+    id: "IR_108",
+    apiType: "IR_108",
+    label: "Copertura nuvolosa",
+    shortLabel: "IR 10.8",
+    description: "Prodotto satellitare derivato dal canale infrarosso 10.8.",
+    cadence: "5 min",
+    unit: "K",
+    wmsLayer: "radar:ir_108",
+    mapEnabled: true
+  },
+  {
+    id: "TEMP",
+    apiType: "TEMP",
+    label: "Temperature",
+    shortLabel: "TMP",
+    description: "Mappa temperature ottenuta da rete termometrica a terra.",
+    cadence: "60 min",
+    unit: "C",
+    wmsLayer: "radar:temp",
     mapEnabled: true
   },
   {
@@ -62,6 +128,28 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "kg/m2",
     wmsLayer: "radar:vil",
+    mapEnabled: true
+  },
+  {
+    id: "ETM",
+    apiType: "ETM",
+    label: "Echo top",
+    shortLabel: "ETM",
+    description: "Altezza massima delle precipitazioni rilevate dal radar.",
+    cadence: "5 min",
+    unit: "m",
+    wmsLayer: "radar:etm",
+    mapEnabled: true
+  },
+  {
+    id: "SITES",
+    apiType: "SITES",
+    label: "Siti radar",
+    shortLabel: "SITES",
+    description: "Ubicazione e stato operativo dei siti radar.",
+    cadence: "5 min",
+    unit: "stato",
+    wmsLayer: "radar:sites",
     mapEnabled: true
   }
 ];
