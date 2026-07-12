@@ -9,7 +9,9 @@ const ECMWF_ENDPOINT = "https://api.open-meteo.com/v1/ecmwf";
 
 const HOURLY = [
   "temperature_2m",
+  "apparent_temperature",
   "relative_humidity_2m",
+  "dew_point_2m",
   "precipitation_probability",
   "precipitation",
   "rain",
@@ -18,6 +20,10 @@ const HOURLY = [
   "snow_depth",
   "weather_code",
   "cloud_cover",
+  "cloud_cover_low",
+  "cloud_cover_mid",
+  "cloud_cover_high",
+  "visibility",
   "wind_speed_10m",
   "wind_direction_10m",
   "wind_gusts_10m",
@@ -186,14 +192,27 @@ function pick24HourSummaryFromHourly(hourly) {
   const sum = (items) => Number(items.reduce((total, value) => total + (Number(value) || 0), 0).toFixed(1));
   const max = (items) => Math.max(0, ...items.map((value) => Number(value) || 0));
   const validTemps = rows.map((row) => Number(row.temperature)).filter(Number.isFinite);
+  const validApparentTemps = rows.map((row) => Number(row.apparentTemperature)).filter(Number.isFinite);
+  const validHumidity = rows.map((row) => Number(row.humidity)).filter(Number.isFinite);
+  const validVisibility = rows.map((row) => Number(row.visibility)).filter(Number.isFinite);
+  const maxWindRow = rows
+    .filter((row) => Number.isFinite(Number(row.windGust)))
+    .sort((a, b) => Number(b.windGust) - Number(a.windGust))[0];
 
   return {
     rain24h: sum(rows.map((row) => row.precipitation)),
+    showers24h: sum(rows.map((row) => row.showers)),
     snow24h: sum(rows.map((row) => row.snowfall)),
+    maxSnowDepth: Number(max(rows.map((row) => row.snowDepth)).toFixed(1)),
     maxWindGust: Number(max(rows.map((row) => row.windGust)).toFixed(1)),
+    maxWindDirection: maxWindRow?.windDirection ?? null,
     maxPrecipitationProbability: Number(max(rows.map((row) => row.precipitationProbability)).toFixed(0)),
+    maxHumidity: validHumidity.length ? Number(Math.max(...validHumidity).toFixed(0)) : null,
+    minVisibility: validVisibility.length ? Number((Math.min(...validVisibility) / 1000).toFixed(1)) : null,
     minTemperature: validTemps.length ? Number(Math.min(...validTemps).toFixed(1)) : null,
-    maxTemperature: validTemps.length ? Number(Math.max(...validTemps).toFixed(1)) : null
+    maxTemperature: validTemps.length ? Number(Math.max(...validTemps).toFixed(1)) : null,
+    minApparentTemperature: validApparentTemps.length ? Number(Math.min(...validApparentTemps).toFixed(1)) : null,
+    maxApparentTemperature: validApparentTemps.length ? Number(Math.max(...validApparentTemps).toFixed(1)) : null
   };
 }
 
@@ -218,14 +237,21 @@ function normalizeSource(source) {
     time,
     hour: String(time).slice(11, 16),
     temperature: getArray(payload, "hourly", "temperature_2m")[index] ?? null,
+    apparentTemperature: getArray(payload, "hourly", "apparent_temperature")[index] ?? null,
     humidity: getArray(payload, "hourly", "relative_humidity_2m")[index] ?? null,
+    dewPoint: getArray(payload, "hourly", "dew_point_2m")[index] ?? null,
     precipitationProbability: getArray(payload, "hourly", "precipitation_probability")[index] ?? null,
     precipitation: getArray(payload, "hourly", "precipitation")[index] ?? null,
     rain: getArray(payload, "hourly", "rain")[index] ?? null,
+    showers: getArray(payload, "hourly", "showers")[index] ?? null,
     snowfall: getArray(payload, "hourly", "snowfall")[index] ?? null,
     snowDepth: getArray(payload, "hourly", "snow_depth")[index] ?? null,
     weatherCode: getArray(payload, "hourly", "weather_code")[index] ?? null,
     cloudCover: getArray(payload, "hourly", "cloud_cover")[index] ?? null,
+    cloudCoverLow: getArray(payload, "hourly", "cloud_cover_low")[index] ?? null,
+    cloudCoverMid: getArray(payload, "hourly", "cloud_cover_mid")[index] ?? null,
+    cloudCoverHigh: getArray(payload, "hourly", "cloud_cover_high")[index] ?? null,
+    visibility: getArray(payload, "hourly", "visibility")[index] ?? null,
     windSpeed: getArray(payload, "hourly", "wind_speed_10m")[index] ?? null,
     windGust: getArray(payload, "hourly", "wind_gusts_10m")[index] ?? null,
     windDirection: getArray(payload, "hourly", "wind_direction_10m")[index] ?? null,

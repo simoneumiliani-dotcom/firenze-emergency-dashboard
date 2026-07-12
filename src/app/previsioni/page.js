@@ -137,7 +137,8 @@ function buildWindDayRows(rows, dayKey) {
     const source = byHour.get(label);
     return {
       hour: label,
-      windGust: source?.windGust ?? null
+      windGust: source?.windGust ?? null,
+      windDirection: source?.windDirection ?? null
     };
   });
 }
@@ -176,6 +177,37 @@ function weatherLabel(code) {
   return labels[code] || "Meteo";
 }
 
+function smartWeatherLabel(day) {
+  const probability = Number(day.precipitationProbability) || 0;
+  const precipitation = Number(day.precipitation) || 0;
+  const snowfall = Number(day.snowfall) || 0;
+  const windGust = Number(day.windGustMax) || 0;
+
+  if (snowfall > 0) return "Neve";
+  if ([95, 96, 99].includes(day.weatherCode)) return "Temporale";
+  if (precipitation >= 20) return "Pioggia intensa";
+  if (precipitation >= 5 || probability >= 60) return "Pioggia";
+  if ([45, 48].includes(day.weatherCode)) return "Nebbia";
+  if (windGust >= 70) return "Vento forte";
+  if ([1, 2].includes(day.weatherCode) && probability < 30) return "Variabile";
+  return weatherLabel(day.weatherCode);
+}
+
+function formatMetric(value, unit = "", decimals = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "n.d.";
+  const formatted = Number(number.toFixed(decimals));
+  if (unit === "%") return formatted + "%";
+  return formatted + (unit ? " " + unit : "");
+}
+
+function windDirectionLabel(degrees) {
+  const number = Number(degrees);
+  if (!Number.isFinite(number)) return "n.d.";
+  const directions = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+  return directions[Math.round(number / 45) % 8];
+}
+
 function highestHazard(sources) {
   const order = { Verde: 0, Giallo: 1, Arancione: 2, Rosso: 3 };
   const hazards = sources.flatMap((source) => source.hazards || []);
@@ -192,11 +224,18 @@ function buildChartRows(primary) {
     hour: point.hour,
     date: point.time,
     precipitation: point.precipitation ?? 0,
+    rain: point.rain ?? 0,
+    showers: point.showers ?? 0,
     temperature: point.temperature,
+    apparentTemperature: point.apparentTemperature,
     windGust: point.windGust,
+    windDirection: point.windDirection,
     probability: point.precipitationProbability,
     humidity: point.humidity,
-    snow: point.snowfall ?? 0
+    visibility: point.visibility,
+    cloudCover: point.cloudCover,
+    snow: point.snowfall ?? 0,
+    snowDepth: point.snowDepth ?? 0
   }));
   return rows;
 }
@@ -209,8 +248,10 @@ function buildDailyRows(primary) {
     temperatureMax: day.temperatureMax,
     temperatureMin: day.temperatureMin,
     precipitation: day.precipitation ?? 0,
+    rain: day.rain ?? 0,
     precipitationProbability: day.precipitationProbability ?? 0,
     windGustMax: day.windGustMax ?? day.windSpeedMax ?? null,
+    windDirection: day.windDirection ?? null,
     snowfall: day.snowfall ?? 0
   }));
 }
@@ -349,6 +390,7 @@ function SummarySection({ payload }) {
   const primary = getPrimarySource(payload);
   const hazard = highestHazard(payload?.sources || []);
   const summary = primary?.summary24h || {};
+  const hasSnowSignal = Number(summary.snow24h) > 0 || Number(summary.maxSnowDepth) > 0;
 
   return (
     <section>
@@ -364,12 +406,28 @@ function SummarySection({ payload }) {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={CloudRain} label="Pioggia 24h" value={(summary.rain24h ?? "n.d.") + " mm"} detail="Soglie: 15 / 30 / 50 mm" />
-          <MetricCard icon={Wind} label="Raffica max" value={(summary.maxWindGust ?? "n.d.") + " km/h"} detail="Soglie: 50 / 70 / 90 km/h" />
-          <MetricCard icon={Thermometer} label="Temperatura" value={(summary.minTemperature ?? "n.d.") + " / " + (summary.maxTemperature ?? "n.d.") + " C"} detail="Minima e massima su 24 ore" />
-          <MetricCard icon={Snowflake} label="Neve" value={(summary.snow24h ?? "n.d.") + " cm"} detail="Indicatore utile per Appennino e quote alte" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <MetricCard icon={CloudRain} label="Pioggia 24h" value={formatMetric(summary.rain24h, "mm")} detail={"Rovesci: " + formatMetric(summary.showers24h, "mm")} />
+          <MetricCard icon={CloudRain} label="Prob. pioggia" value={formatMetric(summary.maxPrecipitationProbability, "%", 0)} detail="Massima probabilita oraria" />
+          <MetricCard icon={Wind} label="Raffica max" value={formatMetric(summary.maxWindGust, "km/h")} detail={"Direzione: " + windDirectionLabel(summary.maxWindDirection)} />
+          <MetricCard icon={Thermometer} label="Percepita" value={formatMetric(summary.minApparentTemperature, "C") + " / " + formatMetric(summary.maxApparentTemperature, "C")} detail="Minima e massima percepita" />
+          <MetricCard icon={Cloud} label="Umidita max" value={formatMetric(summary.maxHumidity, "%", 0)} detail="Indicatore afa/nebbia" />
+          <MetricCard icon={Crosshair} label="Visibilita min" value={formatMetric(summary.minVisibility, "km")} detail="Utile per nebbia e rovesci" />
         </div>
+
+        {hasSnowSignal && (
+          <div className="mt-4 rounded-lg border border-sky-300/40 bg-sky-400/10 p-3 text-sm text-sky-100">
+            <div className="flex items-start gap-3">
+              <Snowflake className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Segnale neve/Appennino</p>
+                <p className="mt-1 text-xs leading-5 text-sky-100/80">
+                  Neve prevista 24h: {formatMetric(summary.snow24h, "cm")}. Altezza neve massima stimata: {formatMetric(summary.maxSnowDepth, "m")}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -386,6 +444,9 @@ function ForecastCharts({ payload }) {
   const windRows = useMemo(() => buildWindDayRows(rows, selectedWindDayKey), [rows, selectedWindDayKey]);
   const windMax = Math.max(0, ...windRows.map((row) => Number(row.windGust) || 0));
   const windDomainMax = Math.max(100, Math.ceil((windMax + 10) / 10) * 10);
+  const windPeakRow = windRows
+    .filter((row) => Number.isFinite(Number(row.windGust)))
+    .sort((a, b) => Number(b.windGust) - Number(a.windGust))[0];
   const rainRows = rainView === "hourly"
     ? rows.slice(0, 24).map((row) => ({ ...row, label: row.hour }))
     : dailyRows.map((row) => ({ ...row, label: row.label, probability: row.precipitationProbability }));
@@ -502,6 +563,7 @@ function ForecastCharts({ payload }) {
           <span className="inline-flex items-center gap-2 text-yellow-200"><span className="h-1 w-8 rounded-full bg-yellow-400" />soglia 50 km/h</span>
           <span className="inline-flex items-center gap-2 text-orange-200"><span className="h-1 w-8 rounded-full bg-orange-400" />soglia 70 km/h</span>
           <span className="inline-flex items-center gap-2 text-red-200"><span className="h-1 w-8 rounded-full bg-red-500" />soglia 90 km/h</span>
+          <span className="inline-flex items-center gap-2 text-sky-200">direzione raffica max: {windDirectionLabel(windPeakRow?.windDirection)}</span>
         </div>
       </div>
     </section>
@@ -517,7 +579,7 @@ function DailyTable({ payload }) {
     <section className="panel overflow-hidden">
       <div className="border-b border-emergency-line px-4 py-3">
         <h2 className="section-title">Sintesi giornaliera</h2>
-        <p className="muted">Vista grafica Open-Meteo con temperatura massima, minima e probabilita di pioggia.</p>
+        <p className="muted">Vista grafica Open-Meteo con scenario dedotto da codice meteo, pioggia, neve, vento e probabilita.</p>
       </div>
       <div className="overflow-x-auto p-4">
         <div className="min-w-[48rem]">
@@ -528,6 +590,7 @@ function DailyTable({ payload }) {
               const dateLabel = Number.isFinite(date.getTime())
                 ? date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
                 : day.day;
+              const scenarioLabel = smartWeatherLabel(day);
 
               return (
                 <article key={day.day} className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-4 text-center">
@@ -536,13 +599,19 @@ function DailyTable({ payload }) {
                   <div className="mt-4 flex justify-center">
                     <WeatherIcon code={day.weatherCode} />
                   </div>
-                  <p className="mt-3 text-sm text-slate-300">{weatherLabel(day.weatherCode)}</p>
+                  <p className="mt-3 text-sm font-semibold text-slate-200">{scenarioLabel}</p>
                   <p className="mt-3 text-sm text-slate-300">
                     <CloudRain className="mr-1 inline h-4 w-4 text-sky-300" />
-                    {day.precipitationProbability ?? "n.d."}%
+                    {day.precipitationProbability ?? "n.d."}% - {formatMetric(day.precipitation, "mm")}
                   </p>
                   <p className="mt-3 text-2xl font-semibold text-rose-300">max {day.temperatureMax ?? "n.d."} C</p>
                   <p className="mt-2 text-xl font-semibold text-sky-300">min {day.temperatureMin ?? "n.d."} C</p>
+                  <p className="mt-3 text-xs text-slate-400">
+                    Raffica {formatMetric(day.windGustMax, "km/h")} - {windDirectionLabel(day.windDirection)}
+                  </p>
+                  {Number(day.snowfall) > 0 && (
+                    <p className="mt-2 text-xs font-semibold text-sky-200">Neve {formatMetric(day.snowfall, "cm")}</p>
+                  )}
                   <div className="mt-3 flex items-center justify-center gap-2 text-xs text-slate-400">
                     <Moon className="h-4 w-4 text-yellow-200" />
                     notte
@@ -997,7 +1066,7 @@ export default function ForecastPage() {
               <div>
                 <h2 className="section-title">Soglie locali usate</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Le soglie sono indicatori previsionali di supporto: pioggia 24h a 15/30/50 mm, raffiche a 50/70/90 km/h, neve 24h da 10 cm. Non sostituiscono il bollettino ufficiale di criticita.
+                  Le soglie sono indicatori previsionali di supporto: scenario pioggia 24h a 15/30/50 mm, grafico pioggia a 10/50/100 mm, raffiche a 50/70/90 km/h, neve 24h da 10 cm. Non sostituiscono il bollettino ufficiale di criticita.
                 </p>
               </div>
             </div>
