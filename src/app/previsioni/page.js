@@ -64,6 +64,34 @@ const MUNICIPALITIES = [
   { id: "vicchio", name: "Vicchio", lat: 43.9337, lng: 11.4654 }
 ];
 
+const FORECAST_PROFILES = [
+  {
+    id: "recommended",
+    label: "Consigliato",
+    detail: "ARPAE 0-72h, poi ICON/ECMWF con fallback best match"
+  },
+  {
+    id: "arpae",
+    label: "ItaliaMeteo ARPAE",
+    detail: "ICON-2I, alta risoluzione, breve termine"
+  },
+  {
+    id: "icon",
+    label: "DWD ICON",
+    detail: "Buon compromesso fino a 7 giorni"
+  },
+  {
+    id: "ecmwf",
+    label: "ECMWF IFS/AIFS",
+    detail: "Tendenza medio termine"
+  },
+  {
+    id: "best_match",
+    label: "Open-Meteo best match",
+    detail: "Selezione automatica Open-Meteo"
+  }
+];
+
 const HAZARD_STYLE = {
   Verde: "border-emergency-green/50 bg-emergency-green/10 text-green-100",
   Giallo: "border-emergency-yellow/60 bg-emergency-yellow/10 text-yellow-100",
@@ -156,7 +184,7 @@ function highestHazard(sources) {
 }
 
 function getPrimarySource(payload) {
-  return payload?.sources?.find((source) => source.id === "open-meteo") || payload?.sources?.[0] || null;
+  return payload?.sources?.find((source) => source.primary) || payload?.sources?.[0] || null;
 }
 
 function buildChartRows(primary) {
@@ -212,7 +240,20 @@ function MetricCard({ icon: Icon, label, value, detail }) {
   );
 }
 
-function ForecastControls({ selectedId, setSelectedId, custom, setCustom, days, setDays, onRefresh, loading }) {
+function ForecastControls({
+  selectedId,
+  setSelectedId,
+  custom,
+  setCustom,
+  days,
+  setDays,
+  forecastProfile,
+  setForecastProfile,
+  onRefresh,
+  loading
+}) {
+  const selectedProfile = FORECAST_PROFILES.find((profile) => profile.id === forecastProfile) || FORECAST_PROFILES[0];
+
   function selectMunicipality(id) {
     setSelectedId(id);
     const item = MUNICIPALITIES.find((municipality) => municipality.id === id);
@@ -221,7 +262,7 @@ function ForecastControls({ selectedId, setSelectedId, custom, setCustom, days, 
 
   return (
     <section className="panel p-4">
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr_auto] lg:items-end">
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.95fr_auto] xl:items-end">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Comune</span>
           <select
@@ -255,6 +296,20 @@ function ForecastControls({ selectedId, setSelectedId, custom, setCustom, days, 
             />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Fonte meteo</span>
+          <select
+            value={forecastProfile}
+            onChange={(event) => setForecastProfile(event.target.value)}
+            className="min-h-11 rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+          >
+            {FORECAST_PROFILES.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.label}</option>
+            ))}
+          </select>
+          <span className="text-[11px] leading-4 text-slate-500">{selectedProfile.detail}</span>
+        </label>
 
         <div className="grid grid-cols-[1fr_auto] gap-3">
           <label className="flex flex-col gap-1">
@@ -780,6 +835,7 @@ export default function ForecastPage() {
   const [selectedId, setSelectedId] = useState("firenze");
   const [custom, setCustom] = useState({ lat: "43.7696", lng: "11.2558" });
   const [days, setDays] = useState(3);
+  const [forecastProfile, setForecastProfile] = useState("recommended");
   const [payload, setPayload] = useState(null);
   const [radarPayload, setRadarPayload] = useState(null);
   const [radarProduct, setRadarProduct] = useState("VMI");
@@ -791,6 +847,7 @@ export default function ForecastPage() {
   const activeLat = Number(custom.lat);
   const activeLng = Number(custom.lng);
   const coordinatesValid = Number.isFinite(activeLat) && Number.isFinite(activeLng) && Math.abs(activeLat) <= 90 && Math.abs(activeLng) <= 180;
+  const primarySource = getPrimarySource(payload);
 
   async function loadForecast() {
     if (!coordinatesValid) {
@@ -800,7 +857,12 @@ export default function ForecastPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ lat: String(activeLat), lng: String(activeLng), days: String(days) });
+      const params = new URLSearchParams({
+        lat: String(activeLat),
+        lng: String(activeLng),
+        days: String(days),
+        profile: forecastProfile
+      });
       const response = await fetch("/api/forecast?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
       setPayload(data);
@@ -838,9 +900,12 @@ export default function ForecastPage() {
   }
 
   useEffect(() => {
-    loadForecast();
     loadRadar();
   }, []);
+
+  useEffect(() => {
+    loadForecast();
+  }, [activeLat, activeLng, days, coordinatesValid, forecastProfile]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -848,7 +913,7 @@ export default function ForecastPage() {
       loadRadar(radarProduct);
     }, DATA_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [activeLat, activeLng, days, coordinatesValid, radarProduct]);
+  }, [activeLat, activeLng, days, coordinatesValid, forecastProfile, radarProduct]);
 
   return (
     <>
@@ -881,6 +946,8 @@ export default function ForecastPage() {
             setCustom={setCustom}
             days={days}
             setDays={setDays}
+            forecastProfile={forecastProfile}
+            setForecastProfile={setForecastProfile}
             onRefresh={() => {
               loadForecast();
               loadRadar(radarProduct);
@@ -926,7 +993,7 @@ export default function ForecastPage() {
           </section>
 
           <footer className="pb-6 text-xs text-slate-500">
-            Fonte previsionale: Open-Meteo. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+            Fonte previsionale: {primarySource?.label || "Open-Meteo"}{primarySource?.model ? " (" + primarySource.model + ")" : ""}. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
           </footer>
         </div>
       </main>

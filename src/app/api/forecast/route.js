@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const OPEN_METEO_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+const DWD_ICON_ENDPOINT = "https://api.open-meteo.com/v1/dwd-icon";
+const ECMWF_ENDPOINT = "https://api.open-meteo.com/v1/ecmwf";
 
 const HOURLY = [
   "temperature_2m",
@@ -53,26 +55,98 @@ const DAILY = [
   "wind_direction_10m_dominant"
 ].join(",");
 
+const ECMWF_HOURLY = [
+  "temperature_2m",
+  "relative_humidity_2m",
+  "precipitation",
+  "rain",
+  "snowfall",
+  "weather_code",
+  "cloud_cover",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
+  "cape",
+  "freezing_level_height"
+].join(",");
+
+const ECMWF_DAILY = [
+  "weather_code",
+  "temperature_2m_max",
+  "temperature_2m_min",
+  "precipitation_sum",
+  "rain_sum",
+  "snowfall_sum",
+  "precipitation_hours",
+  "wind_speed_10m_max",
+  "wind_gusts_10m_max",
+  "wind_direction_10m_dominant"
+].join(",");
+
+const FORECAST_SOURCES = {
+  best_match: {
+    id: "best_match",
+    label: "Open-Meteo best match",
+    model: "best_match",
+    endpoint: OPEN_METEO_ENDPOINT,
+    maxDays: 7,
+    current: CURRENT,
+    hourly: HOURLY,
+    daily: DAILY
+  },
+  arpae: {
+    id: "arpae_icon_2i",
+    label: "ItaliaMeteo ARPAE ICON-2I",
+    model: "italia_meteo_arpae_icon_2i",
+    endpoint: OPEN_METEO_ENDPOINT,
+    modelParam: "italia_meteo_arpae_icon_2i",
+    maxDays: 3,
+    current: CURRENT,
+    hourly: HOURLY,
+    daily: DAILY
+  },
+  icon: {
+    id: "dwd_icon",
+    label: "DWD ICON",
+    model: "dwd_icon_seamless",
+    endpoint: DWD_ICON_ENDPOINT,
+    maxDays: 7,
+    current: CURRENT,
+    hourly: HOURLY,
+    daily: DAILY
+  },
+  ecmwf: {
+    id: "ecmwf_ifs",
+    label: "ECMWF IFS/AIFS",
+    model: "ecmwf",
+    endpoint: ECMWF_ENDPOINT,
+    maxDays: 10,
+    current: null,
+    hourly: ECMWF_HOURLY,
+    daily: ECMWF_DAILY
+  }
+};
+
 function numberFromParam(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
 
-function buildForecastUrl(endpoint, options) {
+function buildForecastUrl(config, options) {
   const params = new URLSearchParams({
     latitude: String(options.lat),
     longitude: String(options.lng),
-    current: CURRENT,
-    hourly: HOURLY,
-    daily: DAILY,
+    hourly: config.hourly,
+    daily: config.daily,
     timezone: "Europe/Rome",
-    forecast_days: String(options.days),
+    forecast_days: String(Math.min(options.days, config.maxDays || options.days)),
     wind_speed_unit: "kmh",
     precipitation_unit: "mm"
   });
 
-  if (options.model && endpoint.endsWith("/forecast")) params.set("models", options.model);
-  return endpoint + "?" + params.toString();
+  if (config.current) params.set("current", config.current);
+  if (config.modelParam && config.endpoint.endsWith("/forecast")) params.set("models", config.modelParam);
+  return config.endpoint + "?" + params.toString();
 }
 
 async function fetchJson(url) {
@@ -91,12 +165,13 @@ async function fetchJson(url) {
   }
 }
 
-async function fetchOpenMeteo(options) {
-  const url = buildForecastUrl(OPEN_METEO_ENDPOINT, options);
+async function fetchForecastSource(config, options) {
+  const url = buildForecastUrl(config, options);
   return {
-    id: "open-meteo",
-    label: "Open-Meteo best match",
-    model: "best_match",
+    id: config.id,
+    label: config.label,
+    model: config.model,
+    maxDays: config.maxDays,
     url,
     payload: await fetchJson(url)
   };
@@ -106,22 +181,17 @@ function getArray(payload, section, key) {
   return Array.isArray(payload?.[section]?.[key]) ? payload[section][key] : [];
 }
 
-function pick24HourSummary(payload) {
-  const precipitation = getArray(payload, "hourly", "precipitation").slice(0, 24);
-  const wind = getArray(payload, "hourly", "wind_gusts_10m").slice(0, 24);
-  const snow = getArray(payload, "hourly", "snowfall").slice(0, 24);
-  const probability = getArray(payload, "hourly", "precipitation_probability").slice(0, 24);
-  const temperature = getArray(payload, "hourly", "temperature_2m").slice(0, 24);
-
+function pick24HourSummaryFromHourly(hourly) {
+  const rows = hourly.slice(0, 24);
   const sum = (items) => Number(items.reduce((total, value) => total + (Number(value) || 0), 0).toFixed(1));
-  const max = (items) => Math.max(...items.map((value) => Number(value) || 0));
-  const validTemps = temperature.map(Number).filter(Number.isFinite);
+  const max = (items) => Math.max(0, ...items.map((value) => Number(value) || 0));
+  const validTemps = rows.map((row) => Number(row.temperature)).filter(Number.isFinite);
 
   return {
-    rain24h: sum(precipitation),
-    snow24h: sum(snow),
-    maxWindGust: Number(max(wind).toFixed(1)),
-    maxPrecipitationProbability: Number(max(probability).toFixed(0)),
+    rain24h: sum(rows.map((row) => row.precipitation)),
+    snow24h: sum(rows.map((row) => row.snowfall)),
+    maxWindGust: Number(max(rows.map((row) => row.windGust)).toFixed(1)),
+    maxPrecipitationProbability: Number(max(rows.map((row) => row.precipitationProbability)).toFixed(0)),
     minTemperature: validTemps.length ? Number(Math.min(...validTemps).toFixed(1)) : null,
     maxTemperature: validTemps.length ? Number(Math.max(...validTemps).toFixed(1)) : null
   };
@@ -178,11 +248,13 @@ function normalizeSource(source) {
     windDirection: getArray(payload, "daily", "wind_direction_10m_dominant")[index] ?? null
   }));
 
-  const summary24h = pick24HourSummary(payload);
+  const summary24h = pick24HourSummaryFromHourly(hourly);
   return {
     id: source.id,
     label: source.label,
     model: source.model,
+    maxDays: source.maxDays,
+    url: source.url,
     generationTimeMs: payload.generationtime_ms,
     latitude: payload.latitude,
     longitude: payload.longitude,
@@ -199,24 +271,99 @@ function normalizeSource(source) {
   };
 }
 
+function mergeRecommendedSources(normalizedSources) {
+  const arpae = normalizedSources.find((source) => source.id === "arpae_icon_2i");
+  const icon = normalizedSources.find((source) => source.id === "dwd_icon");
+  const ecmwf = normalizedSources.find((source) => source.id === "ecmwf_ifs");
+  const best = normalizedSources.find((source) => source.id === "best_match");
+  const fallback = icon || ecmwf || best || arpae;
+  if (!arpae && !fallback) return null;
+  if (!arpae) return { ...fallback, primary: true };
+
+  const arpaeDays = new Set(arpae.daily.map((day) => day.day));
+  const sourcesByPriority = [arpae, icon, ecmwf, best].filter(Boolean);
+  const allHourlyTimes = [...new Set(sourcesByPriority.flatMap((source) => source.hourly.map((row) => row.time)))].sort();
+  const allDailyDays = [...new Set(sourcesByPriority.flatMap((source) => source.daily.map((row) => row.day)))].sort();
+
+  function pickSourceForDay(day) {
+    if (arpaeDays.has(day)) return arpae;
+    return fallback;
+  }
+
+  const hourly = allHourlyTimes.map((time) => {
+    const day = String(time).slice(0, 10);
+    const preferred = pickSourceForDay(day);
+    return preferred.hourly.find((row) => row.time === time)
+      || sourcesByPriority.map((source) => source.hourly.find((row) => row.time === time)).find(Boolean);
+  }).filter(Boolean);
+
+  const daily = allDailyDays.map((day) => {
+    const preferred = pickSourceForDay(day);
+    return preferred.daily.find((row) => row.day === day)
+      || sourcesByPriority.map((source) => source.daily.find((row) => row.day === day)).find(Boolean);
+  }).filter(Boolean);
+
+  const summary24h = pick24HourSummaryFromHourly(hourly);
+  return {
+    id: "recommended",
+    label: "Consigliato Firenze",
+    model: arpae && fallback?.id !== arpae.id ? "ARPAE ICON-2I + " + fallback.label : arpae.label,
+    primary: true,
+    generationTimeMs: arpae.generationTimeMs,
+    latitude: arpae.latitude,
+    longitude: arpae.longitude,
+    elevation: arpae.elevation,
+    timezone: arpae.timezone,
+    current: arpae.current || fallback?.current || null,
+    currentUnits: arpae.currentUnits || fallback?.currentUnits || {},
+    hourlyUnits: arpae.hourlyUnits || fallback?.hourlyUnits || {},
+    dailyUnits: arpae.dailyUnits || fallback?.dailyUnits || {},
+    summary24h,
+    hazards: buildHazards(summary24h),
+    hourly,
+    daily
+  };
+}
+
+async function tryFetch(config, options, errors) {
+  try {
+    return normalizeSource(await fetchForecastSource(config, options));
+  } catch (error) {
+    errors.push({ source: config.label, message: error.message });
+    return null;
+  }
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const lat = numberFromParam(searchParams.get("lat"), 43.7696);
   const lng = numberFromParam(searchParams.get("lng"), 11.2558);
   const days = Math.max(1, Math.min(7, numberFromParam(searchParams.get("days"), 3)));
+  const profile = String(searchParams.get("profile") || "recommended");
   const sources = [];
   const errors = [];
 
-  try {
-    sources.push(normalizeSource(await fetchOpenMeteo({ lat, lng, days })));
-  } catch (error) {
-    errors.push({ source: "Open-Meteo", message: error.message });
+  if (profile === "recommended") {
+    const attempts = await Promise.all([
+      tryFetch(FORECAST_SOURCES.arpae, { lat, lng, days }, errors),
+      tryFetch(FORECAST_SOURCES.icon, { lat, lng, days }, errors),
+      tryFetch(FORECAST_SOURCES.ecmwf, { lat, lng, days }, errors),
+      tryFetch(FORECAST_SOURCES.best_match, { lat, lng, days }, errors)
+    ]);
+    const available = attempts.filter(Boolean);
+    const recommended = mergeRecommendedSources(available);
+    if (recommended) sources.push(recommended);
+    sources.push(...available);
+  } else {
+    const config = FORECAST_SOURCES[profile] || FORECAST_SOURCES.best_match;
+    const source = await tryFetch(config, { lat, lng, days }, errors);
+    if (source) sources.push({ ...source, primary: true });
   }
 
   return NextResponse.json({
     source: "Open-Meteo",
     fetchedAt: new Date().toISOString(),
-    query: { lat, lng, days },
+    query: { lat, lng, days, profile },
     sources,
     errors,
     warning: sources.length ? null : "Previsioni non disponibili in questo momento."
