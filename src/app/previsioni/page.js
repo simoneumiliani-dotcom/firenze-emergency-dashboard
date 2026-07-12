@@ -387,8 +387,10 @@ function ForecastCharts({ payload }) {
   const windMax = Math.max(0, ...windRows.map((row) => Number(row.windGust) || 0));
   const windDomainMax = Math.max(100, Math.ceil((windMax + 10) / 10) * 10);
   const rainRows = rainView === "hourly"
-    ? rows.map((row) => ({ ...row, label: row.hour }))
+    ? rows.slice(0, 24).map((row) => ({ ...row, label: row.hour }))
     : dailyRows.map((row) => ({ ...row, label: row.label, probability: row.precipitationProbability }));
+  const rainMax = Math.max(0, ...rainRows.map((row) => Number(row.precipitation) || 0));
+  const rainDomainMax = Math.max(110, Math.ceil((rainMax + 10) / 10) * 10);
 
   useEffect(() => {
     if (windDayIndex > Math.max(windDayKeys.length - 1, 0)) {
@@ -424,20 +426,29 @@ function ForecastCharts({ payload }) {
           </div>
         </div>
         <div className="overflow-x-auto pb-2">
-          <div className={"h-72 " + (rainView === "hourly" ? "min-w-[80rem]" : "min-w-[44rem]")}>
+          <div className={"h-72 " + (rainView === "hourly" ? "min-w-[48rem]" : "min-w-[44rem]")}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={rainRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                 <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                 <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <YAxis yAxisId="left" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#bae6fd" tick={{ fill: "#bae6fd", fontSize: 12 }} unit="%" />
+                <YAxis yAxisId="left" domain={[0, rainDomainMax]} stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#c4b5fd" tick={{ fill: "#c4b5fd", fontSize: 12 }} unit="%" />
                 <Tooltip contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8 }} labelStyle={{ color: "#e2e8f0" }} />
                 <Legend />
+                <ReferenceLine yAxisId="left" y={10} stroke="#facc15" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
+                <ReferenceLine yAxisId="left" y={50} stroke="#fb923c" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
+                <ReferenceLine yAxisId="left" y={100} stroke="#ef4444" strokeWidth={2} strokeDasharray="6 4" ifOverflow="extendDomain" />
                 <Bar yAxisId="left" dataKey="precipitation" name={rainView === "hourly" ? "Pioggia oraria mm" : "Pioggia giornaliera mm"} fill="#38bdf8" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="probability" name="Probabilita pioggia %" stroke="#bae6fd" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8", stroke: "#e0f2fe", strokeWidth: 2 }} />
+                <Line yAxisId="right" type="monotone" dataKey="probability" name="Probabilita pioggia %" stroke="#a78bfa" strokeWidth={2} dot={{ r: 4, fill: "#a78bfa", stroke: "#ddd6fe", strokeWidth: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold">
+          <span className="inline-flex items-center gap-2 text-yellow-200"><span className="h-1 w-8 rounded-full bg-yellow-400" />soglia 10 mm</span>
+          <span className="inline-flex items-center gap-2 text-orange-200"><span className="h-1 w-8 rounded-full bg-orange-400" />soglia 50 mm</span>
+          <span className="inline-flex items-center gap-2 text-red-200"><span className="h-1 w-8 rounded-full bg-red-500" />soglia 100 mm</span>
+          <span className="inline-flex items-center gap-2 text-violet-200"><span className="h-1 w-8 rounded-full bg-violet-400" />probabilita pioggia</span>
         </div>
       </div>
 
