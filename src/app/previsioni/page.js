@@ -241,15 +241,17 @@ function buildChartRows(primary) {
 }
 
 function buildDailyRows(primary) {
+  const currentWeatherCode = primary?.current?.weather_code ?? null;
   return (primary?.daily || []).map((day) => ({
     day: day.day,
     label: formatDay(day.day),
-    weatherCode: day.weatherCode,
+    weatherCode: day.day === primary?.daily?.[0]?.day ? currentWeatherCode ?? day.weatherCode : day.weatherCode,
     temperatureMax: day.temperatureMax,
     temperatureMin: day.temperatureMin,
     precipitation: day.precipitation ?? 0,
     rain: day.rain ?? 0,
     precipitationProbability: day.precipitationProbability ?? 0,
+    uvIndexMax: day.uvIndexMax ?? null,
     windGustMax: day.windGustMax ?? day.windSpeedMax ?? null,
     windDirection: day.windDirection ?? null,
     snowfall: day.snowfall ?? 0
@@ -390,6 +392,7 @@ function SummarySection({ payload }) {
   const primary = getPrimarySource(payload);
   const hazard = highestHazard(payload?.sources || []);
   const summary = primary?.summary24h || {};
+  const currentHumidity = primary?.current?.relative_humidity_2m ?? null;
   const hasSnowSignal = Number(summary.snow24h) > 0 || Number(summary.maxSnowDepth) > 0;
 
   return (
@@ -411,7 +414,7 @@ function SummarySection({ payload }) {
           <MetricCard icon={CloudRain} label="Prob. pioggia" value={formatMetric(summary.maxPrecipitationProbability, "%", 0)} detail="Massima probabilita oraria" />
           <MetricCard icon={Wind} label="Raffica max" value={formatMetric(summary.maxWindGust, "km/h")} detail={"Direzione: " + windDirectionLabel(summary.maxWindDirection)} />
           <MetricCard icon={Thermometer} label="Percepita" value={formatMetric(summary.minApparentTemperature, "C") + " / " + formatMetric(summary.maxApparentTemperature, "C")} detail="Minima e massima percepita" />
-          <MetricCard icon={Cloud} label="Umidita max" value={formatMetric(summary.maxHumidity, "%", 0)} detail="Indicatore afa/nebbia" />
+          <MetricCard icon={Cloud} label="UMIDITA'" value={formatMetric(currentHumidity, "%", 0)} detail="Dato corrente Open-Meteo" />
           <MetricCard icon={Crosshair} label="Visibilita min" value={formatMetric(summary.minVisibility, "km")} detail="Utile per nebbia e rovesci" />
         </div>
 
@@ -606,6 +609,7 @@ function DailyTable({ payload }) {
                   </p>
                   <p className="mt-3 text-2xl font-semibold text-rose-300">max {day.temperatureMax ?? "n.d."} C</p>
                   <p className="mt-2 text-xl font-semibold text-sky-300">min {day.temperatureMin ?? "n.d."} C</p>
+                  <p className="mt-2 text-sm font-semibold text-yellow-200">UV {formatMetric(day.uvIndexMax, "", 1)}</p>
                   <p className="mt-3 text-xs text-slate-400">
                     Raffica {formatMetric(day.windGustMax, "km/h")} - {windDirectionLabel(day.windDirection)}
                   </p>

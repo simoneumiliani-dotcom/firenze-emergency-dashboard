@@ -56,6 +56,7 @@ const DAILY = [
   "snowfall_sum",
   "precipitation_hours",
   "precipitation_probability_max",
+  "uv_index_max",
   "wind_speed_10m_max",
   "wind_gusts_10m_max",
   "wind_direction_10m_dominant"
@@ -269,6 +270,7 @@ function normalizeSource(source) {
     snowfall: getArray(payload, "daily", "snowfall_sum")[index] ?? null,
     precipitationHours: getArray(payload, "daily", "precipitation_hours")[index] ?? null,
     precipitationProbability: getArray(payload, "daily", "precipitation_probability_max")[index] ?? null,
+    uvIndexMax: getArray(payload, "daily", "uv_index_max")[index] ?? null,
     windSpeedMax: getArray(payload, "daily", "wind_speed_10m_max")[index] ?? null,
     windGustMax: getArray(payload, "daily", "wind_gusts_10m_max")[index] ?? null,
     windDirection: getArray(payload, "daily", "wind_direction_10m_dominant")[index] ?? null
