@@ -645,11 +645,11 @@ function DailyTable({ payload }) {
 }
 
 const RADAR_PRODUCTS_FALLBACK = [
-  { id: "SRI", label: "Intensita pioggia", shortLabel: "SRI", unit: "mm/h", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:sri" },
-  { id: "SRT1", label: "Pioggia cumulata 1h", shortLabel: "SRT1", unit: "mm", cadence: "30 min", mapEnabled: true, wmsLayer: "radar:srt_1" },
-  { id: "VMI", label: "Massima intensita verticale", shortLabel: "VMI", unit: "dBZ", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:vmi" },
-  { id: "POH", label: "Probabilita grandine", shortLabel: "POH", unit: "%", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:poh" },
-  { id: "VIL", label: "Acqua integrata verticale", shortLabel: "VIL", unit: "kg/m2", cadence: "5 min", mapEnabled: true, wmsLayer: "radar:vil" }
+  { id: "SRI", label: "Intensita pioggia", shortLabel: "SRI", unit: "mm/h", cadence: "5 min", mapEnabled: true, tileProduct: "SRI" },
+  { id: "SRT1", label: "Pioggia cumulata 1h", shortLabel: "SRT1", unit: "mm", cadence: "30 min", mapEnabled: true, tileProduct: "SRT1" },
+  { id: "VMI", label: "Massima intensita verticale", shortLabel: "VMI", unit: "dBZ", cadence: "5 min", mapEnabled: true, tileProduct: "VMI" },
+  { id: "POH", label: "Probabilita grandine", shortLabel: "POH", unit: "%", cadence: "5 min", mapEnabled: true, tileProduct: "POH" },
+  { id: "VIL", label: "Acqua integrata verticale", shortLabel: "VIL", unit: "kg/m2", cadence: "5 min", mapEnabled: true, tileProduct: "VIL" }
 ];
 
 function buildDpcWmsImageUrl(product, time) {
@@ -922,7 +922,7 @@ export default function ForecastPage() {
   const [forecastProfile, setForecastProfile] = useState("recommended");
   const [payload, setPayload] = useState(null);
   const [radarPayload, setRadarPayload] = useState(null);
-  const [radarProduct, setRadarProduct] = useState("VMI");
+  const [radarProduct, setRadarProduct] = useState("SRI");
   const [loading, setLoading] = useState(false);
   const [radarLoading, setRadarLoading] = useState(false);
   const [error, setError] = useState(null);

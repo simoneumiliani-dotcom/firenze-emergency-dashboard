@@ -4,9 +4,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const DPC_API_BASE = "https://radar-api.protezionecivile.it";
+const DPC_TILE_CACHE_BASE = "https://s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com";
 const DPC_WMS_BASE = "https://radar-geowebcache.protezionecivile.it/service/wms";
 const WMS_CAPABILITIES_URL = `${DPC_WMS_BASE}?SERVICE=WMS&VERSION=1.1.1&REQUEST=getcapabilities&TILED=true`;
-const DPC_WEB_ORIGIN = "https://radar.protezionecivile.it";
+const DPC_WEB_ORIGIN = "https://radar.protezionecivile.gov.it";
 
 const PRODUCTS = [
   {
@@ -18,6 +19,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "dBZ",
     wmsLayer: "radar:vmi",
+    tileProduct: "VMI",
     mapEnabled: true
   },
   {
@@ -29,6 +31,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "mm/h",
     wmsLayer: "radar:sri",
+    tileProduct: "SRI",
     mapEnabled: true
   },
   {
@@ -40,6 +43,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "mm",
     wmsLayer: "radar:srt_1",
+    tileProduct: "SRT1",
     mapEnabled: true
   },
   {
@@ -51,6 +55,7 @@ const PRODUCTS = [
     cadence: "60 min",
     unit: "mm",
     wmsLayer: "radar:cum3",
+    tileProduct: "CUM3",
     mapEnabled: true
   },
   {
@@ -62,6 +67,7 @@ const PRODUCTS = [
     cadence: "60 min",
     unit: "mm",
     wmsLayer: "radar:cum6",
+    tileProduct: "CUM6",
     mapEnabled: true
   },
   {
@@ -73,6 +79,7 @@ const PRODUCTS = [
     cadence: "60 min",
     unit: "mm",
     wmsLayer: "radar:cum12",
+    tileProduct: "CUM12",
     mapEnabled: true
   },
   {
@@ -84,6 +91,7 @@ const PRODUCTS = [
     cadence: "60 min",
     unit: "mm",
     wmsLayer: "radar:cum24",
+    tileProduct: "CUM24",
     mapEnabled: true
   },
   {
@@ -95,6 +103,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "K",
     wmsLayer: "radar:ir_108",
+    tileProduct: "IR_108",
     mapEnabled: true
   },
   {
@@ -102,11 +111,12 @@ const PRODUCTS = [
     apiType: "TEMP",
     label: "Temperature",
     shortLabel: "TMP",
-    description: "Prodotto temperatura disponibile via REST/download; layer WMS non confermato nelle capabilities pubbliche.",
+    description: "Prodotto temperatura disponibile via REST/download e tile WebP ufficiale DPC.",
     cadence: "60 min",
     unit: "C",
     wmsLayer: null,
-    mapEnabled: false
+    tileProduct: "TEMP",
+    mapEnabled: true
   },
   {
     id: "POH",
@@ -117,6 +127,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "%",
     wmsLayer: "radar:poh",
+    tileProduct: "POH",
     mapEnabled: true
   },
   {
@@ -128,6 +139,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "kg/m2",
     wmsLayer: "radar:vil",
+    tileProduct: "VIL",
     mapEnabled: true
   },
   {
@@ -139,6 +151,7 @@ const PRODUCTS = [
     cadence: "5 min",
     unit: "m",
     wmsLayer: "radar:etm",
+    tileProduct: "ETM",
     mapEnabled: true
   },
   {
@@ -149,8 +162,9 @@ const PRODUCTS = [
     description: "Ubicazione e stato operativo dei siti radar.",
     cadence: "5 min",
     unit: "stato",
-    wmsLayer: "radar:sites",
-    mapEnabled: true
+    wmsLayer: null,
+    tileProduct: null,
+    mapEnabled: false
   }
 ];
 
@@ -269,8 +283,10 @@ export async function GET(request) {
       rawDownload,
       services: {
         rest: DPC_API_BASE,
+        tileCache: DPC_TILE_CACHE_BASE,
         wms: DPC_WMS_BASE,
-        wmsCapabilities: WMS_CAPABILITIES_URL
+        wmsCapabilities: WMS_CAPABILITIES_URL,
+    tileCacheBaseUrl: DPC_TILE_CACHE_BASE
       },
       errors
     },

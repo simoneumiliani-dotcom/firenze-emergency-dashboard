@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -70,4 +70,24 @@ body {
   .muted {
     @apply text-sm text-slate-400;
   }
+}
+
+.dpc-radar-tile {
+  mix-blend-mode: screen;
+  filter: contrast(1.35) saturate(1.15);
+}
+
+.dpc-radar-sri,
+.dpc-radar-srt1,
+.dpc-radar-cum3,
+.dpc-radar-cum6,
+.dpc-radar-cum12,
+.dpc-radar-cum24 {
+  opacity: 0.9;
+}
+
+.dpc-radar-temp,
+.dpc-radar-ir_108 {
+  mix-blend-mode: multiply;
+  filter: contrast(1.18) saturate(1.05);
 }

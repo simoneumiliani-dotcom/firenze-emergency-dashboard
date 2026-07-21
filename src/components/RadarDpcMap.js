@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
-import { MapContainer, TileLayer, WMSTileLayer } from "react-leaflet";
+import { MapContainer, TileLayer } from "react-leaflet";
 
+const DPC_TILE_CACHE_URL = "https://s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com";
 const DPC_WMS_URL = "https://radar-geowebcache.protezionecivile.it/service/wms";
-const DPC_MAP_URL = "https://radar.protezionecivile.it/";
+const DPC_MAP_URL = "https://radar.protezionecivile.gov.it/";
 const WMS_CAPABILITIES_URL = "https://radar-geowebcache.protezionecivile.it/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=getcapabilities&TILED=true";
 const API_DOCS_URL = "https://dpc-radar.readthedocs.io/it/latest/api.html";
 const SERVICES_DOCS_URL = "https://dpc-radar.readthedocs.io/it/latest/services.html";
@@ -19,6 +20,7 @@ const FALLBACK_PRODUCTS = [
     unit: "dBZ",
     cadence: "5 min",
     wmsLayer: "radar:vmi",
+    tileProduct: "VMI",
     description: "Massimo valore di riflettivita presente sulla verticale."
   },
   {
@@ -29,6 +31,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm/h",
     cadence: "5 min",
     wmsLayer: "radar:sri",
+    tileProduct: "SRI",
     description: "Stima radar dell'intensita di precipitazione al suolo."
   },
   {
@@ -39,6 +42,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm",
     cadence: "5 min",
     wmsLayer: "radar:srt_1",
+    tileProduct: "SRT1",
     description: "Cumulata di precipitazione stimata nell'ultima ora."
   },
   {
@@ -49,6 +53,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm",
     cadence: "60 min",
     wmsLayer: "radar:cum3",
+    tileProduct: "CUM3",
     description: "Cumulata da rete a terra interpolata su tre ore."
   },
   {
@@ -59,6 +64,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm",
     cadence: "60 min",
     wmsLayer: "radar:cum6",
+    tileProduct: "CUM6",
     description: "Cumulata da rete a terra interpolata su sei ore."
   },
   {
@@ -69,6 +75,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm",
     cadence: "60 min",
     wmsLayer: "radar:cum12",
+    tileProduct: "CUM12",
     description: "Cumulata da rete a terra interpolata su dodici ore."
   },
   {
@@ -79,6 +86,7 @@ const FALLBACK_PRODUCTS = [
     unit: "mm",
     cadence: "60 min",
     wmsLayer: "radar:cum24",
+    tileProduct: "CUM24",
     description: "Cumulata da rete a terra interpolata su ventiquattro ore."
   },
   {
@@ -89,6 +97,7 @@ const FALLBACK_PRODUCTS = [
     unit: "%",
     cadence: "5 min",
     wmsLayer: "radar:poh",
+    tileProduct: "POH",
     description: "Probabilita di fenomeni grandinigeni."
   },
   {
@@ -99,6 +108,7 @@ const FALLBACK_PRODUCTS = [
     unit: "kg/m2",
     cadence: "5 min",
     wmsLayer: "radar:vil",
+    tileProduct: "VIL",
     description: "Stima della massa d'acqua liquida integrata in colonna."
   },
   {
@@ -109,6 +119,7 @@ const FALLBACK_PRODUCTS = [
     unit: "m",
     cadence: "5 min",
     wmsLayer: "radar:etm",
+    tileProduct: "ETM",
     description: "Altezza massima delle precipitazioni rilevate dal radar."
   },
   {
@@ -119,6 +130,7 @@ const FALLBACK_PRODUCTS = [
     unit: "K",
     cadence: "5 min",
     wmsLayer: "radar:ir_108",
+    tileProduct: "IR_108",
     description: "Prodotto satellitare derivato dal canale infrarosso 10.8."
   },
   {
@@ -129,8 +141,9 @@ const FALLBACK_PRODUCTS = [
     unit: "C",
     cadence: "60 min",
     wmsLayer: null,
-    mapEnabled: false,
-    description: "Prodotto temperatura disponibile via REST/download; layer WMS non confermato nelle capabilities pubbliche."
+    tileProduct: "TEMP",
+    mapEnabled: true,
+    description: "Prodotto temperatura renderizzato dal tile cache WebP ufficiale Radar-DPC."
   },
   {
     id: "SITES",
@@ -139,8 +152,10 @@ const FALLBACK_PRODUCTS = [
     shortLabel: "SITES",
     unit: "stato",
     cadence: "5 min",
-    wmsLayer: "radar:sites",
-    description: "Ubicazione e stato operativo dei siti radar."
+    wmsLayer: null,
+    tileProduct: null,
+    mapEnabled: false,
+    description: "Ubicazione e stato operativo dei siti radar; gestito come layer vettoriale sulla mappa ufficiale DPC."
   }
 ];
 
@@ -316,25 +331,25 @@ function parseDpcWsMessage(data) {
   }
 }
 
-function buildWmsPreviewUrl(product) {
-  if (!product?.wmsLayer) return WMS_CAPABILITIES_URL;
-  const params = new URLSearchParams({
-    service: "WMS",
-    version: "1.1.1",
-    request: "GetMap",
-    layers: product.wmsLayer,
-    styles: "",
-    format: "image/png",
-    transparent: "true",
-    tiled: "true",
-    width: "768",
-    height: "768",
-    srs: "EPSG:3857",
-    bbox: "1046400,5190000,1402600,5590000"
-  });
-  return (product.wmsBaseUrl || DPC_WMS_URL) + "?" + params.toString();
+function dpcTileParts(value) {
+  const date = value ? new Date(value) : new Date();
+  if (!Number.isFinite(date.getTime())) return null;
+  const yyyy = String(date.getUTCFullYear());
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const minuteStep = Math.floor(date.getUTCMinutes() / 5) * 5;
+  const min = String(minuteStep).padStart(2, "0");
+  return { datePath: `${yyyy}/${mm}/${dd}`, timePath: `${hh}${min}` };
 }
 
+function buildDpcWebpTileUrl(product, lastProduct) {
+  const tileProduct = product?.tileProduct || product?.apiType || product?.id;
+  if (!tileProduct) return null;
+  const parts = dpcTileParts(lastProduct?.productDate || lastProduct?.date || lastProduct?.wmsTime);
+  if (!parts) return null;
+  return `${DPC_TILE_CACHE_URL}/${tileProduct}/${parts.datePath}/${parts.timePath}/{z}/{x}/{y}/${tileProduct.toLowerCase()}.webp`;
+}
 function ToggleButton({ product, active, onClick }) {
   return (
     <button
@@ -389,20 +404,20 @@ function RadarLegend({ product }) {
 export default function RadarDpcMap({ radarPayload, loading, selectedProduct, onProductChange, onRefresh }) {
   const products = useMemo(() => {
     const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
-    return source.filter((product) => product.wmsLayer && product.mapEnabled !== false);
+    return source.filter((product) => product.mapEnabled !== false && (product.tileProduct || product.apiType));
   }, [radarPayload?.products]);
   const metadataOnlyProducts = useMemo(() => {
     const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
-    return source.filter((product) => !product.wmsLayer || product.mapEnabled === false);
+    return source.filter((product) => product.mapEnabled === false || (!product.tileProduct && !product.apiType));
   }, [radarPayload?.products]);
   const currentProduct = products.find((product) => product.id === selectedProduct || product.apiType === selectedProduct) || products[0];
-  const [activeLayers, setActiveLayers] = useState(["VMI"]);
+  const [activeLayers, setActiveLayers] = useState([selectedProduct || "SRI"]);
   const [wsStatus, setWsStatus] = useState("non connesso");
   const [liveEvents, setLiveEvents] = useState({});
   const lastProduct = radarPayload?.lastProduct;
   const rawDownloadUrl = radarPayload?.rawDownload?.url;
   const restUrl = currentProduct?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=VMI";
-  const wmsPreviewUrl = buildWmsPreviewUrl(currentProduct);
+  const dpcTileUrl = buildDpcWebpTileUrl(currentProduct, lastProduct);
   const errors = radarPayload?.errors || [];
 
   useEffect(() => {
@@ -448,12 +463,7 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
   }, []);
 
   function toggleLayer(productId) {
-    setActiveLayers((current) => {
-      if (current.includes(productId)) {
-        return current.length > 1 ? current.filter((id) => id !== productId) : current;
-      }
-      return [...current, productId].slice(-4);
-    });
+    setActiveLayers([productId]);
     onProductChange(productId);
   }
 
@@ -468,7 +478,7 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
             <div>
               <h2 className="section-title">Radar DPC</h2>
               <p className="muted">
-                Mappa WMS/WMTS Protezione Civile con layer selezionabili. Se il servizio non risponde, usa il collegamento alla mappa ufficiale.
+                Mappa con tile WebP ufficiali Protezione Civile e prodotti selezionabili. Se il servizio non risponde, usa il collegamento alla mappa ufficiale.
               </p>
             </div>
           </div>
@@ -513,7 +523,7 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
               ))}
             </div>
             <p className="mt-3 text-xs text-slate-500">
-              Puoi tenere attivi fino a 4 layer. VMI e IR sono i layer piu utili per verificare visivamente il servizio; SRI puo risultare trasparente in assenza di precipitazioni.
+              La mappa usa le tile WebP ufficiali DPC. SRI puo risultare trasparente in assenza di precipitazioni.
             </p>
           </div>
 
@@ -523,19 +533,22 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {visibleLayers.map((product, index) => (
-                <WMSTileLayer
-                  key={product.id + "-" + (lastProduct?.wmsTime || "current")}
-                  url={product.wmsBaseUrl || DPC_WMS_URL}
-                  layers={product.wmsLayer}
-                  format="image/png"
-                  transparent
-                  version="1.1.1"
-                  tiled
-                  opacity={index === visibleLayers.length - 1 ? 0.78 : 0.5}
-                  zIndex={400 + index}
-                />
-              ))}
+              {visibleLayers.map((product, index) => {
+                const tileUrl = product.id === currentProduct?.id ? dpcTileUrl : buildDpcWebpTileUrl(product, lastProduct);
+                if (!tileUrl) return null;
+                return (
+                  <TileLayer
+                    key={product.id + "-" + (lastProduct?.productDate || lastProduct?.date || "current")}
+                    url={tileUrl}
+                    opacity={index === visibleLayers.length - 1 ? 0.82 : 0.55}
+                    zIndex={400 + index}
+                    tileSize={256}
+                    minNativeZoom={7}
+                    maxNativeZoom={7}
+                    className={"dpc-radar-tile dpc-radar-" + product.id.toLowerCase()}
+                  />
+                );
+              })}
             </MapContainer>
           </div>
 
@@ -572,8 +585,8 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
                 <p className="mt-1 font-semibold text-slate-100">{currentProduct?.unit || "n.d."}</p>
               </div>
               <div className="col-span-2 rounded-md border border-emergency-line bg-emergency-panel px-3 py-2">
-                <p className="uppercase text-slate-500">Layer WMS</p>
-                <p className="mt-1 font-semibold text-slate-100">{currentProduct?.wmsLayer || "n.d."}</p>
+                <p className="uppercase text-slate-500">Tile cache</p>
+                <p className="mt-1 font-semibold text-slate-100">{currentProduct?.tileProduct || "n.d."}</p>
               </div>
             </div>
           </div>
@@ -600,12 +613,12 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
             <p className="text-xs uppercase tracking-wide text-slate-500">Fonti e download</p>
             <p className="mt-2 text-sm font-semibold text-slate-100">Protezione Civile - Radar DPC</p>
             <p className="mt-2 text-xs leading-5 text-slate-400">
-              WMS/WMTS per la mappa, REST per conoscere l&apos;ultimo campione e scaricare il GeoTIFF grezzo quando disponibile.
+              Tile cache WebP ufficiale per la mappa, REST per conoscere l&apos;ultimo campione e scaricare il GeoTIFF grezzo quando disponibile.
             </p>
             {!!metadataOnlyProducts.length && (
               <div className="mt-3 rounded-md border border-emergency-orange/40 bg-emergency-orange/10 px-3 py-2 text-xs leading-5 text-orange-100">
-                Non mappati in WMS: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
-                Sono prodotti REST/download, ma non vengono mostrati sulla mappa finche il layer WMS non e confermato.
+                Non visualizzati in app: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
+                Sono prodotti REST/download, ma non vengono mostrati sulla mappa perche non sono tile raster direttamente sovrapponibili.
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -617,10 +630,12 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
                 WMS capabilities
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
-              <a href={wmsPreviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-                Test WMS diretto
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+              {dpcTileUrl && (
+                <a href={dpcTileUrl.replace("{z}", "7").replace("{x}", "68").replace("{y}", "46")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
+                  Test tile Firenze
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
               {rawDownloadUrl && (
                 <a href={rawDownloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
                   GeoTIFF
