@@ -345,7 +345,41 @@ export default function PdfParser({ onAlertDetected }) {
   const [extractOpen, setExtractOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archive, setArchive] = useState([]);
+  const [writeToken, setWriteToken] = useState("");
+  const [publishNotice, setPublishNotice] = useState(null);
   const objectUrlRef = useRef(null);
+
+  // L'archivio condiviso decide lo stato di allerta: il token lo inserisce
+  // l'operatore a runtime e resta solo in memoria, mai nel bundle o nello storage.
+  const publishBulletin = useCallback(async (payload) => {
+    if (!writeToken) {
+      setPublishNotice({ ok: false, message: "Nessun token inserito: il bollettino resta solo su questo dispositivo." });
+      return null;
+    }
+
+    try {
+      const response = await fetch("/api/bulletins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-bulletin-token": writeToken },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const archive = await response.json();
+        setPublishNotice(archive?.saved === false
+          ? { ok: false, message: "Archivio condiviso non persistente: il bollettino resta su questo dispositivo." }
+          : { ok: true, message: "Bollettino pubblicato nell'archivio condiviso." });
+        return archive;
+      }
+
+      const body = await response.json().catch(() => null);
+      setPublishNotice({ ok: false, message: body?.error || "Archivio condiviso non raggiungibile." });
+      return null;
+    } catch {
+      setPublishNotice({ ok: false, message: "Archivio condiviso non raggiungibile." });
+      return null;
+    }
+  }, [writeToken]);
 
   useEffect(() => {
     return () => {
@@ -477,16 +511,8 @@ export default function PdfParser({ onAlertDetected }) {
       setViewerOpen(true);
       onAlertDetected?.(localPayload);
 
-      fetch("/api/bulletins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((remoteArchive) => {
-          if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
-        })
-        .catch(() => null);
+      const remoteArchive = await publishBulletin(payload);
+      if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
     } catch (error) {
       setStatus("error");
       setResult({
@@ -495,7 +521,7 @@ export default function PdfParser({ onAlertDetected }) {
         message: "Non riesco a leggere il PDF. Verifica che non sia protetto o scansionato come immagine."
       });
     }
-  }, [onAlertDetected]);
+  }, [onAlertDetected, publishBulletin]);
 
   async function hydrateArchivedBulletin(item, pdfBlob) {
     if ((item.issue && item.validity) || !pdfBlob) return item;
@@ -524,11 +550,7 @@ export default function PdfParser({ onAlertDetected }) {
         writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
         return nextArchive;
       });
-      fetch("/api/bulletins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(enriched)
-      }).catch(() => null);
+      await publishBulletin(enriched);
       return enriched;
     } catch {
       return item;
@@ -618,6 +640,24 @@ export default function PdfParser({ onAlertDetected }) {
             </div>
             <button type="button" onClick={() => setArchiveOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
           </div>
+
+          <div className="mb-3 rounded-lg border border-emergency-line bg-black/20 p-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Token archivio condiviso</span>
+              <input
+                type="password"
+                value={writeToken}
+                onChange={(event) => setWriteToken(event.target.value)}
+                placeholder="Inserito dall'operatore, non viene salvato"
+                autoComplete="off"
+                className="rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+              />
+            </label>
+            <p className="mt-2 text-xs text-slate-500">
+              L&apos;archivio condiviso accetta solo scritture autenticate. Senza token il bollettino viene letto e conservato solo su questo dispositivo.
+            </p>
+          </div>
+
           {archive.length ? (
             <div className="grid gap-2">
               {archive.map((item) => (
@@ -711,6 +751,12 @@ export default function PdfParser({ onAlertDetected }) {
                 )}
               </div>
             </div>
+          )}
+
+          {publishNotice && (
+            <p className={`mt-3 rounded-lg border px-3 py-2 text-xs ${publishNotice.ok ? "border-emergency-green/40 bg-emergency-green/10 text-green-100" : "border-emergency-line bg-black/20 text-slate-300"}`}>
+              {publishNotice.message}
+            </p>
           )}
 
           {result?.level && result.level !== "Verde" && (
