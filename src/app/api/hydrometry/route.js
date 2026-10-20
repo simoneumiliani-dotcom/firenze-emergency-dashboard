@@ -22,13 +22,17 @@ export async function GET(request) {
   const historicalLimit = Number(searchParams.get("historicalLimit") || 120);
 
   try {
-    const stations = await getHydrometryStations({ province });
-    const historicalCatalog = await getHydrometryHistoricalCatalog({ province });
+    // Le due fonti condividono lo stesso documento OpenData: in parallelo la cache
+    // di processo serve una sola fetch, in serie se ne facevano due.
+    const [stations, historicalCatalog] = await Promise.all([
+      getHydrometryStations({ province }),
+      getHydrometryHistoricalCatalog({ province })
+    ]);
     const realtimeLimit = realtimeLimitParam === "all"
       ? stations.length
       : Math.min(stations.length, Math.max(1, Number(realtimeLimitParam || stations.length) || stations.length));
     const bulkRealtime = realtime
-      ? await getHydrometryRealtimeBulk({ stations })
+      ? await getHydrometryRealtimeBulk({ stations, province })
       : { rows: [], diagnostics: null };
     const realtimeByStation = new Map();
     bulkRealtime.rows.forEach((row) => realtimeByStation.set(row.station_id, row));

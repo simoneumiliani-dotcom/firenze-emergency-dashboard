@@ -38,6 +38,88 @@ const CFR_USER_AGENT =
 
 const FETCH_TIMEOUT_MS = Number(process.env.HYDROMETRY_FETCH_TIMEOUT_MS || 9000);
 const CFR_CONCURRENCY = Number(process.env.HYDROMETRY_CFR_CONCURRENCY || 6);
+const SOURCE_CACHE_TTL_MS = Number(process.env.HYDROMETRY_CACHE_TTL_SECONDS || 900) * 1000;
+const REALTIME_CACHE_TTL_MS = Number(process.env.HYDROMETRY_REALTIME_CACHE_TTL_SECONDS || 120) * 1000;
+const SOURCE_CACHE_MAX_ENTRIES = 24;
+// Il documento OpenData di SIR e' ~1,4 MB e in misura normale impiega 7-9 s:
+// col timeout generico di 9 s veniva abortito a meta' scaricamento, rendendo
+// impossibile riempire la cache e bloccando il catalogo sul fallback statico.
+const SOURCE_FETCH_TIMEOUT_MS = Number(process.env.HYDROMETRY_SOURCE_FETCH_TIMEOUT_MS || 25000);
+// Un errore viene ricordato per poco: evita di ripetere un timeout lungo a ogni
+// richiesta, ma non congela il fallback quando la fonte torna disponibile.
+const SOURCE_FAILURE_CACHE_TTL_MS = Number(process.env.HYDROMETRY_FAILURE_CACHE_TTL_SECONDS || 30) * 1000;
+
+// Cache di processo per i documenti OpenData e per i risultati gia' normalizzati.
+// Senza questa cache ogni richiesta riscaricava due volte lo stesso JSON da SIR.
+function getSourceCache() {
+  if (!globalThis.__firenzeHydrometrySourceCache) {
+    globalThis.__firenzeHydrometrySourceCache = { entries: new Map(), inflight: new Map() };
+  }
+  return globalThis.__firenzeHydrometrySourceCache;
+}
+
+function pruneSourceCache(entries) {
+  while (entries.size > SOURCE_CACHE_MAX_ENTRIES) {
+    const oldest = entries.keys().next().value;
+    entries.delete(oldest);
+  }
+}
+
+/**
+ * Valore memorizzato con TTL, con deduplica delle richieste concorrenti:
+ * due chiamate parallele sulla stessa chiave condividono una sola fetch.
+ *
+ * `cacheWhen` serve a NON congelare i risultati degradati (timeout, fonte giu',
+ * fallback statico): un errore transitorio deve potersi riprovare alla richiesta
+ * successiva invece di restare in cache per tutto il TTL.
+ */
+async function cachedValue(key, loader, { ttlMs = SOURCE_CACHE_TTL_MS, cacheWhen = () => true, ttlFor = null } = {}) {
+  const cache = getSourceCache();
+  const now = Date.now();
+  const hit = cache.entries.get(key);
+  if (hit && hit.expiresAt > now) return hit.value;
+  if (cache.inflight.has(key)) return cache.inflight.get(key);
+
+  const promise = (async () => {
+    try {
+      const value = await loader();
+      if (cacheWhen(value)) {
+        const effectiveTtl = ttlFor ? Math.max(0, Number(ttlFor(value)) || 0) : ttlMs;
+        if (effectiveTtl > 0) {
+          cache.entries.set(key, { value, expiresAt: Date.now() + effectiveTtl });
+          pruneSourceCache(cache.entries);
+        }
+      }
+      return value;
+    } finally {
+      cache.inflight.delete(key);
+    }
+  })();
+
+  cache.inflight.set(key, promise);
+  return promise;
+}
+
+async function fetchSourceJson(url) {
+  const result = await cachedValue("json:" + url, async () => {
+    try {
+      return { ok: true, payload: await fetchJson(url, { timeoutMs: SOURCE_FETCH_TIMEOUT_MS }) };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }, {
+    ttlFor: (value) => (value.ok ? SOURCE_CACHE_TTL_MS : SOURCE_FAILURE_CACHE_TTL_MS)
+  });
+
+  if (!result.ok) throw result.error;
+  return result.payload;
+}
+
+export function clearHydrometrySourceCache() {
+  const cache = getSourceCache();
+  cache.entries.clear();
+  cache.inflight.clear();
+}
 
 function withTimeout(ms = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -390,36 +472,46 @@ function getStaticHydrometryHistoricalCatalog({ province = "FI" } = {}) {
 }
 
 export async function getHydrometryHistoricalCatalog({ province = "FI" } = {}) {
-  try {
-    const archivePayload = await fetchJson(HYDROMETRY_SOURCES.stationArchive.dataUrl);
-    const dynamicCatalog = (archivePayload?.features || [])
-      .map(normalizeHistoricalCatalogStation)
-      .filter(Boolean)
-      .filter((station) => !province || station.province === province);
+  const cached = await cachedValue("archive-catalog:" + province, async () => {
+    try {
+      const archivePayload = await fetchSourceJson(HYDROMETRY_SOURCES.stationArchive.dataUrl);
+      const dynamicCatalog = (archivePayload?.features || [])
+        .map(normalizeHistoricalCatalogStation)
+        .filter(Boolean)
+        .filter((station) => !province || station.province === province);
 
-    return dynamicCatalog.length
-      ? dynamicCatalog
-      : getStaticHydrometryHistoricalCatalog({ province });
-  } catch {
-    return getStaticHydrometryHistoricalCatalog({ province });
-  }
+      if (dynamicCatalog.length) return { items: dynamicCatalog, degraded: false };
+      return { items: getStaticHydrometryHistoricalCatalog({ province }), degraded: true };
+    } catch {
+      return { items: getStaticHydrometryHistoricalCatalog({ province }), degraded: true };
+    }
+  }, { cacheWhen: (value) => !value.degraded });
+
+  return cached.items;
 }
 
 export async function getHydrometryStations({ province = "FI" } = {}) {
-  const [activePayload, archivePayload] = await Promise.allSettled([
-    fetchJson(HYDROMETRY_SOURCES.activeHydrometers.dataUrl),
-    fetchJson(HYDROMETRY_SOURCES.stationArchive.dataUrl)
-  ]);
+  const cached = await cachedValue("stations:" + province, async () => {
+    const [activePayload, archivePayload] = await Promise.allSettled([
+      fetchSourceJson(HYDROMETRY_SOURCES.activeHydrometers.dataUrl),
+      fetchSourceJson(HYDROMETRY_SOURCES.stationArchive.dataUrl)
+    ]);
 
-  const opendataStations = activePayload.status === "fulfilled"
-    ? parseActiveHydrometersGeoJson(
-      activePayload.value,
-      archivePayload.status === "fulfilled" ? archivePayload.value : null,
-      { province }
-    )
-    : [];
+    const opendataStations = activePayload.status === "fulfilled"
+      ? parseActiveHydrometersGeoJson(
+        activePayload.value,
+        archivePayload.status === "fulfilled" ? archivePayload.value : null,
+        { province }
+      )
+      : [];
 
-  return buildHydrometryStationsFromMap(opendataStations, { province });
+    return {
+      items: buildHydrometryStationsFromMap(opendataStations, { province }),
+      degraded: activePayload.status !== "fulfilled"
+    };
+  }, { cacheWhen: (value) => !value.degraded });
+
+  return cached.items;
 }
 
 function parseQuotedArrayItems(rawItems) {
@@ -775,6 +867,8 @@ function parseCfrHtmlTables(html, stations, sourceUrl) {
 
   $("table").each((_, table) => {
     const headerTrs = [];
+    let cachedHeaderCount = -1;
+    let cachedHeaders = [];
     $(table).find("tr").each((__, tr) => {
       const ths = $(tr).find("th");
       if (ths.length) {
@@ -783,8 +877,13 @@ function parseCfrHtmlTables(html, stations, sourceUrl) {
       }
       const cells = $(tr).find("td").map((___, td) => cleanText($(td).text())).get();
       if (!cells.length) return;
-      const headers = combineHeaderRows(buildHeaderRows($, headerTrs));
-      const normalized = normalizeCfrBulkRow(cells, headers, stations, sourceUrl, measurementTime);
+      // Le righe di intestazione crescono solo in avanti: ricalcoliamo la mappa
+      // soltanto quando ne compare una nuova, invece che a ogni riga di dati.
+      if (headerTrs.length !== cachedHeaderCount) {
+        cachedHeaders = combineHeaderRows(buildHeaderRows($, headerTrs));
+        cachedHeaderCount = headerTrs.length;
+      }
+      const normalized = normalizeCfrBulkRow(cells, cachedHeaders, stations, sourceUrl, measurementTime);
       if (normalized) rows.push(normalized);
     });
   });
@@ -919,7 +1018,20 @@ function parseCfrBulkArrayRows(html, stations, sourceUrl) {
     .filter(Boolean);
 }
 
-export async function getHydrometryRealtimeBulk({ stations } = {}) {
+export async function getHydrometryRealtimeBulk({ stations, province = "FI" } = {}) {
+  // Le stazioni servono solo all'abbinamento delle righe, quindi la chiave di cache
+  // e' la provincia: a parita' di provincia l'insieme delle stazioni e' stabile.
+  return cachedValue(
+    "realtime-bulk:" + province,
+    () => fetchHydrometryRealtimeBulk({ stations }),
+    {
+      ttlMs: REALTIME_CACHE_TTL_MS,
+      cacheWhen: (value) => !value?.diagnostics?.error && Array.isArray(value?.rows) && value.rows.length > 0
+    }
+  );
+}
+
+async function fetchHydrometryRealtimeBulk({ stations } = {}) {
   try {
     const html = await fetchText(HYDROMETRY_SOURCES.cfrRealtime.url, {
       timeoutMs: Number(process.env.HYDROMETRY_CFR_PAGE_TIMEOUT_MS || 8000)
