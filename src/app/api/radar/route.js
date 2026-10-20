@@ -123,36 +123,36 @@ const PRODUCTS = [
     apiType: "POH",
     label: "Probabilita grandine",
     shortLabel: "POH",
-    description: "Probabilita radar di grandine.",
+    description: "Probabilita radar di grandine. Disponibile via REST e download GeoTIFF; il tile cache WebP ufficiale DPC non pubblica questo prodotto.",
     cadence: "5 min",
     unit: "%",
     wmsLayer: "radar:poh",
     tileProduct: "POH",
-    mapEnabled: true
+    mapEnabled: false
   },
   {
     id: "VIL",
     apiType: "VIL",
     label: "Acqua integrata verticale",
     shortLabel: "VIL",
-    description: "Prodotto radar utile per stimare il contenuto d'acqua verticale dei sistemi temporaleschi.",
+    description: "Prodotto radar utile per stimare il contenuto d'acqua verticale dei sistemi temporaleschi. Disponibile via REST e download GeoTIFF; il tile cache WebP ufficiale DPC non pubblica questo prodotto.",
     cadence: "5 min",
     unit: "kg/m2",
     wmsLayer: "radar:vil",
     tileProduct: "VIL",
-    mapEnabled: true
+    mapEnabled: false
   },
   {
     id: "ETM",
     apiType: "ETM",
     label: "Echo top",
     shortLabel: "ETM",
-    description: "Altezza massima delle precipitazioni rilevate dal radar.",
+    description: "Altezza massima delle precipitazioni rilevate dal radar. Disponibile via REST e download GeoTIFF; il tile cache WebP ufficiale DPC non pubblica questo prodotto.",
     cadence: "5 min",
     unit: "m",
     wmsLayer: "radar:etm",
     tileProduct: "ETM",
-    mapEnabled: true
+    mapEnabled: false
   },
   {
     id: "SITES",

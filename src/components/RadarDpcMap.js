@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
 import { MapContainer, TileLayer } from "react-leaflet";
+import RadarOverlayLayer from "@/components/RadarOverlayLayer";
 
 const DPC_TILE_CACHE_URL = "https://s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com";
 const DPC_WMS_URL = "https://radar-geowebcache.protezionecivile.it/service/wms";
@@ -98,7 +99,8 @@ const FALLBACK_PRODUCTS = [
     cadence: "5 min",
     wmsLayer: "radar:poh",
     tileProduct: "POH",
-    description: "Probabilita di fenomeni grandinigeni."
+    mapEnabled: false,
+    description: "Probabilita di fenomeni grandinigeni; disponibile via REST e GeoTIFF, non nel tile cache WebP."
   },
   {
     id: "VIL",
@@ -109,7 +111,8 @@ const FALLBACK_PRODUCTS = [
     cadence: "5 min",
     wmsLayer: "radar:vil",
     tileProduct: "VIL",
-    description: "Stima della massa d'acqua liquida integrata in colonna."
+    mapEnabled: false,
+    description: "Stima della massa d'acqua liquida integrata in colonna; disponibile via REST e GeoTIFF, non nel tile cache WebP."
   },
   {
     id: "ETM",
@@ -120,7 +123,8 @@ const FALLBACK_PRODUCTS = [
     cadence: "5 min",
     wmsLayer: "radar:etm",
     tileProduct: "ETM",
-    description: "Altezza massima delle precipitazioni rilevate dal radar."
+    mapEnabled: false,
+    description: "Altezza massima delle precipitazioni rilevate dal radar; disponibile via REST e GeoTIFF, non nel tile cache WebP."
   },
   {
     id: "IR_108",
@@ -241,13 +245,14 @@ const RADAR_LEGENDS = {
   VMI: {
     title: "Riflettivita VMI",
     unit: "dBZ",
-    note: "Valori piu alti indicano nuclei convettivi e precipitazioni piu intense.",
+    note: "Valori piu alti indicano nuclei convettivi e precipitazioni piu intense. Colori della palette ufficiale DPC.",
     items: [
-      { label: "5 - 20", color: "#8fd3ff" },
-      { label: "20 - 35", color: "#42d77d" },
-      { label: "35 - 45", color: "#fff45a" },
-      { label: "45 - 55", color: "#ff9f2f" },
-      { label: "> 55", color: "#f0455d" }
+      { label: "0 - 10", color: "#878787" },
+      { label: "10 - 20", color: "#00fafa" },
+      { label: "20 - 30", color: "#00fa00" },
+      { label: "30 - 40", color: "#fafa00" },
+      { label: "40 - 50", color: "#fa6400" },
+      { label: "> 50", color: "#fa0000" }
     ]
   },
   TEMP: {
@@ -332,7 +337,8 @@ function parseDpcWsMessage(data) {
 }
 
 function dpcTileParts(value) {
-  const date = value ? new Date(value) : new Date();
+  if (!value) return null;
+  const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
   const yyyy = String(date.getUTCFullYear());
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -343,10 +349,10 @@ function dpcTileParts(value) {
   return { datePath: `${yyyy}/${mm}/${dd}`, timePath: `${hh}${min}` };
 }
 
-function buildDpcWebpTileUrl(product, lastProduct) {
+function buildDpcWebpTileUrl(product, timestamp) {
   const tileProduct = product?.tileProduct || product?.apiType || product?.id;
-  if (!tileProduct) return null;
-  const parts = dpcTileParts(lastProduct?.productDate || lastProduct?.date || lastProduct?.wmsTime);
+  if (!tileProduct || product?.mapEnabled === false) return null;
+  const parts = dpcTileParts(timestamp);
   if (!parts) return null;
   return `${DPC_TILE_CACHE_URL}/${tileProduct}/${parts.datePath}/${parts.timePath}/{z}/{x}/{y}/${tileProduct.toLowerCase()}.webp`;
 }
@@ -415,9 +421,16 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
   const [wsStatus, setWsStatus] = useState("non connesso");
   const [liveEvents, setLiveEvents] = useState({});
   const lastProduct = radarPayload?.lastProduct;
+  const payloadProductId = radarPayload?.product?.id || null;
   const rawDownloadUrl = radarPayload?.rawDownload?.url;
   const restUrl = currentProduct?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=VMI";
-  const dpcTileUrl = buildDpcWebpTileUrl(currentProduct, lastProduct);
+  // Il campione del payload vale solo per il prodotto a cui si riferisce: usarlo per un altro
+  // prodotto produrrebbe richieste a un timestamp inesistente (403 dal tile cache DPC).
+  function tileTimestampFor(product) {
+    if (!product || product.id !== payloadProductId) return null;
+    return lastProduct?.productDate || lastProduct?.date || lastProduct?.wmsTime || null;
+  }
+  const dpcTileUrl = buildDpcWebpTileUrl(currentProduct, tileTimestampFor(currentProduct));
   const errors = radarPayload?.errors || [];
 
   useEffect(() => {
@@ -524,28 +537,26 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
             </div>
             <p className="mt-3 text-xs text-slate-500">
               La mappa usa le tile WebP ufficiali DPC. SRI puo risultare trasparente in assenza di precipitazioni.
+              Le cumulate orarie e TEMP hanno un solo campione all&apos;ora, quindi la mappa resta ferma fino al successivo.
             </p>
           </div>
 
           <div className="h-[28rem] overflow-hidden rounded-lg border border-emergency-line bg-[#07101d] sm:h-[34rem]">
-            <MapContainer center={[43.77, 11.25]} zoom={8} minZoom={6} maxZoom={12} scrollWheelZoom className="h-full w-full">
+            <MapContainer center={[43.77, 11.25]} zoom={8} minZoom={6} maxZoom={12} scrollWheelZoom className="dpc-radar-map h-full w-full">
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                className="dpc-radar-basemap"
               />
               {visibleLayers.map((product, index) => {
-                const tileUrl = product.id === currentProduct?.id ? dpcTileUrl : buildDpcWebpTileUrl(product, lastProduct);
-                if (!tileUrl) return null;
+                const timestamp = tileTimestampFor(product);
+                if (!timestamp) return null;
                 return (
-                  <TileLayer
-                    key={product.id + "-" + (lastProduct?.productDate || lastProduct?.date || "current")}
-                    url={tileUrl}
-                    opacity={index === visibleLayers.length - 1 ? 0.82 : 0.55}
-                    zIndex={400 + index}
-                    tileSize={256}
-                    minNativeZoom={7}
-                    maxNativeZoom={7}
-                    className={"dpc-radar-tile dpc-radar-" + product.id.toLowerCase()}
+                  <RadarOverlayLayer
+                    key={product.id + "-" + timestamp}
+                    product={product}
+                    timestamp={timestamp}
+                    opacity={index === visibleLayers.length - 1 ? 0.92 : 0.55}
                   />
                 );
               })}
@@ -617,8 +628,8 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
             </p>
             {!!metadataOnlyProducts.length && (
               <div className="mt-3 rounded-md border border-emergency-orange/40 bg-emergency-orange/10 px-3 py-2 text-xs leading-5 text-orange-100">
-                Non visualizzati in app: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
-                Sono prodotti REST/download, ma non vengono mostrati sulla mappa perche non sono tile raster direttamente sovrapponibili.
+                Non visualizzati sulla mappa: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
+                Sono prodotti REST/download: il tile cache WebP ufficiale DPC non ne pubblica le tile raster, quindi restano consultabili solo come dati grezzi.
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
