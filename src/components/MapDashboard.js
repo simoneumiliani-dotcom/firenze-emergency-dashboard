@@ -43,13 +43,23 @@ const WMS_LAYERS = [
   }
 ];
 
+// Number(null) vale 0: senza questo controllo una soglia assente diventerebbe
+// una soglia a 0 m, cioe' un allarme falso.
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function getHydroStatus(station) {
-  const value = Number(station.value);
-  const danger = Number(station.danger);
-  const warning = Number(station.warning);
-  if (station.value === null || station.value === undefined) return { color: "#64748b", label: "Dato non disponibile" };
-  if (Number.isFinite(value) && Number.isFinite(danger) && value >= danger) return { color: "#ef4444", label: "Soglia critica" };
-  if (Number.isFinite(value) && Number.isFinite(warning) && value >= warning) return { color: "#facc15", label: "Soglia attenzione" };
+  const value = toFiniteNumber(station.value);
+  const danger = toFiniteNumber(station.danger);
+  const warning = toFiniteNumber(station.warning);
+  if (value === null) return { color: "#64748b", label: "Dato non disponibile" };
+  if (danger !== null && value >= danger) return { color: "#ef4444", label: "Soglia critica" };
+  if (warning !== null && value >= warning) return { color: "#facc15", label: "Soglia attenzione" };
+  // Senza soglie ufficiali non si dichiara "regolare": non lo sappiamo.
+  if (warning === null && danger === null) return { color: "#94a3b8", label: "Soglie non disponibili" };
   return { color: "#22c55e", label: "Regolare" };
 }
 

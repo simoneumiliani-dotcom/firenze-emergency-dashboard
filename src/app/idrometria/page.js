@@ -41,6 +41,14 @@ function getStationLabel(station) {
   return river + station.station_name;
 }
 
+// Number(null) vale 0: senza questo controllo una soglia assente diventerebbe
+// una soglia a 0 m, cioe' un allarme falso.
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function buildRealtimeTrendPoints(realtime) {
   const value = Number(realtime?.level_m);
   if (!Number.isFinite(value)) return [];
@@ -74,12 +82,10 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
     .filter((row) => Number.isFinite(Number(row.level_m)));
   const rawRows = stationHistoricalRows.length ? stationHistoricalRows.slice(-48) : buildRealtimeTrendPoints(selectedRealtime);
   const currentLevel = Number(selectedRealtime?.level_m ?? rawRows[rawRows.length - 1]?.level_m);
-  const levelOne = Number.isFinite(Number(selectedRealtime?.warning_m))
-    ? Number(selectedRealtime.warning_m)
-    : Number.isFinite(currentLevel) ? Number((currentLevel + 0.8).toFixed(2)) : null;
-  const levelTwo = Number.isFinite(Number(selectedRealtime?.danger_m))
-    ? Number(selectedRealtime.danger_m)
-    : Number.isFinite(currentLevel) ? Number((currentLevel + 1.4).toFixed(2)) : null;
+  // Solo soglie ufficiali CFR: se mancano non vengono inventate a partire dal
+  // livello misurato, altrimenti il grafico mostrerebbe limiti che non esistono.
+  const levelOne = toFiniteNumber(selectedRealtime?.warning_m);
+  const levelTwo = toFiniteNumber(selectedRealtime?.danger_m);
   const chartData = rawRows.map((row) => ({
     time: formatChartTime(row.measurement_time),
     timestamp: row.measurement_time,
@@ -162,8 +168,11 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
             <div className="space-y-3 text-sm">
               <div>
                 <p className="font-semibold text-indigo-800">Soglie operative</p>
-                <p className="mt-1"><span className="inline-block h-2.5 w-6 rounded-sm bg-yellow-300" /> Livello 1 -&gt; {levelOne ?? "n.d."} m</p>
-                <p><span className="inline-block h-2.5 w-6 rounded-sm bg-red-500" /> Livello 2 -&gt; {levelTwo ?? "n.d."} m</p>
+                <p className="mt-1"><span className="inline-block h-2.5 w-6 rounded-sm bg-yellow-300" /> Livello 1 -&gt; {levelOne === null ? "soglia non disponibile" : levelOne + " m"}</p>
+                <p><span className="inline-block h-2.5 w-6 rounded-sm bg-red-500" /> Livello 2 -&gt; {levelTwo === null ? "soglia non disponibile" : levelTwo + " m"}</p>
+                {levelOne === null && levelTwo === null && (
+                  <p className="mt-1 text-xs text-slate-600">CFR Toscana non pubblica le soglie per questa stazione: nessuna linea di riferimento nel grafico.</p>
+                )}
               </div>
               <div className="rounded border border-slate-300 bg-slate-50 p-2">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Ultima misura</p>

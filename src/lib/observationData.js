@@ -107,20 +107,6 @@ function parseNumber(text) {
   return match ? Number(match[0].replace(",", ".")) : null;
 }
 
-function buildHydroHistory(value) {
-  return [5, 4, 3, 2, 1, 0].map((hoursAgo, index) => {
-    const time = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toLocaleTimeString("it-IT", {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-    return {
-      time,
-      value: Number(Math.max(0, value + Math.sin(index * 0.9) * 0.16).toFixed(2)),
-      warning: Number((value + 0.8).toFixed(2))
-    };
-  });
-}
-
 export function buildEmptyMeasurements(provider = "CFR Toscana") {
   return Object.fromEntries(Object.entries(STATIONS_BY_TYPE).map(([type, stations]) => [
     type,
@@ -149,7 +135,8 @@ function getUpdatedAt(dateTimeText) {
 
 function getWarningThreshold(type, value) {
   if (!Number.isFinite(value)) return null;
-  if (type === "hydrometry") return Number((value + 0.8).toFixed(2));
+  // Le soglie idrometriche esistono solo se le pubblica CFR Toscana: qui non
+  // vengono derivate dal livello misurato (sarebbe un limite inventato).
   if (type === "pluviometry") return 25;
   if (type === "anemometry") return 50;
   return null;
@@ -157,7 +144,6 @@ function getWarningThreshold(type, value) {
 
 function getDangerThreshold(type, value) {
   if (!Number.isFinite(value)) return null;
-  if (type === "hydrometry") return Number((value + 1.4).toFixed(2));
   if (type === "pluviometry") return 50;
   if (type === "anemometry") return 80;
   return null;
@@ -325,7 +311,6 @@ async function fetchCfrMeasurementsForSelection(selection) {
         updatedAt: result.updatedAt,
         warning: getWarningThreshold(job.type, value),
         danger: getDangerThreshold(job.type, value),
-        history: job.type === "hydrometry" ? buildHydroHistory(value) : undefined,
         unavailable: false,
         provider: "CFR Toscana",
         real: true,
@@ -364,7 +349,6 @@ async function fetchCfrMeasurements() {
         updatedAt: result.updatedAt,
         warning: getWarningThreshold(job.type, value),
         danger: getDangerThreshold(job.type, value),
-        history: job.type === "hydrometry" ? buildHydroHistory(value) : undefined,
         unavailable: false,
         provider: "CFR Toscana",
         real: true,

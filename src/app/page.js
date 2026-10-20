@@ -74,12 +74,12 @@ function buildFallbackMeasurements() {
   ]));
 }
 
-function buildHydroHistory(value) {
-  return ["-5h", "-4h", "-3h", "-2h", "-1h", "Ora"].map((time, index) => ({
-    time,
-    value: Number(Math.max(0, value + Math.sin(index * 0.9) * 0.16).toFixed(2)),
-    warning: Number((value + 0.8).toFixed(2))
-  }));
+// Number(null) vale 0: usato sulle soglie trasformerebbe "soglia assente" in
+// "soglia a 0 m", cioe' in un allarme falso.
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizeObservationData(payload) {
@@ -175,15 +175,11 @@ function normalizeHydrometryForDashboard(payload) {
   const realtimeByStation = new Map((payload?.realtimeMeasurements || []).map((row) => [row.station_id, row]));
   return (payload?.stations || []).map((station) => {
     const realtime = realtimeByStation.get(station.station_id);
-    const value = realtime?.level_m;
-    const numericValue = Number(value);
-    const hasValue = Number.isFinite(numericValue);
-    const warning = Number.isFinite(Number(realtime?.warning_m))
-      ? Number(realtime.warning_m)
-      : hasValue ? Number((numericValue + 0.8).toFixed(2)) : null;
-    const danger = Number.isFinite(Number(realtime?.danger_m))
-      ? Number(realtime.danger_m)
-      : hasValue ? Number((numericValue + 1.4).toFixed(2)) : null;
+    const numericValue = toFiniteNumber(realtime?.level_m);
+    const hasValue = numericValue !== null;
+    // Soglie solo se pubblicate da CFR: nessun valore derivato dal livello misurato.
+    const warning = toFiniteNumber(realtime?.warning_m);
+    const danger = toFiniteNumber(realtime?.danger_m);
 
     return {
       id: station.station_id,
@@ -197,7 +193,6 @@ function normalizeHydrometryForDashboard(payload) {
       updatedAt: formatShortTime(realtime?.measurement_time),
       warning,
       danger,
-      history: hasValue ? buildHydroHistory(numericValue) : undefined,
       unavailable: !hasValue,
       provider: realtime ? "CFR Toscana" : "CFR Toscana (in attesa)",
       real: Boolean(realtime),
@@ -215,12 +210,12 @@ function normalizeHydrometryForDashboard(payload) {
 }
 
 function getStationStatus(station) {
-  const value = Number(station.value);
-  const danger = Number(station.danger);
-  const warning = Number(station.warning);
-  if (station.value === null || station.value === undefined) return "Verde";
-  if (Number.isFinite(value) && Number.isFinite(danger) && value >= danger) return "Rosso";
-  if (Number.isFinite(value) && Number.isFinite(warning) && value >= warning) return "Giallo";
+  const value = toFiniteNumber(station.value);
+  const danger = toFiniteNumber(station.danger);
+  const warning = toFiniteNumber(station.warning);
+  if (value === null) return "Verde";
+  if (danger !== null && value >= danger) return "Rosso";
+  if (warning !== null && value >= warning) return "Giallo";
   return "Verde";
 }
 
