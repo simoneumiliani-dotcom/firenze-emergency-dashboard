@@ -1,11 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   CloudRain,
   Droplets,
@@ -674,13 +676,21 @@ export default function DashboardPage() {
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Dashboard meteo e idrometria Firenze</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio con Open Meteo come fonte primaria per le grandezze meteorologiche e CFR Toscana per i livelli idrometrici.</p>
           </div>
-          <div className={`w-full rounded-lg border px-4 py-3 sm:w-auto ${ALERT_STYLE[visibleAlert]}`}>
+          <Link
+            href="/allerte"
+            aria-label={"Apri la pagina Allerte e criticità, livello " + visibleAlert}
+            className={`group block w-full rounded-lg border px-4 py-3 transition hover:shadow-glow sm:w-auto ${ALERT_STYLE[visibleAlert]}`}
+          >
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               <span className="text-sm font-medium">Allerta attiva</span>
             </div>
             <p className="mt-1 text-2xl font-semibold">{visibleAlert}</p>
-          </div>
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-80 group-hover:opacity-100">
+              Dettagli allerte
+              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+            </span>
+          </Link>
         </header>
 
         <PdfParser onAlertDetected={setAlert} />
