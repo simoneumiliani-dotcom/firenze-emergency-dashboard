@@ -9,6 +9,7 @@ import {
   ArrowDown,
   Archive,
   Clock,
+  Download,
   ExternalLink,
   FileText,
   MapPin,
@@ -38,6 +39,13 @@ function normalizeLevel(value) {
 
 function levelWeight(value) {
   return Math.max(0, LEVEL_ORDER.indexOf(normalizeLevel(value)));
+}
+
+// I bollettini pubblicati prima della validazione sugli URL hanno il PDF
+// incorporato come data URL: il browser blocca l'apertura in una nuova scheda,
+// quindi lì il link deve essere un download esplicito.
+function isInlinePdf(url) {
+  return typeof url === "string" && url.startsWith("data:");
 }
 
 function parseDate(value) {
@@ -264,7 +272,16 @@ export default function AllertePage() {
                     </div>
                   )}
 
-                  {current.pdfUrl && (
+                  {current.pdfUrl && (isInlinePdf(current.pdfUrl) ? (
+                    <a
+                      href={current.pdfUrl}
+                      download={current.fileName || "bollettino.pdf"}
+                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+                    >
+                      Scarica bollettino PDF
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
                     <a
                       href={current.pdfUrl}
                       target="_blank"
@@ -274,7 +291,7 @@ export default function AllertePage() {
                       Apri bollettino PDF
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
-                  )}
+                  ))}
                 </>
               ) : (
                 <div className="mt-5 flex flex-col items-start gap-3 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6">
@@ -389,12 +406,21 @@ export default function AllertePage() {
                             <span className="line-clamp-2">{item.reason || "—"}</span>
                           </td>
                           <td className="py-3">
-                            {item.pdfUrl ? (
+                            {item.pdfUrl ? (isInlinePdf(item.pdfUrl) ? (
+                              <a
+                                href={item.pdfUrl}
+                                download={item.fileName || "bollettino.pdf"}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-sky-200 hover:underline"
+                              >
+                                Scarica
+                                <Download className="h-3 w-3" />
+                              </a>
+                            ) : (
                               <a href={item.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-sky-200 hover:underline">
                                 Apri
                                 <ExternalLink className="h-3 w-3" />
                               </a>
-                            ) : (
+                            )) : (
                               <span className="text-xs text-slate-600">—</span>
                             )}
                           </td>
