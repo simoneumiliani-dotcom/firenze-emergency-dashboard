@@ -52,7 +52,10 @@ function WebcamCard({ webcam, status, refreshKey }) {
           <h2 className="truncate text-sm font-semibold text-slate-100">{webcam.title}</h2>
           <p className="mt-1 truncate text-xs text-slate-400">{webcam.area} - {webcam.provider}</p>
         </div>
-        <span className={"inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs " + statusMeta.className}>
+        <span
+          className={"inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs " + statusMeta.className}
+          title={status ? "Controllo: " + status.mode + " - " + status.checkedUrl + (status.contentType ? " (" + status.contentType + ")" : "") : "Nessun controllo effettuato"}
+        >
           <StatusIcon className="h-3.5 w-3.5" />
           {statusMeta.label}
         </span>
@@ -100,6 +103,7 @@ function WebcamCard({ webcam, status, refreshKey }) {
             muted
             playsInline
             preload="metadata"
+            poster={webcam.previewUrl || undefined}
           >
             <source src={videoSrc} type={webcam.videoType || "video/mp4"} />
           </video>
