@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Camera, CloudSun, LayoutDashboard, Waves } from "lucide-react";
+import { AlertTriangle, BarChart3, Camera, CloudSun, LayoutDashboard, Waves } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/allerte", label: "Allerte", icon: AlertTriangle },
   { href: "/previsioni", label: "Previsioni", icon: CloudSun },
   { href: "/idrometria", label: "Idrometria", icon: Waves },
   { href: "/webcam", label: "Webcam", icon: Camera }
@@ -27,7 +28,7 @@ export default function AppNav() {
           </span>
         </Link>
 
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-sm sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-sm sm:grid-cols-5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
