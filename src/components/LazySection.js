@@ -28,7 +28,27 @@ export default function LazySection({ children, minHeight = "24rem", label = "Ca
     }, { rootMargin: "0px", threshold: 0.01 });
 
     observer.observe(element);
-    return () => observer.disconnect();
+
+    // Alcuni browser (finestra non in primo piano, webview, risparmio energia)
+    // non consegnano le callback dell'observer: senza questa rete di sicurezza
+    // la sezione resterebbe sul segnaposto per sempre. Il controllo sul rettangolo
+    // allo scroll costa poco e non fa partire nulla prima del necessario.
+    const mountIfInView = () => {
+      const rect = element.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        setVisible(true);
+        observer.disconnect();
+        window.removeEventListener("scroll", mountIfInView);
+      }
+    };
+
+    window.addEventListener("scroll", mountIfInView, { passive: true });
+    mountIfInView();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", mountIfInView);
+    };
   }, []);
 
   return (
