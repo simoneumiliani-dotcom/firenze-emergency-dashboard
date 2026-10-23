@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // La scrittura dell'archivio decide lo stato di allerta mostrato in dashboard.
-// Il codice condiviso (BULLETIN_WRITE_CODE, con default in bulletinPublishCode)
-// blocca le scritture anonime; la dashboard lo conferma una volta e poi lo invia.
+// Il codice condiviso vive in bulletinPublishCode.js, unica fonte sia per il server
+// sia per il prompt della dashboard: blocca le scritture anonime da terzi.
 const MAX_FILE_NAME = 160;
 const MAX_LABEL = 200;
 const MAX_TEXT = 4000;
@@ -27,12 +27,6 @@ function readRequestToken(request) {
   const authorization = request.headers.get("authorization");
   if (authorization && /^bearer\s+/i.test(authorization)) return authorization.replace(/^bearer\s+/i, "").trim();
   return null;
-}
-
-function getExpectedCode() {
-  return String(
-    process.env.BULLETIN_WRITE_CODE || process.env.BULLETIN_WRITE_TOKEN || DEFAULT_BULLETIN_PUBLISH_CODE
-  ).trim();
 }
 
 function tokensMatch(provided, expected) {
@@ -133,7 +127,7 @@ export async function POST(request) {
     return reject(403, "Origine della richiesta non consentita.");
   }
   const providedToken = readRequestToken(request);
-  if (!providedToken || !tokensMatch(providedToken, getExpectedCode())) {
+  if (!providedToken || !tokensMatch(providedToken, DEFAULT_BULLETIN_PUBLISH_CODE)) {
     return reject(401, "Codice di pubblicazione mancante o non valido.");
   }
 

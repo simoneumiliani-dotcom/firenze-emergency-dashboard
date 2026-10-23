@@ -1,7 +1,8 @@
 // Codice condiviso per pubblicare un bollettino nell'archivio comune.
-// Non è un segreto forte: serve a impedire scritture anonime da terzi, non a
-// distinguere gli operatori. Il server può sostituirlo con BULLETIN_WRITE_CODE
-// (o con il vecchio BULLETIN_WRITE_TOKEN) senza toccare la dashboard.
+// Unica fonte per il server (/api/bulletins) e per il prompt della dashboard:
+// per cambiarlo basta modificare questa costante e ridistribuire.
+// Non è un segreto forte, perché viaggia nel bundle del browser: serve a
+// impedire scritture anonime da terzi, non a distinguere gli operatori.
 export const DEFAULT_BULLETIN_PUBLISH_CODE = "FirenzePc2026";
 
 // Chiave localStorage in cui la dashboard ricorda il codice confermato.

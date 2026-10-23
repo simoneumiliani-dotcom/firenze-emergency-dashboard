@@ -19,9 +19,9 @@ Ambito: tutto il codice applicativo (49 file tracciati, ~11.700 righe escluse le
 
 > **Risolto il 20/10/2026, semplificato il 23/10/2026.** Il `POST` richiede un codice
 > condiviso (header `x-bulletin-token` o `Authorization: Bearer`), confrontato in tempo
-> costante. Il codice è `BULLETIN_WRITE_CODE` oppure, se assente, il default
-> `FirenzePc2026` in `src/lib/bulletinPublishCode.js`: non esiste più lo stato 503 da
-> variabile mancante. Codice errato **401**, `Origin` estranea **403**, payload non
+> costante. Il codice è la costante `FirenzePc2026` in `src/lib/bulletinPublishCode.js`,
+> unica fonte per server e prompt: non esistono più né lo stato 503 da variabile mancante
+> né override da ambiente. Codice errato **401**, `Origin` estranea **403**, payload non
 > valido **400**. Verifiche in §5.2.
 
 Situazione precedente: `src/app/api/bulletins/route.js:11` accettava un `POST` arbitrario senza
@@ -307,14 +307,16 @@ Modifiche:
   (livello in whitelist, date ISO, limiti di lunghezza, liste ripulite) e sanitizzazione di
   `pdfUrl` (solo `https`, i data URL base64 non vengono più salvati). Il `GET` resta pubblico
   e in sola lettura. Il 23/10/2026 il token per-deploy è stato sostituito da un **codice
-  condiviso con default** (`BULLETIN_WRITE_CODE`, fallback `FirenzePc2026`), così la
-  pubblicazione non richiede più configurazione su Vercel.
+  condiviso** (`FirenzePc2026` in `src/lib/bulletinPublishCode.js`), così la pubblicazione
+  non richiede configurazione su Vercel: le vecchie `BULLETIN_WRITE_CODE` e
+  `BULLETIN_WRITE_TOKEN` non vengono più lette.
 - `src/components/PdfParser.js`: il campo token è stato rimosso dall'archivio; al primo invio
   la dashboard chiede il codice con il default già compilato e lo ricorda in `localStorage`.
   Il codice è per definizione nel bundle, quindi va inteso come barriera contro scritture
   anonime, non come autenticazione forte: per un controllo reale impostare
   `BULLETIN_WRITE_CODE` e cambiare il default nel codice.
-- `.env.example`: documentata `BULLETIN_WRITE_CODE` (alias legacy `BULLETIN_WRITE_TOKEN`).
+- `.env.example`: non contiene più variabili per la scrittura dei bollettini; indica che il
+  codice vive nel modulo condiviso.
 
 Matrice verificata (server con token configurato):
 
