@@ -1,12 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getBulletinArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
+import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// La scrittura dell'archivio decide lo stato di allerta mostrato in dashboard,
-// quindi richiede un token: senza BULLETIN_WRITE_TOKEN il POST resta chiuso.
+// La scrittura dell'archivio decide lo stato di allerta mostrato in dashboard.
+// Il codice condiviso (BULLETIN_WRITE_CODE, con default in bulletinPublishCode)
+// blocca le scritture anonime; la dashboard lo conferma una volta e poi lo invia.
 const MAX_FILE_NAME = 160;
 const MAX_LABEL = 200;
 const MAX_TEXT = 4000;
@@ -25,6 +27,12 @@ function readRequestToken(request) {
   const authorization = request.headers.get("authorization");
   if (authorization && /^bearer\s+/i.test(authorization)) return authorization.replace(/^bearer\s+/i, "").trim();
   return null;
+}
+
+function getExpectedCode() {
+  return String(
+    process.env.BULLETIN_WRITE_CODE || process.env.BULLETIN_WRITE_TOKEN || DEFAULT_BULLETIN_PUBLISH_CODE
+  ).trim();
 }
 
 function tokensMatch(provided, expected) {
@@ -121,16 +129,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const expectedToken = String(process.env.BULLETIN_WRITE_TOKEN || "").trim();
-  if (!expectedToken) {
-    return reject(503, "Scrittura dei bollettini disabilitata: BULLETIN_WRITE_TOKEN non configurato sul server.");
-  }
   if (!isSameOrigin(request)) {
     return reject(403, "Origine della richiesta non consentita.");
   }
   const providedToken = readRequestToken(request);
-  if (!providedToken || !tokensMatch(providedToken, expectedToken)) {
-    return reject(401, "Token di scrittura mancante o non valido.");
+  if (!providedToken || !tokensMatch(providedToken, getExpectedCode())) {
+    return reject(401, "Codice di pubblicazione mancante o non valido.");
   }
 
   let payload;

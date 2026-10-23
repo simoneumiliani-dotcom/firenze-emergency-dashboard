@@ -17,10 +17,12 @@ Ambito: tutto il codice applicativo (49 file tracciati, ~11.700 righe escluse le
 
 ### 1.1 CRITICO — ~~`POST /api/bulletins` non è autenticato~~ — RISOLTO
 
-> **Risolto il 20/10/2026.** Il `POST` richiede ora `BULLETIN_WRITE_TOKEN` (header
-> `x-bulletin-token` o `Authorization: Bearer`), confrontato in tempo costante; senza
-> variabile configurata risponde **503** (fail-closed), con token errato **401**, con
-> `Origin` estranea **403**, con payload non valido **400**. Verifiche in §5.2.
+> **Risolto il 20/10/2026, semplificato il 23/10/2026.** Il `POST` richiede un codice
+> condiviso (header `x-bulletin-token` o `Authorization: Bearer`), confrontato in tempo
+> costante. Il codice è `BULLETIN_WRITE_CODE` oppure, se assente, il default
+> `FirenzePc2026` in `src/lib/bulletinPublishCode.js`: non esiste più lo stato 503 da
+> variabile mancante. Codice errato **401**, `Origin` estranea **403**, payload non
+> valido **400**. Verifiche in §5.2.
 
 Situazione precedente: `src/app/api/bulletins/route.js:11` accettava un `POST` arbitrario senza
 alcun controllo di identità. Il record diventava `archive.current` (`src/lib/bulletinArchive.js:70`)
@@ -300,21 +302,25 @@ Verifiche (payload reale e payload forzato senza soglie, in browser):
 
 Modifiche:
 
-- `src/app/api/bulletins/route.js`: token obbligatorio con confronto a tempo costante
-  (`node:crypto.timingSafeEqual`), **fail-closed** se `BULLETIN_WRITE_TOKEN` non è impostato,
-  controllo same-origin per il CSRF, validazione del payload (livello in whitelist, date ISO,
-  limiti di lunghezza, liste ripulite) e sanitizzazione di `pdfUrl` (solo `https`, i data URL
-  base64 non vengono più salvati). Il `GET` resta pubblico e in sola lettura.
-- `src/components/PdfParser.js`: il token lo inserisce l'operatore a runtime e resta **solo in
-  memoria** (mai nel bundle, mai in localStorage); senza token il client non invia nulla e il
-  bollettino resta sul dispositivo; gli errori del server vengono mostrati all'utente.
-- `.env.example`: documentata `BULLETIN_WRITE_TOKEN` con l'istruzione di generarla a caso.
+- `src/app/api/bulletins/route.js`: codice obbligatorio con confronto a tempo costante
+  (`node:crypto.timingSafeEqual`), controllo same-origin per il CSRF, validazione del payload
+  (livello in whitelist, date ISO, limiti di lunghezza, liste ripulite) e sanitizzazione di
+  `pdfUrl` (solo `https`, i data URL base64 non vengono più salvati). Il `GET` resta pubblico
+  e in sola lettura. Il 23/10/2026 il token per-deploy è stato sostituito da un **codice
+  condiviso con default** (`BULLETIN_WRITE_CODE`, fallback `FirenzePc2026`), così la
+  pubblicazione non richiede più configurazione su Vercel.
+- `src/components/PdfParser.js`: il campo token è stato rimosso dall'archivio; al primo invio
+  la dashboard chiede il codice con il default già compilato e lo ricorda in `localStorage`.
+  Il codice è per definizione nel bundle, quindi va inteso come barriera contro scritture
+  anonime, non come autenticazione forte: per un controllo reale impostare
+  `BULLETIN_WRITE_CODE` e cambiare il default nel codice.
+- `.env.example`: documentata `BULLETIN_WRITE_CODE` (alias legacy `BULLETIN_WRITE_TOKEN`).
 
 Matrice verificata (server con token configurato):
 
 | Richiesta | Esito |
 |---|---|
-| `POST` senza token | 401 `Token di scrittura mancante o non valido.` |
+| `POST` senza token | 401 `Codice di pubblicazione mancante o non valido.` |
 | `POST` con token errato | 401 |
 | `POST` con token corretto (`x-bulletin-token` o Bearer) | 200, record in `current` |
 | `POST` con token corretto ma `Origin: https://evil.example` | 403 |
@@ -322,7 +328,7 @@ Matrice verificata (server con token configurato):
 | `POST` con JSON malformato | 400 |
 | `POST` con `pdfUrl` data URL base64 | 200 con `pdfUrl: null` |
 | `POST` con `fileName` di 400 caratteri | 200 con nome troncato a 160 |
-| Server **senza** `BULLETIN_WRITE_TOKEN` | 503, `GET` sempre 200 |
+| `POST` con il codice di default (nessuna variabile impostata) | 200, `GET` sempre 200 |
 
 Verifica end-to-end nella UI: PDF sintetico caricato dal browser → livello rilevato `Giallo`
 senza token, nessuna richiesta inviata, avviso "il bollettino resta solo su questo dispositivo";
