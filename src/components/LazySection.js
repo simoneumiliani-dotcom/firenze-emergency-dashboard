@@ -17,12 +17,15 @@ export default function LazySection({ children, minHeight = "24rem", label = "Ca
       return;
     }
 
+    // Margine zero: il contenuto parte solo quando entra davvero in viewport.
+    // Con un margine ampio la sezione si montava al primo layout, prima che i
+    // dati caricati spostassero la mappa piu' in basso, annullando il risparmio.
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         setVisible(true);
         observer.disconnect();
       }
-    }, { rootMargin: "300px 0px" });
+    }, { rootMargin: "0px", threshold: 0.01 });
 
     observer.observe(element);
     return () => observer.disconnect();
