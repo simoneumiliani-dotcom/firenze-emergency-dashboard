@@ -32,7 +32,7 @@ export default function AppNav() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
-            const className = "inline-flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-center font-medium transition sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:py-2 " +
+            const className = "inline-flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-center font-medium transition sm:min-h-11 sm:flex-row sm:gap-2 sm:px-3 sm:py-2 " +
               (active
                 ? "bg-sky-400/15 text-sky-100 ring-1 ring-sky-400/40"
                 : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-100");
