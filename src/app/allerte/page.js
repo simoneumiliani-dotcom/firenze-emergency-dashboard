@@ -300,7 +300,7 @@ export default function AllertePage() {
                     <p className="text-sm font-semibold">Nessuna allerta in corso</p>
                   </div>
                   <p className="max-w-xl text-sm leading-6 text-slate-400">
-                    Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato dalla dashboard: una volta pubblicato con token, il livello compare anche qui.
+                    Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato dalla dashboard: una volta pubblicato, il livello compare anche qui.
                   </p>
                   <Link
                     href="/"
@@ -432,7 +432,7 @@ export default function AllertePage() {
               </div>
             ) : (
               <div className="mt-4 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6 text-sm text-slate-400">
-                Nessun bollettino archiviato. La pubblicazione avviene dalla dashboard, nella sezione di caricamento PDF: serve un bollettino valido e, per l&apos;archivio condiviso, il token di scrittura.
+                Nessun bollettino archiviato. La pubblicazione avviene dalla dashboard, nella sezione di caricamento PDF: basta un bollettino valido e la conferma del codice di pubblicazione.
               </div>
             )}
           </section>

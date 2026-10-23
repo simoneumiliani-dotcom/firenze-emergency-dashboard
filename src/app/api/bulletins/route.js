@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getBulletinArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
+import { getBulletinArchive, removeBulletinFromArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
 import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +47,18 @@ function isSameOrigin(request) {
   } catch {
     return false;
   }
+}
+
+// Stesso controllo per scrittura e rimozione: codice condiviso + stessa origine.
+function checkWriteAccess(request) {
+  if (!isSameOrigin(request)) {
+    return reject(403, "Origine della richiesta non consentita.");
+  }
+  const providedToken = readRequestToken(request);
+  if (!providedToken || !tokensMatch(providedToken, DEFAULT_BULLETIN_PUBLISH_CODE)) {
+    return reject(401, "Codice di pubblicazione mancante o non valido.");
+  }
+  return null;
 }
 
 function asText(value, maxLength) {
@@ -123,13 +135,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  if (!isSameOrigin(request)) {
-    return reject(403, "Origine della richiesta non consentita.");
-  }
-  const providedToken = readRequestToken(request);
-  if (!providedToken || !tokensMatch(providedToken, DEFAULT_BULLETIN_PUBLISH_CODE)) {
-    return reject(401, "Codice di pubblicazione mancante o non valido.");
-  }
+  const denied = checkWriteAccess(request);
+  if (denied) return denied;
 
   let payload;
   try {
@@ -146,5 +153,22 @@ export async function POST(request) {
     return NextResponse.json(archive);
   } catch {
     return reject(500, "Impossibile salvare il bollettino nell'archivio.");
+  }
+}
+
+// Ritira un bollettino pubblicato per errore: se era quello in corso, il livello
+// torna a quello del bollettino valido precedente (o a nessun bollettino).
+export async function DELETE(request) {
+  const denied = checkWriteAccess(request);
+  if (denied) return denied;
+
+  const id = asText(new URL(request.url).searchParams.get("id"), MAX_FILE_NAME + 60);
+  if (!id) return reject(400, "Identificativo del bollettino mancante.");
+
+  try {
+    const archive = await removeBulletinFromArchive(id);
+    return NextResponse.json({ ...archive, removed: id });
+  } catch {
+    return reject(500, "Impossibile rimuovere il bollettino dall'archivio.");
   }
 }

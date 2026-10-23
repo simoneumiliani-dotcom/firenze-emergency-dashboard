@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, UploadCloud, XCircle } from "lucide-react";
+import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 
 const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
@@ -349,7 +349,10 @@ export default function PdfParser({ onAlertDetected }) {
   const [publishCode, setPublishCode] = useState("");
   const [codePrompt, setCodePrompt] = useState(null);
   const [publishNotice, setPublishNotice] = useState(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
+  const [removingId, setRemovingId] = useState(null);
   const pendingPayloadsRef = useRef([]);
+  const pendingDeleteRef = useRef(null);
   const objectUrlRef = useRef(null);
 
   // Il codice di pubblicazione è unico per tutti: la dashboard lo chiede una
@@ -404,6 +407,72 @@ export default function PdfParser({ onAlertDetected }) {
     }
   }, [publishCode]);
 
+  const removeBulletinRecord = useCallback(async (id, codeOverride) => {
+    const code = String(codeOverride || publishCode || "").trim();
+    if (!code) {
+      pendingDeleteRef.current = id;
+      setCodePrompt({ code: DEFAULT_BULLETIN_PUBLISH_CODE, error: null, mode: "delete" });
+      return null;
+    }
+
+    setRemovingId(id);
+    try {
+      const response = await fetch("/api/bulletins?id=" + encodeURIComponent(id), {
+        method: "DELETE",
+        headers: { "x-bulletin-token": code }
+      });
+
+      if (response.ok) {
+        const archive = await response.json();
+        const nextLocal = pruneLocalArchive(
+          readJsonStorage(LOCAL_ARCHIVE_KEY, []).filter((item) => item.id !== id)
+        );
+        writeJsonStorage(LOCAL_ARCHIVE_KEY, nextLocal);
+        setArchive(nextLocal);
+        removeOldPdfBlobs(nextLocal.map((item) => item.id));
+
+        const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
+        const wasCurrent = localCurrent?.id === id;
+        if (wasCurrent) {
+          writeJsonStorage(LOCAL_CURRENT_KEY, null);
+          onAlertDetected?.({ level: "Verde", matches: [], reason: "Nessun bollettino pubblicato in corso." });
+        }
+        if (wasCurrent || result?.id === id) {
+          setResult(null);
+          setStatus("idle");
+          setViewerOpen(false);
+          setExtractOpen(false);
+          setPdfUrl(null);
+          if (objectUrlRef.current) {
+            URL.revokeObjectURL(objectUrlRef.current);
+            objectUrlRef.current = null;
+          }
+        }
+
+        setPublishNotice({ ok: true, message: "Bollettino rimosso dall'archivio condiviso." });
+        return archive;
+      }
+
+      if (response.status === 401) {
+        try { window.localStorage.removeItem(PUBLISH_CODE_STORAGE_KEY); } catch {}
+        setPublishCode("");
+        pendingDeleteRef.current = id;
+        setPublishNotice(null);
+        setCodePrompt({ code, error: "Codice non valido: controlla il codice di pubblicazione.", mode: "delete" });
+        return null;
+      }
+
+      const body = await response.json().catch(() => null);
+      setPublishNotice({ ok: false, message: body?.error || "Archivio condiviso non raggiungibile." });
+      return null;
+    } catch {
+      setPublishNotice({ ok: false, message: "Archivio condiviso non raggiungibile." });
+      return null;
+    } finally {
+      setRemovingId(null);
+    }
+  }, [onAlertDetected, publishCode, result]);
+
   const confirmPublishCode = useCallback(async () => {
     const code = String(codePrompt?.code || "").trim();
     if (!code) return;
@@ -412,18 +481,32 @@ export default function PdfParser({ onAlertDetected }) {
     setPublishCode(code);
     setCodePrompt(null);
 
+    const pendingId = pendingDeleteRef.current;
+    pendingDeleteRef.current = null;
+    if (pendingId) {
+      await removeBulletinRecord(pendingId, code);
+      return;
+    }
+
     const queue = pendingPayloadsRef.current;
     pendingPayloadsRef.current = [];
     for (const payload of queue) {
       const remoteArchive = await publishBulletin(payload, code);
       if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
     }
-  }, [codePrompt, publishBulletin]);
+  }, [codePrompt, publishBulletin, removeBulletinRecord]);
 
   const cancelPublishCode = useCallback(() => {
+    const wasDelete = Boolean(pendingDeleteRef.current);
+    pendingDeleteRef.current = null;
     pendingPayloadsRef.current = [];
     setCodePrompt(null);
-    setPublishNotice({ ok: false, message: "Pubblicazione annullata: il bollettino resta solo su questo dispositivo." });
+    setPublishNotice({
+      ok: false,
+      message: wasDelete
+        ? "Rimozione annullata: il bollettino resta in archivio."
+        : "Pubblicazione annullata: il bollettino resta solo su questo dispositivo."
+    });
   }, []);
 
   useEffect(() => {
@@ -681,7 +764,7 @@ export default function PdfParser({ onAlertDetected }) {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-100">Archivio bollettini</p>
-              <p className="text-xs text-slate-400">Ultimi 5 bollettini, con PDF consultabile quando disponibile.</p>
+              <p className="text-xs text-slate-400">Ultimi 5 bollettini, con PDF consultabile quando disponibile. Il cestino ritira un bollettino pubblicato per errore.</p>
             </div>
             <button type="button" onClick={() => setArchiveOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
           </div>
@@ -689,16 +772,52 @@ export default function PdfParser({ onAlertDetected }) {
           {archive.length ? (
             <div className="grid gap-2">
               {archive.map((item) => (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => openArchivedBulletin(item)}
-                  className="rounded-lg border border-emergency-line bg-black/10 px-3 py-2 text-left hover:bg-white/[0.04]"
+                  className="flex flex-col gap-2 rounded-lg border border-emergency-line bg-black/10 p-2 sm:flex-row sm:items-center"
                 >
-                  <span className="block text-sm font-medium text-slate-100">{item.fileName}</span>
-                  <span className="mt-1 block text-xs text-slate-400">{item.issue || "Emissione non rilevata"}</span>
-                  <span className="mt-1 block text-xs text-sky-100">{item.validity || "Validita non rilevata"}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => openArchivedBulletin(item)}
+                    className="flex-1 rounded-md px-2 py-1 text-left hover:bg-white/[0.04]"
+                  >
+                    <span className="block text-sm font-medium text-slate-100">{item.fileName}</span>
+                    <span className="mt-1 block text-xs text-slate-400">{item.issue || "Emissione non rilevata"}</span>
+                    <span className="mt-1 block text-xs text-sky-100">{item.validity || "Validita non rilevata"}</span>
+                  </button>
+                  {confirmRemoveId === item.id ? (
+                    <div className="flex gap-2 sm:flex-col">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmRemoveId(null);
+                          removeBulletinRecord(item.id);
+                        }}
+                        disabled={removingId === item.id}
+                        className="rounded-md border border-emergency-red/60 bg-emergency-red/15 px-3 py-2 text-xs font-medium text-red-100 hover:bg-emergency-red/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {removingId === item.id ? "Rimozione..." : "Rimuovi"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(null)}
+                        className="rounded-md border border-emergency-line px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06]"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRemoveId(item.id)}
+                      aria-label={"Rimuovi " + item.fileName + " dall'archivio"}
+                      title="Rimuovi dall'archivio"
+                      className="self-start rounded-md border border-emergency-line px-3 py-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           ) : (
@@ -822,12 +941,22 @@ export default function PdfParser({ onAlertDetected }) {
         </div>
       )}
 
+      {status === "idle" && publishNotice && (
+        <p className={`mt-4 rounded-lg border px-3 py-2 text-xs ${publishNotice.ok ? "border-emergency-green/40 bg-emergency-green/10 text-green-100" : "border-emergency-line bg-black/20 text-slate-300"}`}>
+          {publishNotice.message}
+        </p>
+      )}
+
       {codePrompt && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
-            <p className="text-base font-semibold text-slate-100">Codice di pubblicazione</p>
+            <p className="text-base font-semibold text-slate-100">
+              {codePrompt.mode === "delete" ? "Rimuovi il bollettino" : "Codice di pubblicazione"}
+            </p>
             <p className="mt-1 text-sm text-slate-400">
-              Il bollettino viene pubblicato nell&apos;archivio condiviso e diventa visibile anche in Allerte. Conferma il codice per continuare: lo ricordiamo su questo browser.
+              {codePrompt.mode === "delete"
+                ? "Il bollettino viene ritirato dall'archivio condiviso: se era quello in corso, il livello in Allerte torna a quello precedente. Conferma il codice per continuare."
+                : "Il bollettino viene pubblicato nell'archivio condiviso e diventa visibile anche in Allerte. Conferma il codice per continuare: lo ricordiamo su questo browser."}
             </p>
             <label className="mt-3 flex flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>
@@ -860,7 +989,7 @@ export default function PdfParser({ onAlertDetected }) {
                 disabled={!codePrompt.code.trim()}
                 className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Pubblica
+                {codePrompt.mode === "delete" ? "Rimuovi" : "Pubblica"}
               </button>
             </div>
           </div>

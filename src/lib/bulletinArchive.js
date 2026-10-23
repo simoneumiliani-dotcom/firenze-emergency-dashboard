@@ -107,6 +107,14 @@ export async function getBulletinArchive() {
   return { ...archive, persistent };
 }
 
+export async function removeBulletinFromArchive(id) {
+  const archive = await readPersistedArchive();
+  const items = archive.items.filter((item) => item.id !== id);
+  const next = normalizeArchive({ items });
+  const persistent = await writePersistedArchive(next);
+  return { ...next, persistent: hasPersistentStore(), saved: persistent };
+}
+
 export async function saveBulletinToArchive(input) {
   const archive = await readPersistedArchive();
   const record = buildBulletinRecord(input || {});
