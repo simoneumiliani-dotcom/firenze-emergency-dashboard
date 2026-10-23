@@ -15,6 +15,7 @@ import {
   YAxis
 } from "recharts";
 import AppNav from "@/components/AppNav";
+import LazySection from "@/components/LazySection";
 
 const LEVEL_LINE_COLOR = "#2f36d8";
 const LEVEL_ONE_COLOR = "#e8df20";
@@ -233,6 +234,8 @@ function SourceMatrix({ items }) {
 }
 
 function RealtimeTable({ rows }) {
+  const delta = (value) => (Number.isFinite(Number(value)) ? Number(value).toFixed(2) + " m" : "n.d.");
+
   return (
     <section className="panel overflow-hidden">
       <div className="flex items-center gap-3 border-b border-emergency-line px-4 py-3">
@@ -246,7 +249,33 @@ function RealtimeTable({ rows }) {
         <AlertTriangle className="mr-2 inline h-4 w-4" />
         Dati CFR in tempo reale non validati: usare per monitoraggio operativo, non per reportistica ufficiale storica.
       </div>
-      <div className="overflow-x-auto">
+      <div className="grid gap-2 p-3 md:hidden">
+        {rows.length ? rows.map((row) => (
+          <article key={row.station_id} className="rounded-lg border border-emergency-line bg-black/10 px-3 py-3">
+            <p className="text-sm font-medium text-slate-100">{row.station_name}</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <p className="text-slate-500">Livello</p>
+                <p className="text-sky-100">{row.level_m ?? "n.d."} m</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Portata</p>
+                <p className="text-slate-300">{row.flow_mc_s ?? "n.d."} mc/s</p>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+              <span>Δh1 {delta(row.delta_h1_m)}</span>
+              <span>Δh3 {delta(row.delta_h3_m)}</span>
+              <span>Δh6 {delta(row.delta_h6_m)}</span>
+              <span>{formatTime(row.measurement_time)}</span>
+            </div>
+          </article>
+        )) : (
+          <p className="text-sm text-slate-400">Realtime non disponibile nel caricamento corrente.</p>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full divide-y divide-emergency-line text-sm">
           <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
@@ -504,13 +533,15 @@ export default function IdrometriaPage() {
             </div>
           </section>
 
-          <HydrometryTrendChart
-            stations={payload?.stations || []}
-            realtimeRows={payload?.realtimeMeasurements || []}
-            historicalRows={payload?.historicalMeasurements || []}
-            selectedId={selectedTrendId}
-            onSelect={setSelectedTrendStationId}
-          />
+          <LazySection minHeight="20rem" label="Il grafico si carica scorrendo…">
+            <HydrometryTrendChart
+              stations={payload?.stations || []}
+              realtimeRows={payload?.realtimeMeasurements || []}
+              historicalRows={payload?.historicalMeasurements || []}
+              selectedId={selectedTrendId}
+              onSelect={setSelectedTrendStationId}
+            />
+          </LazySection>
 
           <section className="grid gap-5 xl:grid-cols-2">
             <RealtimeTable rows={payload?.realtimeMeasurements || []} />

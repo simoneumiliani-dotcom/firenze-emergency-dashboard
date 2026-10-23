@@ -506,7 +506,9 @@ function buildShellPayload() {
 }
 
 export function getObservationCacheHeaders({ realtime = false } = {}) {
-  if (realtime) return { "Cache-Control": "no-store" };
+  // Anche il realtime puo' stare 60 s in cache CDN: le stazioni selezionate sono
+  // le stesse per tutti e il client aggiorna ogni 5 minuti, non a ogni render.
+  if (realtime) return { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" };
   return {
     "Cache-Control": "s-maxage=" + DEFAULT_CACHE_MAX_AGE_SECONDS + ", stale-while-revalidate=1800"
   };

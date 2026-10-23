@@ -28,19 +28,19 @@ export default function AppNav() {
           </span>
         </Link>
 
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-sm sm:grid-cols-5">
+        <div className="grid grid-cols-5 gap-1 rounded-lg border border-emergency-line bg-emergency-panel p-1 text-[11px] leading-tight sm:gap-2 sm:text-sm">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
-            const className = "inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 font-medium transition " +
+            const className = "inline-flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-center font-medium transition sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:py-2 " +
               (active
                 ? "bg-sky-400/15 text-sky-100 ring-1 ring-sky-400/40"
                 : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-100");
 
             return (
-              <Link key={item.href} href={item.href} className={className}>
-                <Icon className="h-4 w-4" />
-                {item.label}
+              <Link key={item.href} href={item.href} className={className} aria-current={active ? "page" : undefined}>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
               </Link>
             );
           })}

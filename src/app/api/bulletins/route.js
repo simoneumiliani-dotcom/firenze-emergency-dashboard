@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getBulletinArchive, removeBulletinFromArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
 import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
+import { toPublicBulletin } from "@/lib/bulletinPdf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -129,9 +130,19 @@ function validateBulletinPayload(payload) {
   };
 }
 
+// I PDF incorporati (data URL) non vengono mai inviati con l'archivio: il client
+// li chiede a /api/bulletins/pdf quando servono, cosi' la pagina resta leggera.
+function publicArchive(archive) {
+  return {
+    ...archive,
+    current: archive?.current ? toPublicBulletin(archive.current) : null,
+    items: Array.isArray(archive?.items) ? archive.items.map(toPublicBulletin) : []
+  };
+}
+
 export async function GET() {
   const archive = await getBulletinArchive();
-  return NextResponse.json(archive);
+  return NextResponse.json(publicArchive(archive));
 }
 
 export async function POST(request) {
@@ -150,7 +161,7 @@ export async function POST(request) {
 
   try {
     const archive = await saveBulletinToArchive(validated.value);
-    return NextResponse.json(archive);
+    return NextResponse.json(publicArchive(archive));
   } catch {
     return reject(500, "Impossibile salvare il bollettino nell'archivio.");
   }
@@ -167,7 +178,7 @@ export async function DELETE(request) {
 
   try {
     const archive = await removeBulletinFromArchive(id);
-    return NextResponse.json({ ...archive, removed: id });
+    return NextResponse.json({ ...publicArchive(archive), removed: id });
   } catch {
     return reject(500, "Impossibile rimuovere il bollettino dall'archivio.");
   }

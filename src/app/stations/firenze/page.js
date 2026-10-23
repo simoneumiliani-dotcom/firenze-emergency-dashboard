@@ -85,7 +85,28 @@ export default function FirenzeStationsPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="grid gap-2 p-3 md:hidden">
+            {sortedStations.map((station) => (
+              <article key={station.id} className="rounded-lg border border-emergency-line bg-black/10 px-3 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 text-sm font-medium text-white">{station.name}</p>
+                  <span className="shrink-0 font-mono text-[10px] text-cyan-100">{station.id}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {station.sensors.map((sensor) => (
+                    <span key={sensor} className={"rounded-full border px-2 py-0.5 text-[11px] font-medium " + SENSOR_COLORS[sensor]}>
+                      {stationCatalog.sensorLabels[sensor]}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[920px] border-collapse text-left text-sm">
               <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.14em] text-slate-400">
                 <tr>

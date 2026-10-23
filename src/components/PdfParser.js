@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
+import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 
 const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
 const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
@@ -309,9 +310,9 @@ async function extractPdfText(file) {
   const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
 
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    // Evita che Next/Vercel provino a minificare il worker ESM di pdf.js.
-    // Il worker resta versionato con la libreria installata e viene caricato solo nel browser.
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    // Il worker e' servito dal progetto (public/), non da una CDN esterna: nessuna
+    // dipendenza di rete in piu' e stesso comportamento in ogni ambiente.
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
   }
 
   const buffer = await file.arrayBuffer();
@@ -425,7 +426,7 @@ export default function PdfParser({ onAlertDetected }) {
       if (response.ok) {
         const archive = await response.json();
         const nextLocal = pruneLocalArchive(
-          readJsonStorage(LOCAL_ARCHIVE_KEY, []).filter((item) => item.id !== id)
+          readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin).filter((item) => item.id !== id)
         );
         writeJsonStorage(LOCAL_ARCHIVE_KEY, nextLocal);
         setArchive(nextLocal);
@@ -519,15 +520,17 @@ export default function PdfParser({ onAlertDetected }) {
     let cancelled = false;
 
     async function restoreCurrentBulletin() {
-      const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []));
+      // In localStorage restano solo i metadati: eventuali PDF incorporati in
+      // record vecchi vengono scartati (si richiedono a /api/bulletins/pdf).
+      const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin));
       setArchive(localArchive);
       writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
       removeOldPdfBlobs(localArchive.map((item) => item.id));
 
-      const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
+      const localCurrent = toPublicBulletin(readJsonStorage(LOCAL_CURRENT_KEY, null));
       if (localCurrent && isCurrentBulletin(localCurrent)) {
         const pdfBlob = await loadPdfBlob(localCurrent.id);
-        const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : localCurrent.pdfUrl || null;
+        const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : getBulletinPdfHref(localCurrent);
 
         if (cancelled) {
           if (restoredPdfUrl?.startsWith("blob:")) URL.revokeObjectURL(restoredPdfUrl);
@@ -539,7 +542,7 @@ export default function PdfParser({ onAlertDetected }) {
         setResult(localCurrent);
         setStatus("done");
         setPdfUrl(restoredPdfUrl);
-        setViewerOpen(Boolean(restoredPdfUrl));
+        setViewerOpen(false);
         onAlertDetected?.(localCurrent);
       } else if (localCurrent) {
         writeJsonStorage(LOCAL_CURRENT_KEY, null);
@@ -549,22 +552,23 @@ export default function PdfParser({ onAlertDetected }) {
         .then((response) => (response.ok ? response.json() : null))
         .then((archive) => {
           if (cancelled || !archive) return;
-          const remoteArchive = pruneLocalArchive(archive.items || []);
+          const remoteArchive = pruneLocalArchive((archive.items || []).map(toPublicBulletin));
           if (remoteArchive.length) {
             setArchive(remoteArchive);
             writeJsonStorage(LOCAL_ARCHIVE_KEY, remoteArchive);
           }
           if (!archive.current || !isCurrentBulletin(archive.current)) return;
 
-          const next = { ...archive.current, archivePersistent: archive.persistent };
+          const next = { ...toPublicBulletin(archive.current), archivePersistent: archive.persistent };
           writeJsonStorage(LOCAL_CURRENT_KEY, next);
           setResult(next);
+          setStatus("done");
           if (objectUrlRef.current) {
             URL.revokeObjectURL(objectUrlRef.current);
             objectUrlRef.current = null;
           }
-          setPdfUrl(next.pdfUrl || null);
-          setViewerOpen(Boolean(next.pdfUrl));
+          setPdfUrl(getBulletinPdfHref(next));
+          setViewerOpen(false);
           onAlertDetected?.(next);
         })
         .catch(() => {});
@@ -627,7 +631,7 @@ export default function PdfParser({ onAlertDetected }) {
       };
       const savedPdf = await savePdfBlob(payload.id, file);
       const localPayload = { ...payload, pdfUrl: null, hasLocalPdf: savedPdf };
-      const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []);
+      const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin);
       const nextArchive = pruneLocalArchive([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
       writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
       writeJsonStorage(LOCAL_CURRENT_KEY, localPayload);
@@ -636,11 +640,11 @@ export default function PdfParser({ onAlertDetected }) {
       setArchive(nextArchive);
       setResult(localPayload);
       setStatus("done");
-      setViewerOpen(true);
+      setViewerOpen(false);
       onAlertDetected?.(localPayload);
 
       const remoteArchive = await publishBulletin(payload);
-      if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
+      if (remoteArchive) setArchive(remoteArchive.items || []);
     } catch (error) {
       setStatus("error");
       setResult({
@@ -687,16 +691,17 @@ export default function PdfParser({ onAlertDetected }) {
 
   async function openArchivedBulletin(item) {
     let pdfBlob = await loadPdfBlob(item.id);
-    if (!pdfBlob && item.pdfUrl) {
+    const pdfHref = getBulletinPdfHref(item);
+    if (!pdfBlob && pdfHref) {
       try {
-        const response = await fetch(item.pdfUrl);
+        const response = await fetch(pdfHref);
         if (response.ok) pdfBlob = await response.blob();
       } catch {
         pdfBlob = null;
       }
     }
 
-    const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : item.pdfUrl || null;
+    const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : pdfHref;
     const nextItem = await hydrateArchivedBulletin(item, pdfBlob);
 
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -704,7 +709,7 @@ export default function PdfParser({ onAlertDetected }) {
     setResult(nextItem);
     setStatus("done");
     setPdfUrl(restoredPdfUrl);
-    setViewerOpen(Boolean(restoredPdfUrl));
+    setViewerOpen(false);
     setExtractOpen(false);
     setArchiveOpen(false);
     onAlertDetected?.(nextItem);
@@ -794,14 +799,14 @@ export default function PdfParser({ onAlertDetected }) {
                           removeBulletinRecord(item.id);
                         }}
                         disabled={removingId === item.id}
-                        className="rounded-md border border-emergency-red/60 bg-emergency-red/15 px-3 py-2 text-xs font-medium text-red-100 hover:bg-emergency-red/25 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-11 rounded-md border border-emergency-red/60 bg-emergency-red/15 px-3 py-2 text-xs font-medium text-red-100 hover:bg-emergency-red/25 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {removingId === item.id ? "Rimozione..." : "Rimuovi"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmRemoveId(null)}
-                        className="rounded-md border border-emergency-line px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06]"
+                        className="min-h-11 rounded-md border border-emergency-line px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06]"
                       >
                         Annulla
                       </button>
@@ -812,7 +817,7 @@ export default function PdfParser({ onAlertDetected }) {
                       onClick={() => setConfirmRemoveId(item.id)}
                       aria-label={"Rimuovi " + item.fileName + " dall'archivio"}
                       title="Rimuovi dall'archivio"
-                      className="self-start rounded-md border border-emergency-line px-3 py-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center self-start rounded-md border border-emergency-line px-3 py-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -971,7 +976,7 @@ export default function PdfParser({ onAlertDetected }) {
                   }
                 }}
                 autoComplete="off"
-                className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+                className="min-h-11 rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2 text-base text-slate-100 outline-none focus:border-sky-400 sm:text-sm"
               />
             </label>
             {codePrompt.error && <p className="mt-2 text-xs text-red-200">{codePrompt.error}</p>}
@@ -979,7 +984,7 @@ export default function PdfParser({ onAlertDetected }) {
               <button
                 type="button"
                 onClick={cancelPublishCode}
-                className="rounded-lg border border-emergency-line bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
+                className="min-h-11 rounded-lg border border-emergency-line bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
               >
                 Annulla
               </button>
@@ -987,7 +992,7 @@ export default function PdfParser({ onAlertDetected }) {
                 type="button"
                 onClick={confirmPublishCode}
                 disabled={!codePrompt.code.trim()}
-                className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-sky-400/50 bg-sky-400/15 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {codePrompt.mode === "delete" ? "Rimuovi" : "Pubblica"}
               </button>

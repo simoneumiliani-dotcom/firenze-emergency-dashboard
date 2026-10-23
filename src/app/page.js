@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import PdfParser from "@/components/PdfParser";
 import AppNav from "@/components/AppNav";
+import LazySection from "@/components/LazySection";
 import {
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
@@ -158,6 +159,20 @@ function getOpenMeteoClientUrl(station) {
   const params = new URLSearchParams({
     latitude: String(station.lat),
     longitude: String(station.lng),
+    current: "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
+    hourly: "snow_depth",
+    timezone: "Europe/Rome",
+    forecast_days: "1"
+  });
+  return "https://api.open-meteo.com/v1/forecast?" + params.toString();
+}
+
+// Una sola richiesta per tutte le stazioni selezionate: con 6 stazioni il vecchio
+// codice apriva 6 connessioni in parallelo e prendeva 429 dal provider.
+function getOpenMeteoBatchUrl(stations) {
+  const params = new URLSearchParams({
+    latitude: stations.map((station) => Number(station.lat).toFixed(4)).join(","),
+    longitude: stations.map((station) => Number(station.lng).toFixed(4)).join(","),
     current: "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
     hourly: "snow_depth",
     timezone: "Europe/Rome",
@@ -477,6 +492,7 @@ function MobileMeasurementPanel({ config, onChange, measurements, stationCatalog
 
 export default function DashboardPage() {
   const [alert, setAlert] = useState({ level: "Verde", matches: [], fileName: null });
+  const refreshingRef = useRef(false);
   const [observationData, setObservationData] = useState(normalizeObservationData(null));
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
   const [hydrometryCatalog, setHydrometryCatalog] = useState(STATIONS_BY_TYPE.hydrometry || []);
@@ -579,14 +595,32 @@ export default function DashboardPage() {
     const uniqueStations = [...new Map(selected.map((item) => [item.station.id, item.station])).values()];
     if (!uniqueStations.length) return;
 
-    const responses = await Promise.allSettled(uniqueStations.map(async (station) => {
-      const response = await fetch(getOpenMeteoClientUrl(station), { cache: "no-store" });
-      if (!response.ok) throw new Error("Open Meteo HTTP " + response.status);
-      return [station.id, await response.json()];
-    }));
-    const byStationId = new Map(responses
-      .filter((result) => result.status === "fulfilled")
-      .map((result) => result.value));
+    const byStationId = new Map();
+
+    try {
+      const response = await fetch(getOpenMeteoBatchUrl(uniqueStations), { cache: "no-store" });
+      if (response.ok) {
+        const payload = await response.json();
+        const list = Array.isArray(payload) ? payload : [payload];
+        if (list.length === uniqueStations.length) {
+          uniqueStations.forEach((station, index) => byStationId.set(station.id, list[index]));
+        }
+      }
+    } catch {
+      // Se il batch non risponde si ricade sulle singole stazioni, in sequenza.
+    }
+
+    if (!byStationId.size) {
+      for (const station of uniqueStations) {
+        try {
+          const response = await fetch(getOpenMeteoClientUrl(station), { cache: "no-store" });
+          if (response.ok) byStationId.set(station.id, await response.json());
+        } catch {
+          // stazione saltata: le altre restano aggiornabili
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
     const fetchedAt = new Date().toISOString();
     let filled = 0;
 
@@ -641,14 +675,29 @@ export default function DashboardPage() {
   }, [selectedObservationQuery]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      loadObservationData();
-      loadHydrometryData();
-      loadSelectedObservationData(selectedObservationQuery);
-      loadClientOpenMeteoData();
-    }, DATA_REFRESH_INTERVAL_MS);
+    const refreshAll = () => {
+      if (document.hidden || refreshingRef.current) return;
+      refreshingRef.current = true;
+      Promise.allSettled([
+        loadObservationData(),
+        loadHydrometryData(),
+        loadSelectedObservationData(selectedObservationQuery),
+        loadClientOpenMeteoData()
+      ]).finally(() => {
+        refreshingRef.current = false;
+      });
+    };
 
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(refreshAll, DATA_REFRESH_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (!document.hidden) refreshAll();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [selectedObservationQuery]);
 
   const hydrometryStations = observationData.measurements.hydrometry || [];
@@ -701,7 +750,9 @@ export default function DashboardPage() {
           <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{observationData.warning}</div>
         )}
 
-        <MapDashboard stations={mapStations} />
+        <LazySection minHeight="24rem" label="La mappa si carica scorrendo…">
+          <MapDashboard stations={mapStations} />
+        </LazySection>
 
         <MobileMeasurementPanel
           config={panelConfigs[0]}
@@ -712,7 +763,7 @@ export default function DashboardPage() {
           }}
         />
 
-        <section className="hidden gap-5 md:grid xl:grid-cols-2">
+        <section className="hidden gap-5 md:grid lg:grid-cols-2">
           {panelConfigs.map((config, index) => (
             <MeasurementPanel
               key={config.id}

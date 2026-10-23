@@ -33,6 +33,7 @@ import {
   YAxis
 } from "recharts";
 import AppNav from "@/components/AppNav";
+import LazySection from "@/components/LazySection";
 
 const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -1048,15 +1049,19 @@ export default function ForecastPage() {
           {payload ? (
             <>
               <SummarySection payload={payload} />
-              <ForecastCharts payload={payload} />
+              <LazySection minHeight="22rem" label="I grafici si caricano scorrendo…">
+                <ForecastCharts payload={payload} />
+              </LazySection>
               <DailyTable payload={payload} />
-              <RadarDpcMap
-                radarPayload={radarPayload}
-                loading={radarLoading}
-                selectedProduct={radarProduct}
-                onProductChange={handleRadarProductChange}
-                onRefresh={() => loadRadar(radarProduct)}
-              />
+              <LazySection minHeight="26rem" label="Il radar si carica scorrendo…">
+                <RadarDpcMap
+                  radarPayload={radarPayload}
+                  loading={radarLoading}
+                  selectedProduct={radarProduct}
+                  onProductChange={handleRadarProductChange}
+                  onRefresh={() => loadRadar(radarProduct)}
+                />
+              </LazySection>
             </>
           ) : (
             <section className="panel flex min-h-60 items-center justify-center p-6 text-sm text-slate-400">

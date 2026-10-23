@@ -17,6 +17,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
+import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const LEVEL_ORDER = ["Verde", "Giallo", "Arancione", "Rosso"];
@@ -39,13 +40,6 @@ function normalizeLevel(value) {
 
 function levelWeight(value) {
   return Math.max(0, LEVEL_ORDER.indexOf(normalizeLevel(value)));
-}
-
-// I bollettini pubblicati prima della validazione sugli URL hanno il PDF
-// incorporato come data URL: il browser blocca l'apertura in una nuova scheda,
-// quindi lì il link deve essere un download esplicito.
-function isInlinePdf(url) {
-  return typeof url === "string" && url.startsWith("data:");
 }
 
 function parseDate(value) {
@@ -110,6 +104,33 @@ function LevelBadge({ level, size = "sm" }) {
       <span className={"h-2 w-2 rounded-full " + LEVEL_DOT[value]} />
       {value}
     </span>
+  );
+}
+
+function BulletinPdfLink({ item, label }) {
+  const href = getBulletinPdfHref(item);
+  if (!href) return <span className="text-xs text-slate-600">—</span>;
+  const isDownload = isInlinePdfUrl(item.pdfUrl) || item.hasEmbeddedPdf;
+
+  return isDownload ? (
+    <a
+      href={href}
+      download={item.fileName || "bollettino.pdf"}
+      className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-sky-200 hover:underline"
+    >
+      {label || "Scarica"}
+      <Download className="h-3 w-3" />
+    </a>
+  ) : (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-sky-200 hover:underline"
+    >
+      {label || "Apri"}
+      <ExternalLink className="h-3 w-3" />
+    </a>
   );
 }
 
@@ -272,9 +293,9 @@ export default function AllertePage() {
                     </div>
                   )}
 
-                  {current.pdfUrl && (isInlinePdf(current.pdfUrl) ? (
+                  {getBulletinPdfHref(current) && ((isInlinePdfUrl(current.pdfUrl) || current.hasEmbeddedPdf) ? (
                     <a
-                      href={current.pdfUrl}
+                      href={getBulletinPdfHref(current)}
                       download={current.fileName || "bollettino.pdf"}
                       className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
                     >
@@ -283,7 +304,7 @@ export default function AllertePage() {
                     </a>
                   ) : (
                     <a
-                      href={current.pdfUrl}
+                      href={getBulletinPdfHref(current)}
                       target="_blank"
                       rel="noreferrer"
                       className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
@@ -366,7 +387,54 @@ export default function AllertePage() {
             </div>
 
             {archivedCount ? (
-              <div className="mt-4 overflow-x-auto">
+              <>
+              <div className="mt-4 grid gap-2 md:hidden">
+                {items.map((item, index) => {
+                  const level = normalizeLevel(item.level);
+                  const delta = formatDelta(level, items[index + 1]?.level);
+                  const DeltaIcon = delta.Icon;
+                  const isCurrent = current?.id === item.id;
+                  return (
+                    <article key={item.id} className={"rounded-lg border border-emergency-line px-3 py-3 " + (isCurrent ? "bg-sky-400/[0.06]" : "bg-black/10")}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-400">{formatDateTime(item.uploadedAt || item.validTo)}</p>
+                          {isCurrent && <span className="mt-1 inline-block rounded border border-sky-400/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-sky-200">in corso</span>}
+                        </div>
+                        <LevelBadge level={level} />
+                      </div>
+                      <dl className="mt-3 grid gap-2 text-xs">
+                        <div className="flex gap-2">
+                          <dt className="w-20 shrink-0 text-slate-500">Validità</dt>
+                          <dd className="min-w-0 text-slate-200">{formatValidity(item)}</dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="w-20 shrink-0 text-slate-500">Variazione</dt>
+                          <dd className={"inline-flex items-center gap-1 " + delta.className}>
+                            {DeltaIcon ? <DeltaIcon className="h-3.5 w-3.5" /> : null}
+                            {delta.label}
+                          </dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="w-20 shrink-0 text-slate-500">Aree</dt>
+                          <dd className="min-w-0 text-slate-400">{Array.isArray(item.matches) && item.matches.length ? item.matches.join(", ") : "—"}</dd>
+                        </div>
+                        {item.reason && (
+                          <div className="flex gap-2">
+                            <dt className="w-20 shrink-0 text-slate-500">Motivo</dt>
+                            <dd className="min-w-0 text-slate-400">{item.reason}</dd>
+                          </div>
+                        )}
+                      </dl>
+                      <div className="mt-2 border-t border-emergency-line/60 pt-1">
+                        <BulletinPdfLink item={item} />
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-emergency-line text-xs uppercase tracking-wide text-slate-500">
@@ -406,23 +474,7 @@ export default function AllertePage() {
                             <span className="line-clamp-2">{item.reason || "—"}</span>
                           </td>
                           <td className="py-3">
-                            {item.pdfUrl ? (isInlinePdf(item.pdfUrl) ? (
-                              <a
-                                href={item.pdfUrl}
-                                download={item.fileName || "bollettino.pdf"}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-sky-200 hover:underline"
-                              >
-                                Scarica
-                                <Download className="h-3 w-3" />
-                              </a>
-                            ) : (
-                              <a href={item.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-sky-200 hover:underline">
-                                Apri
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )) : (
-                              <span className="text-xs text-slate-600">—</span>
-                            )}
+                            <BulletinPdfLink item={item} />
                           </td>
                         </tr>
                       );
@@ -430,6 +482,7 @@ export default function AllertePage() {
                   </tbody>
                 </table>
               </div>
+              </>
             ) : (
               <div className="mt-4 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6 text-sm text-slate-400">
                 Nessun bollettino archiviato. La pubblicazione avviene dalla dashboard, nella sezione di caricamento PDF: basta un bollettino valido e la conferma del codice di pubblicazione.
