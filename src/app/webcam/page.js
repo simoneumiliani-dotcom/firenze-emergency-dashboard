@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Camera, ExternalLink, Filter, RefreshCcw, Wifi, WifiOff } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import PageHeader from "@/components/PageHeader";
+import PageLayout from "@/components/PageLayout";
 import webcamCatalog from "@/data/webcams.json";
 
 const STATUS_REFRESH_MS = 5 * 60 * 1000;
@@ -199,31 +200,23 @@ export default function WebcamPage() {
   }, []);
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5">
-          <header className="panel p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Webcam pubbliche</h1>
-                <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                  Catalogo di webcam consultabili senza abbonamento o registrazione, con controllo automatico di disponibilita. Anteprime e video incorporabili vengono mostrati in pagina; il click apre la live completa quando disponibile.
-                </p>
+      <PageLayout>
+          <PageHeader
+            eyebrow="Provincia di Firenze"
+            title="Webcam pubbliche"
+            description="Catalogo di webcam consultabili senza abbonamento o registrazione, con controllo automatico di disponibilità. Anteprime e video incorporabili vengono mostrati in pagina; il click apre la live completa quando disponibile."
+          >
+            <div className="grid grid-cols-2 gap-3 md:min-w-[18rem]">
+              <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Catalogo</p>
+                <p className="mt-1 text-xl font-semibold text-white">{webcamCatalog.items.length}</p>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:min-w-[20rem]">
-                <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Catalogo</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{webcamCatalog.items.length}</p>
-                </div>
-                <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Online</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{statusPayload?.online ?? "..."}</p>
-                </div>
+              <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Online</p>
+                <p className="mt-1 text-xl font-semibold text-white">{statusPayload?.online ?? "..."}</p>
               </div>
             </div>
-          </header>
+          </PageHeader>
 
           <section className="panel p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -278,8 +271,6 @@ export default function WebcamPage() {
           <footer className="pb-6 text-xs text-slate-500">
             Fonti webcam: pagine pubbliche dei rispettivi provider. Ultimo controllo disponibilita: {formatDateTime(statusPayload?.fetchedAt)}.
           </footer>
-        </div>
-      </main>
-    </>
+      </PageLayout>
   );
 }

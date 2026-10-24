@@ -19,8 +19,10 @@ import {
   X
 } from "lucide-react";
 import PdfParser from "@/components/PdfParser";
-import AppNav from "@/components/AppNav";
 import LazySection from "@/components/LazySection";
+import PageHeader from "@/components/PageHeader";
+import PageLayout from "@/components/PageLayout";
+import SituationStrip from "@/components/SituationStrip";
 import {
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
@@ -251,27 +253,6 @@ function formatSourceTimestamp(value) {
     date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 }
 
-function SourceStatusPanel({ observationData }) {
-  const cfrUpdatedAt = observationData.cfr?.fetchedAt || observationData.fetchedAt;
-  const openMeteoUpdatedAt = observationData.openMeteo?.fetchedAt || observationData.fetchedAt;
-
-  return (
-    <section className="panel p-4">
-      <div className="grid gap-3 text-sm sm:grid-cols-2">
-        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-          <p className="text-xs uppercase tracking-wide text-slate-500">CFR Toscana</p>
-          <p className="mt-1 font-semibold text-sky-100">Idrometria</p>
-          <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(cfrUpdatedAt)}</p>
-        </div>
-        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Open Meteo</p>
-          <p className="mt-1 font-semibold text-sky-100">Pluvio, termo, vento, umidita, neve</p>
-          <p className="mt-1 text-xs text-slate-400">Ultimo aggiornamento dati: {formatSourceTimestamp(openMeteoUpdatedAt)}</p>
-        </div>
-      </div>
-    </section>
-  );
-}
 function StationSelect({ value, onChange, options, label, selectedIds = [] }) {
   return (
     <label className="flex flex-col gap-1">
@@ -314,7 +295,8 @@ function MeasurementPanel({ index, config, onChange, measurements, stationCatalo
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-sky-300" />
           <div>
-            <h2 className="section-title">Controllo {index + 1}</h2>
+            <h2 className="section-title">{meta.label}</h2>
+            <p className="text-xs text-slate-400">Controllo {index + 1} · {rows.length} stazioni</p>
           </div>
         </div>
         <select
@@ -403,14 +385,13 @@ function MobileMeasurementPanel({ config, onChange, measurements, stationCatalog
   return (
     <section className="panel overflow-hidden md:hidden">
       <div className="border-b border-emergency-line px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-sky-300" />
-            <div>
-              <h2 className="section-title">Controllo meteo</h2>
-              <p className="text-xs text-slate-400">Seleziona il servizio e fino a 3 stazioni.</p>
+        <div className="flex items-center justify-between gap-3">            <div className="flex items-center gap-2">
+              <Icon className="h-5 w-5 text-sky-300" />
+              <div>
+                <h2 className="section-title">{meta.label}</h2>
+                <p className="text-xs text-slate-400">Seleziona il servizio e fino a 3 stazioni.</p>
+              </div>
             </div>
-          </div>
           <select
             value={config.type}
             onChange={(event) => updateType(event.target.value)}
@@ -715,24 +696,20 @@ export default function DashboardPage() {
   const mapStations = Object.values(observationData.measurements).flat();
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-5">
-        <header className="flex flex-col gap-4 rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow sm:p-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Dashboard meteo e idrometria Firenze</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Monitoraggio con Open Meteo come fonte primaria per le grandezze meteorologiche e CFR Toscana per i livelli idrometrici.</p>
-          </div>
+    <PageLayout>
+        <PageHeader
+          eyebrow="Provincia di Firenze"
+          title="Dashboard meteo e idrometria Firenze"
+          description="Situazione in corso sulla provincia: livelli idrometrici CFR Toscana, pluviometria, temperatura e vento delle stazioni monitorate, con la mappa dei rischi territoriali."
+        >
           <Link
             href="/allerte"
             aria-label={"Apri la pagina Allerte e criticità, livello " + visibleAlert}
-            className={`group block w-full rounded-lg border px-4 py-3 transition hover:shadow-glow sm:w-auto ${ALERT_STYLE[visibleAlert]}`}
+            className={`group block w-full rounded-lg border px-4 py-3 transition hover:shadow-glow md:w-64 ${ALERT_STYLE[visibleAlert]}`}
           >
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
-              <span className="text-sm font-medium">Allerta attiva</span>
+              <span className="text-sm font-medium">Stato di allerta</span>
             </div>
             <p className="mt-1 text-2xl font-semibold">{visibleAlert}</p>
             <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-80 group-hover:opacity-100">
@@ -740,15 +717,18 @@ export default function DashboardPage() {
               <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
             </span>
           </Link>
-        </header>
-
-        <PdfParser onAlertDetected={setAlert} />
-
-        <SourceStatusPanel observationData={observationData} />
+        </PageHeader>
 
         {observationData.warning && (
           <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{observationData.warning}</div>
         )}
+
+        <SituationStrip
+          measurements={observationData.measurements}
+          fetchedAt={observationData.fetchedAt}
+          cfrUpdatedAt={observationData.cfr?.fetchedAt}
+          openMeteoUpdatedAt={observationData.openMeteo?.fetchedAt}
+        />
 
         <LazySection minHeight="24rem" label="La mappa si carica scorrendo…">
           <MapDashboard stations={mapStations} />
@@ -778,11 +758,11 @@ export default function DashboardPage() {
           ))}
         </section>
 
+        <PdfParser onAlertDetected={setAlert} />
+
         <footer className="pb-6 text-xs text-slate-500">
-          Fonti osservazioni: Open Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
+          Fonti osservazioni: Open-Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
         </footer>
-      </div>
-      </main>
-    </>
+    </PageLayout>
   );
 }

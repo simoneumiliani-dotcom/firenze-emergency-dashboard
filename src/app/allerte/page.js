@@ -16,7 +16,8 @@ import {
   RefreshCcw,
   ShieldCheck
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import PageHeader from "@/components/PageHeader";
+import PageLayout from "@/components/PageLayout";
 import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -182,23 +183,20 @@ export default function AllertePage() {
   const hasActiveAlert = Boolean(current) && currentLevel !== "Verde";
   const areas = Array.isArray(current?.matches) ? current.matches : [];
   const archivedCount = items.length;
+  // items arriva dal più recente: senza allerta valida resta utile mostrare
+  // l'ultimo bollettino pubblicato, invece di lasciare la scheda vuota.
+  const lastArchived = items[0] || null;
   const archiveLimit = archive?.archiveLimit || items.length;
   const sharedArchive = archive?.persistent !== false;
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5">
-          <header className="panel flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Protezione civile · CFR Toscana</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Allerte e criticità</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                Livello in corso, finestra di validità e motivazione dei bollettini di criticità idraulica e idrogeologica che interessano il territorio fiorentino, con lo storico delle pubblicazioni.
-              </p>
-            </div>
-            <div className={"w-full rounded-lg border px-4 py-3 sm:w-auto " + (current ? LEVEL_STYLE[currentLevel] : "border-emergency-line bg-emergency-panel2 text-slate-300")}>
+    <PageLayout>
+          <PageHeader
+            eyebrow="Protezione civile · CFR Toscana"
+            title="Allerte e criticità"
+            description="Livello in corso, finestra di validità e motivazione dei bollettini di criticità idraulica e idrogeologica che interessano il territorio fiorentino, con lo storico delle pubblicazioni."
+          >
+            <div className={"w-full rounded-lg border px-4 py-3 md:w-64 " + (current ? LEVEL_STYLE[currentLevel] : "border-emergency-line bg-emergency-panel2 text-slate-300")}>
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
                 <span className="text-sm font-medium">{current ? "Livello in corso" : "Nessun bollettino valido"}</span>
@@ -208,7 +206,7 @@ export default function AllertePage() {
                 {current ? formatResidual(current.validTo, now) : "La dashboard mostra il livello solo dopo la pubblicazione di un bollettino."}
               </p>
             </div>
-          </header>
+          </PageHeader>
 
           {error && (
             <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{error}</div>
@@ -315,21 +313,37 @@ export default function AllertePage() {
                   ))}
                 </>
               ) : (
-                <div className="mt-5 flex flex-col items-start gap-3 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6">
-                  <div className="flex items-center gap-2 text-slate-200">
-                    <ShieldCheck className="h-5 w-5 text-emergency-green" />
-                    <p className="text-sm font-semibold">Nessuna allerta in corso</p>
+                <div className="mt-5 flex flex-col gap-3">
+                  <div className="flex flex-col items-start gap-3 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-5">
+                    <div className="flex items-center gap-2 text-slate-200">
+                      <ShieldCheck className="h-5 w-5 text-emergency-green" />
+                      <p className="text-sm font-semibold">Nessuna allerta in corso</p>
+                    </div>
+                    <p className="max-w-xl text-sm leading-6 text-slate-400">
+                      Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato dalla dashboard: una volta pubblicato, il livello compare anche qui.
+                    </p>
+                    <Link
+                      href="/"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+                    >
+                      Vai alla dashboard
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
                   </div>
-                  <p className="max-w-xl text-sm leading-6 text-slate-400">
-                    Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato dalla dashboard: una volta pubblicato, il livello compare anche qui.
-                  </p>
-                  <Link
-                    href="/"
-                    className="inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
-                  >
-                    Vai alla dashboard
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+
+                  {lastArchived && (
+                    <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ultimo bollettino pubblicato</p>
+                        <LevelBadge level={normalizeLevel(lastArchived.level)} />
+                      </div>
+                      <p className="mt-2 text-sm text-slate-200">{formatValidity(lastArchived)}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-400">{lastArchived.reason || "Motivazione non registrata."}</p>
+                      <div className="mt-1">
+                        <BulletinPdfLink item={lastArchived} label="Apri il PDF" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </article>
@@ -493,8 +507,6 @@ export default function AllertePage() {
           <footer className="pb-6 text-xs text-slate-500">
             Fonte: bollettini di criticità idraulica e idrogeologica CFR Toscana, pubblicati dalla dashboard aziendale. Il livello mostrato è quello estratto dal bollettino più recente ancora valido; in assenza di bollettini validi la pagina non stima un livello.
           </footer>
-        </div>
-      </main>
-    </>
+    </PageLayout>
   );
 }

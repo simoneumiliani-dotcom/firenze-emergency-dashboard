@@ -14,10 +14,11 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import AppNav from "@/components/AppNav";
 import LazySection from "@/components/LazySection";
+import PageHeader from "@/components/PageHeader";
+import PageLayout from "@/components/PageLayout";
 
-const LEVEL_LINE_COLOR = "#2f36d8";
+const LEVEL_LINE_COLOR = "#38bdf8";
 const LEVEL_ONE_COLOR = "#e8df20";
 const LEVEL_TWO_COLOR = "#ef4444";
 
@@ -40,6 +41,20 @@ function getStationLabel(station) {
   if (!station) return "Stazione non selezionata";
   const river = station.river_name ? station.river_name + " - " : "";
   return river + station.station_name;
+}
+
+function formatDeltaLevel(value) {
+  const delta = toFiniteNumber(value);
+  if (delta === null) return "n.d.";
+  return (delta > 0 ? "+" : "") + delta.toFixed(2) + " m";
+}
+
+function deltaClass(value) {
+  const delta = toFiniteNumber(value);
+  if (delta === null) return "text-slate-500";
+  if (delta > 0.01) return "text-emergency-orange";
+  if (delta < -0.01) return "text-sky-300";
+  return "text-slate-300";
 }
 
 // Number(null) vale 0: senza questo controllo una soglia assente diventerebbe
@@ -122,38 +137,58 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
         </select>
       </div>
 
-      <div className="bg-slate-100 p-3 text-slate-950 sm:p-4">
-        <div className="rounded-md border border-slate-500 bg-white">
-          <div className="border-b border-slate-400 px-3 py-2 text-sm font-semibold text-indigo-800">
-            {getStationLabel(selectedStation)}
+      <div className="p-3 sm:p-4">
+        <div className="rounded-lg border border-emergency-line bg-emergency-ink/60">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emergency-line px-3 py-2">
+            <p className="text-sm font-semibold text-slate-100">{getStationLabel(selectedStation)}</p>
+            <p className="text-xs text-slate-500">
+              {selectedRealtime?.measurement_time ? "ultima misura " + formatTime(selectedRealtime.measurement_time) : "misura non disponibile"}
+            </p>
           </div>
-          <div className="grid gap-3 p-3 lg:grid-cols-[1fr_11rem]">
+          <div className="grid gap-3 p-3 lg:grid-cols-[1fr_15rem]">
             <div className="h-[22rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ left: 20, right: 20, top: 14, bottom: 24 }}>
-                  <CartesianGrid stroke="#d9d9d9" />
+                <LineChart data={chartData} margin={{ left: 20, right: 26, top: 14, bottom: 24 }}>
+                  <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                   <XAxis
                     dataKey="time"
                     interval="preserveStartEnd"
-                    tick={{ fill: "#111827", fontSize: 11 }}
-                    stroke="#111827"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    stroke="#26364f"
                   />
                   <YAxis
                     domain={[0, yMax]}
-                    tick={{ fill: "#111827", fontSize: 11 }}
-                    stroke="#111827"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    stroke="#26364f"
                     width={48}
                   >
-                    <Label value="Altezza idrometrica [m s.z.i.]" angle={-90} position="insideLeft" fill="#2f36d8" fontSize={12} />
+                    <Label value="Altezza idrometrica [m s.z.i.]" angle={-90} position="insideLeft" fill="#7dd3fc" fontSize={12} />
                   </YAxis>
-                  {Number.isFinite(levelOne) && <ReferenceLine y={levelOne} stroke={LEVEL_ONE_COLOR} strokeWidth={2} />}
-                  {Number.isFinite(levelTwo) && <ReferenceLine y={levelTwo} stroke={LEVEL_TWO_COLOR} strokeWidth={2} />}
+                  {Number.isFinite(levelOne) && (
+                    <ReferenceLine
+                      y={levelOne}
+                      stroke={LEVEL_ONE_COLOR}
+                      strokeDasharray="6 4"
+                      strokeWidth={2}
+                      label={{ value: "Livello 1", position: "right", fill: LEVEL_ONE_COLOR, fontSize: 11 }}
+                    />
+                  )}
+                  {Number.isFinite(levelTwo) && (
+                    <ReferenceLine
+                      y={levelTwo}
+                      stroke={LEVEL_TWO_COLOR}
+                      strokeDasharray="6 4"
+                      strokeWidth={2}
+                      label={{ value: "Livello 2", position: "right", fill: LEVEL_TWO_COLOR, fontSize: 11 }}
+                    />
+                  )}
                   <Tooltip
-                    contentStyle={{ background: "#eef2ff", border: "1px solid #2f36d8", color: "#111827", borderRadius: 0 }}
+                    contentStyle={{ background: "#0d1728", border: "1px solid #26364f", borderRadius: 8, color: "#e2e8f0" }}
+                    labelStyle={{ color: "#cbd5e1" }}
                     formatter={(value) => [Number(value).toFixed(2) + " m", "Altezza idrometrica"]}
                     labelFormatter={(label) => label}
                   />
-                  <Legend verticalAlign="bottom" height={28} wrapperStyle={{ color: "#111827", fontSize: 12 }} />
+                  <Legend verticalAlign="bottom" height={28} wrapperStyle={{ color: "#cbd5e1", fontSize: 12 }} />
                   <Line
                     type="monotone"
                     dataKey="level"
@@ -167,26 +202,32 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 text-sm">
-              <div>
-                <p className="font-semibold text-indigo-800">Soglie operative</p>
-                <p className="mt-1"><span className="inline-block h-2.5 w-6 rounded-sm bg-yellow-300" /> Livello 1 -&gt; {levelOne === null ? "soglia non disponibile" : levelOne + " m"}</p>
-                <p><span className="inline-block h-2.5 w-6 rounded-sm bg-red-500" /> Livello 2 -&gt; {levelTwo === null ? "soglia non disponibile" : levelTwo + " m"}</p>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Ultima misura</p>
+                <p className="mt-1 text-xl font-semibold text-white">{Number.isFinite(currentLevel) ? currentLevel.toFixed(2) + " m" : "n.d."}</p>
+                <p className="text-xs text-slate-400">{formatTime(selectedRealtime?.measurement_time)}</p>
+              </div>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Variazioni livello</p>
+                <p className="mt-1 flex items-center justify-between gap-2 text-slate-300"><span>Δh1</span><strong className={deltaClass(selectedRealtime?.delta_h1_m)}>{formatDeltaLevel(selectedRealtime?.delta_h1_m)}</strong></p>
+                <p className="flex items-center justify-between gap-2 text-slate-300"><span>Δh3</span><strong className={deltaClass(selectedRealtime?.delta_h3_m)}>{formatDeltaLevel(selectedRealtime?.delta_h3_m)}</strong></p>
+                <p className="flex items-center justify-between gap-2 text-slate-300"><span>Δh6</span><strong className={deltaClass(selectedRealtime?.delta_h6_m)}>{formatDeltaLevel(selectedRealtime?.delta_h6_m)}</strong></p>
+              </div>
+              <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Soglie operative</p>
+                <p className="mt-1 flex items-center gap-2 text-slate-300">
+                  <span className="inline-block h-2.5 w-6 rounded-sm" style={{ background: LEVEL_ONE_COLOR }} />
+                  Livello 1 {levelOne === null ? "non disponibile" : "-> " + levelOne + " m"}
+                </p>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="inline-block h-2.5 w-6 rounded-sm" style={{ background: LEVEL_TWO_COLOR }} />
+                  Livello 2 {levelTwo === null ? "non disponibile" : "-> " + levelTwo + " m"}
+                </p>
                 {levelOne === null && levelTwo === null && (
-                  <p className="mt-1 text-xs text-slate-600">CFR Toscana non pubblica le soglie per questa stazione: nessuna linea di riferimento nel grafico.</p>
+                  <p className="mt-1 text-xs text-slate-500">CFR Toscana non pubblica le soglie per questa stazione: nessuna linea di riferimento nel grafico.</p>
                 )}
               </div>
-              <div className="rounded border border-slate-300 bg-slate-50 p-2">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Ultima misura</p>
-                <p className="mt-1 font-semibold text-slate-950">{Number.isFinite(currentLevel) ? currentLevel.toFixed(2) + " m" : "n.d."}</p>
-                <p className="text-xs text-slate-600">{formatTime(selectedRealtime?.measurement_time)}</p>
-              </div>
-              <div className="rounded border border-slate-300 bg-slate-50 p-2">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Variazioni livello</p>
-                <p className="mt-1">Δh1: {Number.isFinite(Number(selectedRealtime?.delta_h1_m)) ? Number(selectedRealtime.delta_h1_m).toFixed(2) + " m" : "n.d."}</p>
-                <p>Δh3: {Number.isFinite(Number(selectedRealtime?.delta_h3_m)) ? Number(selectedRealtime.delta_h3_m).toFixed(2) + " m" : "n.d."}</p>
-                <p>Δh6: {Number.isFinite(Number(selectedRealtime?.delta_h6_m)) ? Number(selectedRealtime.delta_h6_m).toFixed(2) + " m" : "n.d."}</p>
-              </div>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs leading-5 text-slate-500">
                 Realtime CFR non validato. Se lo storico SIR della stazione e&apos; caricato, il grafico usa la serie storica; altrimenti ricostruisce l&apos;andamento da attuale, Δh1, Δh3 e Δh6.
               </p>
             </div>
@@ -486,27 +527,21 @@ export default function IdrometriaPage() {
   }
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5">
-          <header className="rounded-lg border border-emergency-line bg-emergency-panel/80 p-4 shadow-glow sm:p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Provincia di Firenze</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Idrometria ufficiale</h1>
-                <p className="mt-2 max-w-3xl text-sm text-slate-400">Anagrafica OpenData, realtime CFR non validato e collegamento allo storico SIR.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => loadData()}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20"
-              >
-                <RefreshCcw className="h-4 w-4" />
-                Aggiorna
-              </button>
-            </div>
-          </header>
+      <PageLayout>
+          <PageHeader
+            eyebrow="Provincia di Firenze"
+            title="Idrometria ufficiale"
+            description="Anagrafica OpenData, realtime CFR non validato e collegamento allo storico SIR: livelli, portate e variazioni delle stazioni idrometriche provinciali."
+          >
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-4 text-sm font-medium text-sky-100 transition hover:bg-sky-400/20 md:w-40"
+            >
+              <RefreshCcw className="h-4 w-4" />
+              Aggiorna
+            </button>
+          </PageHeader>
 
           {error && <div className="rounded-lg border border-emergency-red/50 bg-emergency-red/10 px-4 py-3 text-sm text-red-100">{error}</div>}
           {loading && <div className="rounded-lg border border-emergency-line bg-emergency-panel px-4 py-3 text-sm text-slate-300">Caricamento dati idrometrici...</div>}
@@ -558,8 +593,6 @@ export default function IdrometriaPage() {
           </section>
 
           <SourceMatrix items={payload?.sourceMatrix || []} />
-        </div>
-      </main>
-    </>
+      </PageLayout>
   );
 }

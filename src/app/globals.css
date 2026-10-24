@@ -58,6 +58,16 @@ body {
   color: #cbd5e1 !important;
 }
 
+/* I controlli nativi restano alti ~36px: su telefono vanno portati almeno a
+ * 44px, come i pulsanti dell'app, per essere toccabili senza errori. */
+@layer base {
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea {
+    min-height: 2.75rem;
+  }
+}
+
 @layer components {
   .panel {
     @apply min-w-0 rounded-lg border border-emergency-line bg-emergency-panel/90 shadow-glow;
@@ -84,5 +94,12 @@ body {
 /* Le tile radar sono canvas gia colorati con trasparenza: nessun blend aggiuntivo,
  * altrimenti i colori della palette DPC vengono alterati. */
 .leaflet-container .leaflet-layer.dpc-radar-tile canvas.leaflet-tile {
+  mix-blend-mode: normal;
+}
+
+/* La mappa delle stazioni usa OSM: convertita in monocromatico scuro resta
+ * leggibile e non compete con i colori di stazioni e layer di rischio. */
+.leaflet-container .leaflet-layer.dashboard-basemap img.leaflet-tile {
+  filter: grayscale(1) invert(1) brightness(0.92) contrast(1.12);
   mix-blend-mode: normal;
 }

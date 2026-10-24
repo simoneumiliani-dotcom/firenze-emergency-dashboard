@@ -32,8 +32,9 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import AppNav from "@/components/AppNav";
 import LazySection from "@/components/LazySection";
+import PageHeader from "@/components/PageHeader";
+import PageLayout from "@/components/PageLayout";
 
 const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -195,6 +196,9 @@ function smartWeatherLabel(day) {
 }
 
 function formatMetric(value, unit = "", decimals = 1) {
+  // Number(null) vale 0: una grandezza assente deve restare "n.d.", non
+  // diventare uno zero reale (per esempio 0 km di visibilita').
+  if (value === null || value === undefined || value === "") return "n.d.";
   const number = Number(value);
   if (!Number.isFinite(number)) return "n.d.";
   const formatted = Number(number.toFixed(decimals));
@@ -1001,28 +1005,20 @@ export default function ForecastPage() {
   }, [activeLat, activeLng, days, coordinatesValid, forecastProfile, radarProduct]);
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen px-3 py-4 sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5">
-          <header className="panel p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-wider text-sky-300">Modulo previsionale</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">Previsioni meteo puntuali</h1>
-                <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                  Analisi per comune o coordinate precise con Open-Meteo, pensata per uso operativo su desktop, tablet e mobile.
-                </p>
+      <PageLayout>
+          <PageHeader
+            eyebrow="Modulo previsionale"
+            title="Previsioni meteo puntuali"
+            description="Analisi per comune o coordinate precise con Open-Meteo, pensata per uso operativo su desktop, tablet e mobile."
+          >
+            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm text-slate-300 md:w-56">
+              <div className="flex items-center gap-2 text-sky-100">
+                <LocateFixed className="h-4 w-4" />
+                {selectedMunicipality.name}
               </div>
-              <div className="rounded-lg border border-emergency-line bg-emergency-panel2 px-3 py-2 text-sm text-slate-300">
-                <div className="flex items-center gap-2 text-sky-100">
-                  <LocateFixed className="h-4 w-4" />
-                  {selectedMunicipality.name}
-                </div>
-                <p className="mt-1 text-xs text-slate-400">{custom.lat}, {custom.lng}</p>
-              </div>
+              <p className="mt-1 text-xs text-slate-400">{custom.lat}, {custom.lng}</p>
             </div>
-          </header>
+          </PageHeader>
 
           <ForecastControls
             selectedId={selectedId}
@@ -1084,8 +1080,6 @@ export default function ForecastPage() {
           <footer className="pb-6 text-xs text-slate-500">
             Fonte previsionale: {primarySource?.label || "Open-Meteo"}{primarySource?.model ? " (" + primarySource.model + ")" : ""}. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
           </footer>
-        </div>
-      </main>
-    </>
+      </PageLayout>
   );
 }

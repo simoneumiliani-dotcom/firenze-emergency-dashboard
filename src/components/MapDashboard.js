@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Layers, MapPin } from "lucide-react";
 import L from "leaflet";
 import {
@@ -14,17 +15,9 @@ import {
   WMSTileLayer
 } from "react-leaflet";
 import { MEASUREMENT_TYPES } from "@/lib/cfrStations";
+import { sensorColor } from "@/lib/stationTheme";
 
 const FLORENCE_CENTER = [43.82, 11.25];
-
-const TYPE_COLORS = {
-  pluviometry: "#38bdf8",
-  hydrometry: "#22c55e",
-  thermometry: "#fb923c",
-  anemometry: "#a78bfa",
-  hygrometry: "#14b8a6",
-  nivometry: "#facc15"
-};
 
 const WMS_LAYERS = [
   {
@@ -66,7 +59,7 @@ function getHydroStatus(station) {
 function stationColor(station) {
   const visibleMeasurement = station.measurements?.[0] || station;
   if (visibleMeasurement.type === "hydrometry") return getHydroStatus(visibleMeasurement).color;
-  return TYPE_COLORS[visibleMeasurement.type] || "#38bdf8";
+  return sensorColor(visibleMeasurement.type);
 }
 
 function stationIcon(station) {
@@ -150,7 +143,12 @@ export default function MapDashboard({ stations = [] }) {
           <MapPin className="h-5 w-5 text-sky-300" />
           <div>
             <h2 className="section-title">Mappa rischi e stazioni</h2>
-            <p className="text-xs text-slate-400">Stazioni CFR Toscana filtrabili per i sei livelli di monitoraggio.</p>
+            <p className="text-xs text-slate-400">
+              Stazioni CFR Toscana filtrabili per i sei livelli di monitoraggio.{" "}
+              <Link href="/stations/firenze" className="font-medium text-sky-300 underline-offset-2 hover:underline">
+                Catalogo completo
+              </Link>
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs text-slate-300">
@@ -165,7 +163,7 @@ export default function MapDashboard({ stations = [] }) {
               }}
               className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 transition ${visibleTypes.includes(type) ? "border-sky-400/70 bg-sky-400/10 text-slate-100" : "border-emergency-line bg-emergency-panel2 text-slate-500"}`}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[type] }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: sensorColor(type) }} />
               {meta.label}
             </button>
           ))}
@@ -198,6 +196,7 @@ export default function MapDashboard({ stations = [] }) {
         ) : (
         <MapContainer center={FLORENCE_CENTER} zoom={9} minZoom={7} maxZoom={18} scrollWheelZoom>
           <TileLayer
+            className="dashboard-basemap"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
