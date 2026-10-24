@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
+import SourcesLink from "@/components/SourcesLink";
 import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -504,8 +505,11 @@ export default function AllertePage() {
             )}
           </section>
 
-          <footer className="pb-6 text-xs text-slate-500">
-            Fonte: bollettini di criticità idraulica e idrogeologica CFR Toscana, pubblicati dalla dashboard aziendale. Il livello mostrato è quello estratto dal bollettino più recente ancora valido; in assenza di bollettini validi la pagina non stima un livello.
+          <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Fonte: bollettini di criticità idraulica e idrogeologica CFR Toscana, pubblicati dalla dashboard aziendale. Il livello mostrato è quello estratto dal bollettino più recente ancora valido; in assenza di bollettini validi la pagina non stima un livello.
+            </p>
+            <SourcesLink section="allerte" label="Fonti e bollettini" />
           </footer>
     </PageLayout>
   );

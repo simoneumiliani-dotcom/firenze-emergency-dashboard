@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import LazySection from "@/components/LazySection";
 import PageHeader from "@/components/PageHeader";
+import SourcesLink from "@/components/SourcesLink";
 import PageLayout from "@/components/PageLayout";
 
 const DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -1079,8 +1080,11 @@ export default function ForecastPage() {
             </div>
           </section>
 
-          <footer className="pb-6 text-xs text-slate-500">
-            Fonte previsionale: {primarySource?.label || "Open-Meteo"}{primarySource?.model ? " (" + primarySource.model + ")" : ""}. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+          <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Fonte previsionale: {primarySource?.label || "Open-Meteo"}{primarySource?.model ? " (" + primarySource.model + ")" : ""}. Radar: Protezione Civile DPC. Ultimo aggiornamento: {formatDateTime(payload?.fetchedAt)}.
+            </p>
+            <SourcesLink section="previsioni" />
           </footer>
       </PageLayout>
   );

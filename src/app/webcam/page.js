@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Camera, ExternalLink, Filter, RefreshCcw, Wifi, WifiOff } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
+import SourcesLink from "@/components/SourcesLink";
 import webcamCatalog from "@/data/webcams.json";
 
 const STATUS_REFRESH_MS = 5 * 60 * 1000;
@@ -268,8 +269,11 @@ export default function WebcamPage() {
             La pagina supporta immagini SkylineWebcams e video MP4 diretti Autostrade: quando una sorgente non espone stream incorporabili, resta disponibile il link alla fonte pubblica.
           </div>
 
-          <footer className="pb-6 text-xs text-slate-500">
-            Fonti webcam: pagine pubbliche dei rispettivi provider. Ultimo controllo disponibilita: {formatDateTime(statusPayload?.fetchedAt)}.
+          <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Fonti webcam: pagine pubbliche dei rispettivi provider. Ultimo controllo disponibilita: {formatDateTime(statusPayload?.fetchedAt)}.
+            </p>
+            <SourcesLink section="webcam" label="Fonti webcam" />
           </footer>
       </PageLayout>
   );

@@ -23,6 +23,7 @@ import LazySection from "@/components/LazySection";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import SituationStrip from "@/components/SituationStrip";
+import SourcesLink from "@/components/SourcesLink";
 import {
   DEFAULT_PANEL_CONFIGS,
   MEASUREMENT_TYPES,
@@ -779,13 +780,7 @@ export default function DashboardPage() {
           <p>
             Fonti osservazioni: Open-Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
           </p>
-          <Link
-            href="/fonti"
-            className="inline-flex items-center gap-1 font-medium text-sky-300 transition hover:text-sky-100"
-          >
-            Tutte le fonti e i download
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <SourcesLink section="dashboard" label="Tutte le fonti e i download" />
         </footer>
     </PageLayout>
   );

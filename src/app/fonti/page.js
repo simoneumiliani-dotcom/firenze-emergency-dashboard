@@ -1,6 +1,8 @@
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
+  Camera,
   CloudSun,
   Database,
   ExternalLink,
@@ -20,6 +22,14 @@ export const metadata = {
   description: "Elenco delle fonti dati, dei download ufficiali e degli aggiornamenti live della dashboard.",
   robots: { index: false, follow: false }
 };
+
+const SECTIONS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "allerte", label: "Allerte" },
+  { id: "previsioni", label: "Previsioni" },
+  { id: "idrometria", label: "Idrometria" },
+  { id: "webcam", label: "Webcam" }
+];
 
 const RADAR_LINKS = [
   { label: "Portale radar DPC", href: "https://radar.protezionecivile.gov.it/" },
@@ -47,12 +57,48 @@ const DASHBOARD_SOURCES = [
     content: "Anagrafica stazioni e serie storiche validate, prevalidate e ricostruite",
     format: "JSON / GeoJSON",
     href: "https://www.sir.toscana.it/archivio/dati.php?D=json_stations"
+  }
+];
+
+const ALERT_SOURCES = [
+  {
+    source: "CFR Toscana - Bollettini",
+    content: "Bollettini di criticità idraulica e idrogeologica e relativi livelli di allerta",
+    format: "PDF",
+    href: "https://www.cfr.toscana.it/"
   },
   {
-    source: "Protezione Civile - Bollettini",
-    content: "Bollettini di criticità e avvisi meteo regionali in PDF",
+    source: "Protezione Civile - Mappe di criticità",
+    content: "Scenari di criticità e avvisi meteo regionali",
+    format: "Web / PDF",
+    href: "https://mappe.protezionecivile.gov.it/it/"
+  },
+  {
+    source: "Archivio della dashboard",
+    content: "Bollettini caricati e validati dall'operatore, con livello e validità estratti dal PDF",
     format: "PDF",
-    href: "https://www.protezionecivile.gov.it/it/"
+    href: "/allerte"
+  }
+];
+
+const WEBCAM_SOURCES = [
+  {
+    source: "SkylineWebcams",
+    content: "Anteprime e live delle webcam cittadine, aggiornate dal provider",
+    format: "iframe / immagine",
+    href: "https://www.skylinewebcams.com/"
+  },
+  {
+    source: "Autostrade per l'Italia",
+    content: "Video MP4 diretti delle tratte autostradali",
+    format: "MP4",
+    href: "https://www.autostrade.it/"
+  },
+  {
+    source: "Pagina Webcam",
+    content: "Stato di disponibilità e link alla fonte pubblica di ogni sorgente",
+    format: "Pagina interna",
+    href: "/webcam"
   }
 ];
 
@@ -71,7 +117,7 @@ function SectionHeading({ icon: Icon, title, description, id }) {
   );
 }
 
-function SourceTable({ rows, withLink = false }) {
+function SourceTable({ rows }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-emergency-line text-sm">
@@ -80,7 +126,7 @@ function SourceTable({ rows, withLink = false }) {
             <th className="px-4 py-3">Fonte</th>
             <th className="px-4 py-3">Contenuto</th>
             <th className="px-4 py-3">Formato</th>
-            <th className="px-4 py-3">{withLink ? "Riferimento" : "Uso applicativo"}</th>
+            <th className="px-4 py-3">Riferimento</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-emergency-line">
@@ -90,20 +136,43 @@ function SourceTable({ rows, withLink = false }) {
               <td className="px-4 py-3 text-slate-300">{row.content}</td>
               <td className="px-4 py-3 text-sky-100">{row.format}</td>
               <td className="px-4 py-3 text-slate-400">
-                {withLink ? (
-                  <a
-                    href={row.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex min-h-11 items-center gap-1 underline decoration-sky-400/50 underline-offset-2 hover:text-sky-100"
-                  >
-                    Apri fonte
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                ) : (
-                  row.applicationUse
-                )}
+                <a
+                  href={row.href}
+                  target={row.href.startsWith("/") ? undefined : "_blank"}
+                  rel={row.href.startsWith("/") ? undefined : "noreferrer"}
+                  className="inline-flex min-h-11 items-center gap-1 underline decoration-sky-400/50 underline-offset-2 hover:text-sky-100"
+                >
+                  Apri fonte
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function HydrometrySourceTable({ rows }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-emergency-line text-sm">
+        <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
+          <tr>
+            <th className="px-4 py-3">Fonte</th>
+            <th className="px-4 py-3">Contenuto</th>
+            <th className="px-4 py-3">Formato</th>
+            <th className="px-4 py-3">Uso applicativo</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-emergency-line">
+          {rows.map((row) => (
+            <tr key={row.source}>
+              <td className="px-4 py-3 font-medium text-slate-100">{row.source}</td>
+              <td className="px-4 py-3 text-slate-300">{row.content}</td>
+              <td className="px-4 py-3 text-sky-100">{row.format}</td>
+              <td className="px-4 py-3 text-slate-400">{row.applicationUse}</td>
             </tr>
           ))}
         </tbody>
@@ -120,7 +189,7 @@ export default function FontiPage() {
       <PageHeader
         eyebrow="Documentazione"
         title="Fonti e aggiornamenti"
-        description="Riferimenti ufficiali, download e canali di aggiornamento raccolti per scheda: dashboard, previsioni e idrometria."
+        description="Riferimenti ufficiali, download e canali di aggiornamento raccolti per scheda: dashboard, allerte, previsioni, idrometria e webcam."
       >
         <Link href="/" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emergency-line bg-emergency-panel px-4 text-sm font-medium text-slate-200 transition hover:bg-white/[0.04]">
           <ArrowLeft className="h-4 w-4" />
@@ -129,10 +198,54 @@ export default function FontiPage() {
       </PageHeader>
 
       <nav aria-label="Sezioni della pagina" className="flex flex-wrap gap-2 text-sm">
-        <a href="#dashboard" className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2 text-slate-300 hover:text-white">Dashboard</a>
-        <a href="#previsioni" className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2 text-slate-300 hover:text-white">Previsioni</a>
-        <a href="#idrometria" className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2 text-slate-300 hover:text-white">Idrometria</a>
+        {SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={"#" + section.id}
+            className="inline-flex min-h-11 items-center rounded-md border border-emergency-line bg-emergency-panel px-3 text-slate-300 hover:text-white"
+          >
+            {section.label}
+          </a>
+        ))}
       </nav>
+
+      <section className="panel overflow-hidden">
+        <SectionHeading
+          id="dashboard"
+          icon={LayoutDashboard}
+          title="Dashboard"
+          description="Fonti osservate per meteo e idrometria in tempo reale."
+        />
+        <SourceTable rows={DASHBOARD_SOURCES} />
+        <div className="flex flex-wrap gap-2 border-t border-emergency-line px-4 py-3">
+          <Link href="/" className={LINK_BUTTON_MUTED}>
+            Apri Dashboard
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel overflow-hidden">
+        <SectionHeading
+          id="allerte"
+          icon={AlertTriangle}
+          title="Allerte"
+          description="Bollettini di criticità, avvisi e archivio validato dalla dashboard."
+        />
+        <div className="border-b border-emergency-line bg-emergency-panel2 px-4 py-3 text-sm leading-6 text-slate-400">
+          Il livello mostrato dipende dal bollettino più recente ancora valido: in assenza di bollettini validi la
+          pagina non stima un livello. I PDF caricati restano consultabili nell&apos;archivio della scheda Allerte.
+        </div>
+        <SourceTable rows={ALERT_SOURCES} />
+        <div className="flex flex-wrap gap-2 border-t border-emergency-line px-4 py-3">
+          <a href="https://www.cfr.toscana.it/monitoraggio/stazioni.php?type=idro" target="_blank" rel="noreferrer" className={LINK_BUTTON}>
+            Monitoraggio CFR Toscana
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+          <Link href="/allerte" className={LINK_BUTTON_MUTED}>
+            Apri Allerte
+          </Link>
+        </div>
+      </section>
 
       <section className="panel overflow-hidden">
         <SectionHeading
@@ -181,7 +294,7 @@ export default function FontiPage() {
           title="Idrometria"
           description="Fonti ufficiali per anagrafica, serie storiche e realtime CFR."
         />
-        <SourceTable rows={hydrometrySources} />
+        <HydrometrySourceTable rows={hydrometrySources} />
         <div className="flex flex-wrap gap-2 border-t border-emergency-line px-4 py-3">
           <a href="https://dati.toscana.it/dataset/idrometri" target="_blank" rel="noreferrer" className={LINK_BUTTON}>
             OpenData Idrometri
@@ -199,12 +312,16 @@ export default function FontiPage() {
 
       <section className="panel overflow-hidden">
         <SectionHeading
-          id="dashboard"
-          icon={LayoutDashboard}
-          title="Dashboard"
-          description="Fonti osservate per meteo, idrometria, bollettini e rischio territoriale."
+          id="webcam"
+          icon={Camera}
+          title="Webcam"
+          description="Provider delle immagini e dei video incorporati nella scheda Webcam."
         />
-        <SourceTable rows={DASHBOARD_SOURCES} withLink />
+        <div className="border-b border-emergency-line bg-emergency-panel2 px-4 py-3 text-sm leading-6 text-slate-400">
+          La pagina supporta immagini SkylineWebcams e video MP4 diretti Autostrade: quando una sorgente non espone
+          stream incorporabili, resta disponibile il link alla fonte pubblica.
+        </div>
+        <SourceTable rows={WEBCAM_SOURCES} />
       </section>
 
       <section className="panel p-4 text-sm text-slate-400">

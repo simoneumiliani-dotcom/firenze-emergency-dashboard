@@ -17,6 +17,7 @@ import {
 import LazySection from "@/components/LazySection";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
+import SourcesLink from "@/components/SourcesLink";
 
 const LEVEL_LINE_COLOR = "#38bdf8";
 const LEVEL_ONE_COLOR = "#e8df20";
@@ -559,6 +560,12 @@ export default function IdrometriaPage() {
             />
           </section>
 
+          <footer className="pb-6 text-xs text-slate-500">
+            Livelli realtime CFR non validati, serie storiche SIR e anagrafica OpenData Regione Toscana.
+            <div className="mt-1">
+              <SourcesLink section="idrometria" />
+            </div>
+          </footer>
       </PageLayout>
   );
 }
