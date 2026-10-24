@@ -222,6 +222,32 @@ function cleanText(value) {
     .trim();
 }
 
+function romeOffsetMinutes(date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Rome",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(date);
+  const part = (type) => Number(parts.find((item) => item.type === type)?.value);
+  const wallClockUtc = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+  return (wallClockUtc - date.getTime()) / 60000;
+}
+
+// Gli orari SIR sono ora locale italiana: senza un fuso esplicito il server
+// (UTC su Vercel) e il computer di sviluppo (UTC+1/+2) producevano istanti
+// diversi per la stessa misura.
+function romeLocalToIso(year, month, day, hour, minute, second = 0) {
+  const wallClockUtc = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  let offset = romeOffsetMinutes(new Date(wallClockUtc));
+  offset = romeOffsetMinutes(new Date(wallClockUtc - offset * 60000));
+  return new Date(wallClockUtc - offset * 60000).toISOString();
+}
+
 function normalizeDateTime(value) {
   const text = cleanText(value);
   const italian = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})[.:](\d{2})/);
@@ -231,6 +257,18 @@ function normalizeDateTime(value) {
   }
   const iso = Date.parse(text);
   return Number.isFinite(iso) ? new Date(iso).toISOString() : null;
+}
+
+// Gli orari SIR arrivano come "YYYY-MM-DD HH:mm:ss" senza fuso: vanno letti
+// come ora italiana, altrimenti il server UTC di Vercel li sposta di due ore.
+function normalizeSirDateTime(value) {
+  const text = cleanText(value);
+  const isoLocal = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (isoLocal) {
+    const [, year, month, day, hour, minute, second] = isoLocal;
+    return romeLocalToIso(year, month, day, hour, minute, second || 0);
+  }
+  return normalizeDateTime(value);
 }
 
 function normalizeSolarDateTime(value) {
@@ -1131,7 +1169,7 @@ function normalizeHistoricalRow(row, station, sourceUrl) {
     basin: station.basin,
     latitude: station.latitude,
     longitude: station.longitude,
-    measurement_time: normalizeDateTime(dateValue) || cleanText(dateValue) || null,
+    measurement_time: normalizeSirDateTime(dateValue) || cleanText(dateValue) || null,
     level_m: Number.isFinite(value) ? value : null,
     flow_mc_s: null,
     source_type: HYDROMETRY_SOURCES.stationArchive.sourceType,
