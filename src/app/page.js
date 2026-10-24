@@ -232,7 +232,9 @@ function getStationStatus(station) {
   const value = toFiniteNumber(station.value);
   const danger = toFiniteNumber(station.danger);
   const warning = toFiniteNumber(station.warning);
-  if (value === null) return "Verde";
+  // Senza livello o senza soglie ufficiali non si puo' dire "verde":
+  // sarebbe un falso "tutto tranquillo".
+  if (value === null || (danger === null && warning === null)) return null;
   if (danger !== null && value >= danger) return "Rosso";
   if (warning !== null && value >= warning) return "Giallo";
   return "Verde";
@@ -327,27 +329,28 @@ function MeasurementPanel({ index, config, onChange, measurements, stationCatalo
         <table className="min-w-full divide-y divide-emergency-line text-sm">
           <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Stazione</th>
-              <th className="px-4 py-3">{meta.valueLabel}</th>
-              <th className="px-4 py-3">Trend</th>
-              <th className="px-4 py-3">Fonte</th>
-              <th className="px-4 py-3">Aggiornamento</th>
+              <th className="px-3 py-3">Stazione</th>
+              <th className="px-3 py-3">{meta.valueLabel}</th>
+              <th className="px-3 py-3">Trend</th>
+              <th className="px-3 py-3">Fonte</th>
+              <th className="px-3 py-3 text-right">Agg.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-emergency-line">
             {rows.map((row) => (
               <tr key={row.id} className="hover:bg-white/[0.03]">
-                <td className="whitespace-nowrap px-4 py-3 text-slate-400">{row.id}</td>
-                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-100">{row.name}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-200">{row.value ?? "n.d."} {row.unit}</td>
-                <td className="px-4 py-3"><TrendIcon trend={row.trend} /></td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-400">
+                <td className="px-3 py-3 font-medium text-slate-100">
+                  {row.name}
+                  <span className="mt-0.5 block font-mono text-[10px] font-normal text-slate-500">{row.id}</span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-3 text-slate-200">{row.value ?? "n.d."} {row.value !== null && row.value !== undefined ? row.unit : ""}</td>
+                <td className="px-3 py-3"><TrendIcon trend={row.trend} /></td>
+                <td className="px-3 py-3 text-slate-400">
                   {row.provider || "n.d."}
                   {row.modelled ? <span className="ml-1 text-xs text-sky-300">(coord.)</span> : null}
                   {row.unavailable ? <span className="ml-1 text-xs text-orange-200">(in attesa)</span> : null}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-400">{row.updatedAt || "n.d."}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-right text-slate-400">{row.updatedAt || "n.d."}</td>
               </tr>
             ))}
           </tbody>
@@ -686,13 +689,25 @@ export default function DashboardPage() {
     ...STATIONS_BY_TYPE,
     hydrometry: hydrometryCatalog
   }), [hydrometryCatalog]);
-  const highestHydroStatus = useMemo(() => {
-    if (hydrometryStations.some((station) => getStationStatus(station) === "Rosso")) return "Rosso";
-    if (hydrometryStations.some((station) => getStationStatus(station) === "Giallo")) return "Giallo";
-    return "Verde";
-  }, [hydrometryStations]);
+  const hydroStatuses = useMemo(
+    () => hydrometryStations.map((station) => getStationStatus(station)).filter(Boolean),
+    [hydrometryStations]
+  );
+  const highestHydroStatus = hydroStatuses.includes("Rosso")
+    ? "Rosso"
+    : hydroStatuses.includes("Giallo")
+      ? "Giallo"
+      : hydroStatuses.includes("Verde")
+        ? "Verde"
+        : null;
 
-  const visibleAlert = alert.level !== "Verde" ? alert.level : highestHydroStatus;
+  // Il livello "di allerta" esiste solo se c'e' un bollettino pubblicato: il
+  // resto e' lo stato idrometrico, che va etichettato per quello che e'.
+  const hasBulletinAlert = Boolean(alert.fileName) || alert.level !== "Verde";
+  const alertLabel = hasBulletinAlert ? "Stato di allerta" : "Stato idrometrico";
+  const alertHref = hasBulletinAlert ? "/allerte" : "/idrometria";
+  const visibleAlert = hasBulletinAlert ? alert.level : (highestHydroStatus || "n.d.");
+  const alertStyle = ALERT_STYLE[visibleAlert] || "border-emergency-line bg-emergency-panel2 text-slate-300";
   const mapStations = Object.values(observationData.measurements).flat();
 
   return (
@@ -700,20 +715,20 @@ export default function DashboardPage() {
         <PageHeader
           eyebrow="Provincia di Firenze"
           title="Dashboard meteo e idrometria Firenze"
-          description="Situazione in corso sulla provincia: livelli idrometrici CFR Toscana, pluviometria, temperatura e vento delle stazioni monitorate, con la mappa dei rischi territoriali."
+          description="Situazione in corso sulla provincia: livelli idrometrici CFR Toscana, pluviometria, temperatura e vento delle stazioni monitorate, con la mappa interattiva delle stazioni e degli stati di soglia."
         >
           <Link
-            href="/allerte"
-            aria-label={"Apri la pagina Allerte e criticità, livello " + visibleAlert}
-            className={`group block w-full rounded-lg border px-4 py-3 transition hover:shadow-glow md:w-64 ${ALERT_STYLE[visibleAlert]}`}
+            href={alertHref}
+            aria-label={"Apri " + (hasBulletinAlert ? "la pagina Allerte e criticità" : "la pagina Idrometria") + ", livello " + visibleAlert}
+            className={`group block w-full rounded-lg border px-4 py-3 transition hover:shadow-glow md:w-64 ${alertStyle}`}
           >
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
-              <span className="text-sm font-medium">Stato di allerta</span>
+              <span className="text-sm font-medium">{alertLabel}</span>
             </div>
             <p className="mt-1 text-2xl font-semibold">{visibleAlert}</p>
             <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium opacity-80 group-hover:opacity-100">
-              Dettagli allerte
+              {hasBulletinAlert ? "Dettagli allerte" : "Dettagli idrometria"}
               <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
             </span>
           </Link>

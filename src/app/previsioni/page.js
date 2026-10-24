@@ -494,10 +494,12 @@ function ForecastCharts({ payload }) {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto pb-2">
-          <div className={"h-72 " + (rainView === "hourly" ? "min-w-[48rem]" : "min-w-[44rem]")}>
+        <div className="overflow-x-auto pb-2 xl:overflow-visible">
+          <div className={"h-72 " + (rainView === "hourly" ? "min-w-[44rem] xl:min-w-0" : "min-w-[38rem] xl:min-w-0")}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rainRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              {/* Il margine superiore lascia spazio all'etichetta del valore massimo,
+                  che altrimenti viene tagliata dal bordo del grafico. */}
+              <ComposedChart data={rainRows} margin={{ left: 0, right: 26, top: 18, bottom: 0 }}>
                 <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                 <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <YAxis yAxisId="left" domain={[0, rainDomainMax]} stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="mm" />
@@ -555,7 +557,7 @@ function ForecastCharts({ payload }) {
         </div>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={windRows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <LineChart data={windRows} margin={{ left: 0, right: 22, top: 18, bottom: 0 }}>
               <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
               <XAxis dataKey="hour" stroke="#94a3b8" interval={2} tick={{ fill: "#94a3b8", fontSize: 12 }} />
               <YAxis domain={[0, windDomainMax]} stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit=" km/h" />
@@ -632,7 +634,7 @@ function DailyTable({ payload }) {
 
           <div className="mt-5 h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={days} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              <LineChart data={days} margin={{ left: 0, right: 22, top: 18, bottom: 0 }}>
                 <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                 <XAxis dataKey="label" stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <YAxis stroke="#94a3b8" tick={{ fill: "#94a3b8", fontSize: 12 }} unit="C" />

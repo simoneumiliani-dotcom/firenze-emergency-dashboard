@@ -81,6 +81,13 @@ body {
   }
 }
 
+/* Tastiera e switch: senza un anello di focus esplicito i controlli scuri
+ * restano indistinguibili quando si naviga senza mouse. */
+:where(a, button, select, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
 /* I controlli nativi restano alti ~36px: su telefono vanno portati almeno a
  * 44px, come i pulsanti dell'app, per essere toccabili senza errori. */
 @layer base {

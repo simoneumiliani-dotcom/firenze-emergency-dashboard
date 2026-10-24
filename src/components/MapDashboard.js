@@ -103,6 +103,14 @@ function mergeStations(stations) {
   return [...map.values()];
 }
 
+const HYDRO_LEGEND = [
+  { color: "#22c55e", label: "Sotto soglia" },
+  { color: "#facc15", label: "Attenzione" },
+  { color: "#ef4444", label: "Critico" },
+  { color: "#94a3b8", label: "Soglie non note" },
+  { color: "#64748b", label: "Dato assente" }
+];
+
 export default function MapDashboard({ stations = [] }) {
   const [mounted, setMounted] = useState(false);
   const [visibleTypes, setVisibleTypes] = useState(Object.keys(MEASUREMENT_TYPES));
@@ -142,7 +150,7 @@ export default function MapDashboard({ stations = [] }) {
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-sky-300" />
           <div>
-            <h2 className="section-title">Mappa rischi e stazioni</h2>
+            <h2 className="section-title">Mappa delle stazioni</h2>
             <p className="text-xs text-slate-400">
               Stazioni CFR Toscana filtrabili per i sei livelli di monitoraggio.{" "}
               <Link href="/stations/firenze" className="font-medium text-sky-300 underline-offset-2 hover:underline">
@@ -261,8 +269,8 @@ export default function MapDashboard({ stations = [] }) {
               <CircleMarker
                 key={`${station.id}-halo`}
                 center={[station.lat, station.lng]}
-                radius={station.approximate ? 10 : 16}
-                pathOptions={{ color, fillColor: color, fillOpacity: 0.06, opacity: 0.36, weight: 2 }}
+                radius={station.approximate ? 8 : 13}
+                pathOptions={{ color, fillColor: color, fillOpacity: 0.05, opacity: 0.26, weight: 1.5 }}
               />
             );
           })}
@@ -282,6 +290,19 @@ export default function MapDashboard({ stations = [] }) {
             ))}
         </MapContainer>
         )}
+      </div>
+
+      {/* I colori degli idrometri indicano lo stato rispetto alle soglie CFR:
+          senza legenda il verde/giallo/rosso resta ambiguo. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-emergency-line px-4 py-2.5 text-[11px] text-slate-400">
+        <span className="font-semibold uppercase tracking-wide text-slate-500">Idrometria</span>
+        {HYDRO_LEGEND.map((item) => (
+          <span key={item.label} className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+            {item.label}
+          </span>
+        ))}
+        <span className="ml-auto hidden text-slate-500 sm:inline">Gli altri sensori usano il colore del parametro.</span>
       </div>
     </section>
   );

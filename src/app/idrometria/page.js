@@ -148,7 +148,7 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
           <div className="grid gap-3 p-3 lg:grid-cols-[1fr_15rem]">
             <div className="h-[22rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ left: 20, right: 26, top: 14, bottom: 24 }}>
+                <LineChart data={chartData} margin={{ left: 20, right: 16, top: 14, bottom: 24 }}>
                   <CartesianGrid stroke="#26364f" strokeDasharray="3 3" />
                   <XAxis
                     dataKey="time"
@@ -164,13 +164,15 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
                   >
                     <Label value="Altezza idrometrica [m s.z.i.]" angle={-90} position="insideLeft" fill="#7dd3fc" fontSize={12} />
                   </YAxis>
+                  {/* Etichette dentro l'area del grafico: con "right" finivano
+                      fuori dal riquadro, coperte dal pannello dei valori. */}
                   {Number.isFinite(levelOne) && (
                     <ReferenceLine
                       y={levelOne}
                       stroke={LEVEL_ONE_COLOR}
                       strokeDasharray="6 4"
                       strokeWidth={2}
-                      label={{ value: "Livello 1", position: "right", fill: LEVEL_ONE_COLOR, fontSize: 11 }}
+                      label={{ value: "Livello 1 · " + levelOne + " m", position: "insideTopRight", fill: LEVEL_ONE_COLOR, fontSize: 11 }}
                     />
                   )}
                   {Number.isFinite(levelTwo) && (
@@ -179,7 +181,7 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
                       stroke={LEVEL_TWO_COLOR}
                       strokeDasharray="6 4"
                       strokeWidth={2}
-                      label={{ value: "Livello 2", position: "right", fill: LEVEL_TWO_COLOR, fontSize: 11 }}
+                      label={{ value: "Livello 2 · " + levelTwo + " m", position: "insideTopRight", fill: LEVEL_TWO_COLOR, fontSize: 11 }}
                     />
                   )}
                   <Tooltip
@@ -276,6 +278,7 @@ function SourceMatrix({ items }) {
 
 function RealtimeTable({ rows }) {
   const delta = (value) => (Number.isFinite(Number(value)) ? Number(value).toFixed(2) + " m" : "n.d.");
+  const compactDelta = (value) => (Number.isFinite(Number(value)) ? (Number(value) > 0 ? "+" : "") + Number(value).toFixed(2) : "–");
 
   return (
     <section className="panel overflow-hidden">
@@ -285,10 +288,9 @@ function RealtimeTable({ rows }) {
           <h2 className="section-title">Realtime CFR</h2>
           <p className="muted">Livelli e portate operative, non validati.</p>
         </div>
-      </div>
-      <div className="border-b border-emergency-orange/40 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">
+      </div>      <div className="border-b border-emergency-orange/40 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">
         <AlertTriangle className="mr-2 inline h-4 w-4" />
-        Dati CFR in tempo reale non validati: usare per monitoraggio operativo, non per reportistica ufficiale storica.
+        Dati CFR in tempo reale non validati: usare per monitoraggio operativo, non per reportistica ufficiale storica. Le variazioni sono in metri.
       </div>
       <div className="grid gap-2 p-3 md:hidden">
         {rows.length ? rows.map((row) => (
@@ -297,11 +299,11 @@ function RealtimeTable({ rows }) {
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <p className="text-slate-500">Livello</p>
-                <p className="text-sky-100">{row.level_m ?? "n.d."} m</p>
+                <p className="text-sky-100">{row.level_m ?? "n.d."}{row.level_m !== null && row.level_m !== undefined ? " m" : ""}</p>
               </div>
               <div>
                 <p className="text-slate-500">Portata</p>
-                <p className="text-slate-300">{row.flow_mc_s ?? "n.d."} mc/s</p>
+                <p className="text-slate-300">{row.flow_mc_s ?? "n.d."}{row.flow_mc_s !== null && row.flow_mc_s !== undefined ? " m³/s" : ""}</p>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
@@ -323,28 +325,28 @@ function RealtimeTable({ rows }) {
               <th className="px-4 py-3">Stazione</th>
               <th className="px-4 py-3">Livello</th>
               <th className="px-4 py-3">Portata</th>
-              <th className="px-4 py-3">Δh1</th>
-              <th className="px-4 py-3">Δh3</th>
-              <th className="px-4 py-3">Δh6</th>
+              <th className="px-4 py-3">Variazione 1h · 3h · 6h</th>
               <th className="px-4 py-3">Ora misura</th>
-              <th className="px-4 py-3">Validato</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-emergency-line">
             {rows.length ? rows.map((row) => (
               <tr key={row.station_id}>
                 <td className="px-4 py-3 font-medium text-slate-100">{row.station_name}</td>
-                <td className="px-4 py-3 text-sky-100">{row.level_m ?? "n.d."} m</td>
-                <td className="px-4 py-3 text-slate-300">{row.flow_mc_s ?? "n.d."} mc/s</td>
-                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h1_m)) ? Number(row.delta_h1_m).toFixed(2) + " m" : "n.d."}</td>
-                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h3_m)) ? Number(row.delta_h3_m).toFixed(2) + " m" : "n.d."}</td>
-                <td className="px-4 py-3 text-slate-300">{Number.isFinite(Number(row.delta_h6_m)) ? Number(row.delta_h6_m).toFixed(2) + " m" : "n.d."}</td>
-                <td className="px-4 py-3 text-slate-400">{formatTime(row.measurement_time)}</td>
-                <td className="px-4 py-3 text-orange-100">no</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sky-100">{row.level_m ?? "n.d."}{row.level_m !== null && row.level_m !== undefined ? " m" : ""}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-slate-300">{row.flow_mc_s ?? "n.d."}{row.flow_mc_s !== null && row.flow_mc_s !== undefined ? " m³/s" : ""}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums">
+                    <span className={deltaClass(row.delta_h1_m)}>{compactDelta(row.delta_h1_m)}</span>
+                    <span className={deltaClass(row.delta_h3_m)}>{compactDelta(row.delta_h3_m)}</span>
+                    <span className={deltaClass(row.delta_h6_m)}>{compactDelta(row.delta_h6_m)}</span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-400">{formatTime(row.measurement_time)}</td>
               </tr>
             )) : (
               <tr>
-                <td className="px-4 py-4 text-slate-400" colSpan={8}>Realtime non disponibile nel caricamento corrente.</td>
+                <td className="px-4 py-4 text-slate-400" colSpan={5}>Realtime non disponibile nel caricamento corrente.</td>
               </tr>
             )}
           </tbody>
@@ -551,20 +553,21 @@ export default function IdrometriaPage() {
             </div>
           ) : null}
 
-          <section className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Stazioni</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.stations ?? 0}</p>
+          <section className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">Stazioni</p>
+              <p className="mt-1 text-xl font-semibold text-white sm:mt-2 sm:text-2xl">{payload?.counts?.stations ?? 0}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400 sm:mt-1 sm:text-xs">idrometri in provincia</p>
             </div>
-            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Realtime CFR</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.realtime ?? 0}</p>
-              <p className="mt-1 text-xs text-slate-400">Bulk CFR: {payload?.realtimeDiagnostics?.bulkRows ?? 0}</p>
+            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">Realtime CFR</p>
+              <p className="mt-1 text-xl font-semibold text-white sm:mt-2 sm:text-2xl">{payload?.counts?.realtime ?? 0}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400 sm:mt-1 sm:text-xs">misure non validate</p>
             </div>
-            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Storico caricato</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{payload?.counts?.historical ?? 0}</p>
-              <p className="mt-1 text-xs text-slate-400">Catalogo SIR: {payload?.counts?.historicalCatalog ?? 0}</p>
+            <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">Storico SIR</p>
+              <p className="mt-1 text-xl font-semibold text-white sm:mt-2 sm:text-2xl">{payload?.counts?.historicalCatalog ?? 0}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400 sm:mt-1 sm:text-xs">{payload?.counts?.historical ?? 0} righe caricate</p>
             </div>
           </section>
 
