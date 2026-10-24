@@ -188,26 +188,38 @@ function getArray(payload, section, key) {
   return Array.isArray(payload?.[section]?.[key]) ? payload[section][key] : [];
 }
 
+// Number(null) vale 0: senza questo filtro una grandezza assente (per esempio
+// la visibilita', che questi modelli non sempre espongono) diventerebbe uno
+// zero reale, cioe' "nebbia fitta" o "calma di vento" inesistenti.
+function finiteNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function pick24HourSummaryFromHourly(hourly) {
   const rows = hourly.slice(0, 24);
   const sum = (items) => Number(items.reduce((total, value) => total + (Number(value) || 0), 0).toFixed(1));
-  const max = (items) => Math.max(0, ...items.map((value) => Number(value) || 0));
-  const validTemps = rows.map((row) => Number(row.temperature)).filter(Number.isFinite);
-  const validApparentTemps = rows.map((row) => Number(row.apparentTemperature)).filter(Number.isFinite);
-  const validHumidity = rows.map((row) => Number(row.humidity)).filter(Number.isFinite);
-  const validVisibility = rows.map((row) => Number(row.visibility)).filter(Number.isFinite);
+  const values = (key) => rows.map((row) => finiteNumberOrNull(row[key])).filter((value) => value !== null);
+  const validTemps = values("temperature");
+  const validApparentTemps = values("apparentTemperature");
+  const validHumidity = values("humidity");
+  const validVisibility = values("visibility");
+  const validGusts = values("windGust");
+  const validSnowDepth = values("snowDepth");
+  const validProbability = values("precipitationProbability");
   const maxWindRow = rows
-    .filter((row) => Number.isFinite(Number(row.windGust)))
-    .sort((a, b) => Number(b.windGust) - Number(a.windGust))[0];
+    .filter((row) => finiteNumberOrNull(row.windGust) !== null)
+    .sort((a, b) => finiteNumberOrNull(b.windGust) - finiteNumberOrNull(a.windGust))[0];
 
   return {
     rain24h: sum(rows.map((row) => row.precipitation)),
     showers24h: sum(rows.map((row) => row.showers)),
     snow24h: sum(rows.map((row) => row.snowfall)),
-    maxSnowDepth: Number(max(rows.map((row) => row.snowDepth)).toFixed(1)),
-    maxWindGust: Number(max(rows.map((row) => row.windGust)).toFixed(1)),
+    maxSnowDepth: validSnowDepth.length ? Number(Math.max(...validSnowDepth).toFixed(1)) : null,
+    maxWindGust: validGusts.length ? Number(Math.max(...validGusts).toFixed(1)) : null,
     maxWindDirection: maxWindRow?.windDirection ?? null,
-    maxPrecipitationProbability: Number(max(rows.map((row) => row.precipitationProbability)).toFixed(0)),
+    maxPrecipitationProbability: validProbability.length ? Number(Math.max(...validProbability).toFixed(0)) : null,
     maxHumidity: validHumidity.length ? Number(Math.max(...validHumidity).toFixed(0)) : null,
     minVisibility: validVisibility.length ? Number((Math.min(...validVisibility) / 1000).toFixed(1)) : null,
     minTemperature: validTemps.length ? Number(Math.min(...validTemps).toFixed(1)) : null,
@@ -318,17 +330,41 @@ function mergeRecommendedSources(normalizedSources) {
     return fallback;
   }
 
+  // I modelli non espongono tutti gli stessi campi: ARPAE, per esempio, non
+  // pubblica probabilita' di pioggia e visibilita'. Il record scelto per l'ora
+  // resta quello preferito, ma i campi vuoti vengono completati dal primo
+  // modello che li fornisce per la stessa ora, senza sovrascrivere nulla.
+  function fillMissingFields(row, donorRows) {
+    const merged = { ...row };
+    donorRows.forEach((donor) => {
+      Object.entries(donor).forEach(([key, value]) => {
+        if (merged[key] === null || merged[key] === undefined) merged[key] = value;
+      });
+    });
+    return merged;
+  }
+
   const hourly = allHourlyTimes.map((time) => {
     const day = String(time).slice(0, 10);
     const preferred = pickSourceForDay(day);
-    return preferred.hourly.find((row) => row.time === time)
-      || sourcesByPriority.map((source) => source.hourly.find((row) => row.time === time)).find(Boolean);
+    const row = preferred.hourly.find((item) => item.time === time)
+      || sourcesByPriority.map((source) => source.hourly.find((item) => item.time === time)).find(Boolean);
+    if (!row) return null;
+    const donors = sourcesByPriority
+      .map((source) => source.hourly.find((item) => item.time === time))
+      .filter((item) => item && item !== row);
+    return fillMissingFields(row, donors);
   }).filter(Boolean);
 
   const daily = allDailyDays.map((day) => {
     const preferred = pickSourceForDay(day);
-    return preferred.daily.find((row) => row.day === day)
-      || sourcesByPriority.map((source) => source.daily.find((row) => row.day === day)).find(Boolean);
+    const row = preferred.daily.find((item) => item.day === day)
+      || sourcesByPriority.map((source) => source.daily.find((item) => item.day === day)).find(Boolean);
+    if (!row) return null;
+    const donors = sourcesByPriority
+      .map((source) => source.daily.find((item) => item.day === day))
+      .filter((item) => item && item !== row);
+    return fillMissingFields(row, donors);
   }).filter(Boolean);
 
   const summary24h = pick24HourSummaryFromHourly(hourly);
