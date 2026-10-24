@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
+import { Download, ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
 import { MapContainer, TileLayer } from "react-leaflet";
 import RadarOverlayLayer from "@/components/RadarOverlayLayer";
 
@@ -380,6 +380,7 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
   const [activeLayers, setActiveLayers] = useState([selectedProduct || "SRI"]);
   const lastProduct = radarPayload?.lastProduct;
   const payloadProductId = radarPayload?.product?.id || null;
+  const rawDownloadUrl = radarPayload?.rawDownload?.url;
   // Il campione del payload vale solo per il prodotto a cui si riferisce: usarlo per un altro
   // prodotto produrrebbe richieste a un timestamp inesistente (403 dal tile cache DPC).
   function tileTimestampFor(product) {
@@ -435,6 +436,17 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
               Mappa ufficiale DPC
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
+            {rawDownloadUrl && (
+              <a
+                href={rawDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-500/50 bg-slate-500/10 px-3 text-xs font-semibold text-slate-100 transition hover:bg-slate-500/20"
+              >
+                GeoTIFF
+                <Download className="h-3.5 w-3.5" />
+              </a>
+            )}
           </div>
         </div>
       </div>
