@@ -105,7 +105,9 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
   const stationHistoricalRows = (historicalRows || [])
     .filter((row) => row.station_id === selectedStation?.station_id)
     .filter((row) => Number.isFinite(Number(row.level_m)));
-  const rawRows = stationHistoricalRows.length ? stationHistoricalRows.slice(-48) : buildRealtimeTrendPoints(selectedRealtime);
+  // Se lo storico è caricato mostra tutto l'intervallo richiesto (120 valori o
+  // un anno intero): tagliarlo a 48 punti nasconderebbe parte del periodo scelto.
+  const rawRows = stationHistoricalRows.length ? stationHistoricalRows : buildRealtimeTrendPoints(selectedRealtime);
   const currentLevel = Number(selectedRealtime?.level_m ?? rawRows[rawRows.length - 1]?.level_m);
   // Solo soglie ufficiali CFR: se mancano non vengono inventate a partire dal
   // livello misurato, altrimenti il grafico mostrerebbe limiti che non esistono.
@@ -329,8 +331,9 @@ function RealtimeTable({ rows }) {
   );
 }
 
-function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loading, error, onLoad }) {
+function HistoricalPanel({ station, stations, selectedId, onSelect, years, selectedYear, onYearChange, rows, loading, error, onLoad }) {
   const hasStations = stations.length > 0;
+  const availableYears = [...new Set(years || [])].filter(Boolean).sort((a, b) => Number(b) - Number(a));
 
   return (
     <section className="panel overflow-hidden">
@@ -356,6 +359,22 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
               </option>
             ))}
           </select>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Periodo
+            <select
+              value={selectedYear || ""}
+              onChange={(event) => onYearChange(event.target.value)}
+              disabled={!station || !availableYears.length}
+              className="w-full rounded-md border border-emergency-line bg-emergency-panel px-2 py-2 text-sm text-slate-100 outline-none focus:border-sky-400 disabled:opacity-60"
+            >
+              <option value="">Ultimi 120 valori</option>
+              {availableYears.map((year) => (
+                <option key={year} value={year}>
+                  Anno {year}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             onClick={onLoad}
@@ -371,6 +390,11 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
           <p className="font-semibold text-slate-100">{station?.station_name || "Nessuna stazione selezionata"}</p>
           <p className="mt-1 text-slate-400">Risorsa storico: {station?.historical_url || "non disponibile"}</p>
           <p className="mt-1 text-xs text-slate-500">Catalogo storico SIR: {stations.length} stazioni</p>
+          {rows.length ? (
+            <p className="mt-2 text-xs text-slate-400">
+              Intervallo caricato: {formatTime(rows[0]?.measurement_time)} – {formatTime(rows[rows.length - 1]?.measurement_time)} ({rows.length} valori)
+            </p>
+          ) : null}
         </div>
         {error && <div className="mt-4 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-3 py-2 text-sm text-orange-100">{error}</div>}
         <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-emergency-line">
@@ -412,6 +436,7 @@ export default function IdrometriaPage() {
   const [selectedTrendStationId, setSelectedTrendStationId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [historicalLoading, setHistoricalLoading] = useState(false);
+  const [historicalYear, setHistoricalYear] = useState("");
   const [error, setError] = useState(null);
   const [historicalError, setHistoricalError] = useState(null);
 
@@ -456,8 +481,9 @@ export default function IdrometriaPage() {
         realtime: "0",
         historical: "1",
         historicalStationId: stationId,
-        historicalLimit: "120"
+        historicalLimit: historicalYear ? "400" : "120"
       });
+      if (historicalYear) params.set("historicalYear", historicalYear);
       const response = await fetch("/api/hydrometry?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || data?.error || "Storico non disponibile");
@@ -506,6 +532,13 @@ export default function IdrometriaPage() {
 
   function handleHistoricalStationChange(stationId) {
     setSelectedStationId(stationId);
+    setHistoricalYear("");
+    setHistoricalError(null);
+    setPayload((current) => current ? { ...current, historicalMeasurements: [] } : current);
+  }
+
+  function handleHistoricalYearChange(year) {
+    setHistoricalYear(year);
     setHistoricalError(null);
     setPayload((current) => current ? { ...current, historicalMeasurements: [] } : current);
   }
@@ -570,6 +603,9 @@ export default function IdrometriaPage() {
               stations={historicalStations}
               selectedId={selectedStationId}
               onSelect={handleHistoricalStationChange}
+              years={selectedStation?.historical_years || []}
+              selectedYear={historicalYear}
+              onYearChange={handleHistoricalYearChange}
               rows={payload?.historicalMeasurements || []}
               loading={historicalLoading}
               error={historicalError}

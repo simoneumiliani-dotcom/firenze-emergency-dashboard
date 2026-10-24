@@ -20,6 +20,8 @@ export async function GET(request) {
   const historicalRequested = searchParams.get("historical") === "1";
   const historicalStationId = historicalRequested ? searchParams.get("historicalStationId") : null;
   const historicalLimit = Number(searchParams.get("historicalLimit") || 120);
+  const historicalYearParam = historicalRequested ? searchParams.get("historicalYear") : null;
+  const historicalYear = /^\d{4}$/.test(historicalYearParam || "") ? Number(historicalYearParam) : null;
 
   try {
     // Le due fonti condividono lo stesso documento OpenData: in parallelo la cache
@@ -44,7 +46,11 @@ export async function GET(request) {
     let historicalError = null;
     if (selectedHistoricalStation) {
       try {
-        historicalMeasurements = await getHydrometryHistorical({ station: selectedHistoricalStation, limit: historicalLimit });
+        historicalMeasurements = await getHydrometryHistorical({
+          station: selectedHistoricalStation,
+          limit: historicalLimit,
+          year: historicalYear
+        });
       } catch (error) {
         historicalError = error?.message || String(error);
       }

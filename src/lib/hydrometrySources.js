@@ -261,6 +261,14 @@ function normalizeDateTime(value) {
 
 // Gli orari SIR arrivano come "YYYY-MM-DD HH:mm:ss" senza fuso: vanno letti
 // come ora italiana, altrimenti il server UTC di Vercel li sposta di due ore.
+const romeYearFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", year: "numeric" });
+
+function romeYear(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return Number(romeYearFormatter.format(date));
+}
+
 function normalizeSirDateTime(value) {
   const text = cleanText(value);
   const isoLocal = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
@@ -1202,7 +1210,7 @@ export function parseHistoricalHydrometry(payload, station, sourceUrl) {
   return rows.map((row) => normalizeHistoricalRow(row, station, sourceUrl)).filter(Boolean);
 }
 
-export async function getHydrometryHistorical({ station, limit = 120 } = {}) {
+export async function getHydrometryHistorical({ station, limit = 120, year = null } = {}) {
   if (!station?.historical_url) return [];
   const text = await fetchText(station.historical_url, {
     headers: { accept: "application/json,text/plain,*/*;q=0.8" }
@@ -1220,9 +1228,14 @@ export async function getHydrometryHistorical({ station, limit = 120 } = {}) {
 
   // Le righe con flag @/-9999 non hanno un livello misurabile: scartarle prima del
   // taglio evita di riempire tabella e grafico di valori "n.d.".
-  return parseHistoricalHydrometry(payload, station, station.historical_url)
-    .filter((row) => Number.isFinite(row.level_m))
-    .slice(-Math.max(1, Number(limit) || 120));
+  let rows = parseHistoricalHydrometry(payload, station, station.historical_url)
+    .filter((row) => Number.isFinite(row.level_m));
+  if (year) {
+    // L'anno va confrontato in ora italiana: a mezzanotte l'istante UTC cade
+    // il giorno prima e un filtro UTC sposterebbe i dati di fine anno.
+    rows = rows.filter((row) => romeYear(row.measurement_time) === Number(year));
+  }
+  return rows.slice(-Math.max(1, Number(limit) || 120));
 }
 
 export function buildHydrometrySourceMatrix() {
