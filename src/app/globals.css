@@ -58,6 +58,29 @@ body {
   color: #cbd5e1 !important;
 }
 
+/* Su telefono i controlli di Leaflet sono da 26px: sotto i 44px si toccano
+ * male, soprattutto con i guanti o sotto la pioggia. */
+@media (max-width: 640px) {
+  .leaflet-control-zoom a {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    line-height: 2.75rem !important;
+    font-size: 1.25rem;
+  }
+
+  .leaflet-control-layers-toggle {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+  }
+
+  .leaflet-container a.leaflet-popup-close-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    line-height: 2.75rem;
+    font-size: 1.35rem;
+  }
+}
+
 /* I controlli nativi restano alti ~36px: su telefono vanno portati almeno a
  * 44px, come i pulsanti dell'app, per essere toccabili senza errori. */
 @layer base {

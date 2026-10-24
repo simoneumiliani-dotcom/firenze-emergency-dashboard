@@ -161,7 +161,7 @@ export default function MapDashboard({ stations = [] }) {
                   ? current.filter((item) => item !== type)
                   : [...current, type]);
               }}
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 transition ${visibleTypes.includes(type) ? "border-sky-400/70 bg-sky-400/10 text-slate-100" : "border-emergency-line bg-emergency-panel2 text-slate-500"}`}
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition sm:min-h-0 sm:px-2 sm:py-1 ${visibleTypes.includes(type) ? "border-sky-400/70 bg-sky-400/10 text-slate-100" : "border-emergency-line bg-emergency-panel2 text-slate-500"}`}
             >
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: sensorColor(type) }} />
               {meta.label}
@@ -179,7 +179,7 @@ export default function MapDashboard({ stations = [] }) {
                     ? current.filter((item) => item !== layer.id)
                     : [...current, layer.id]);
                 }}
-                className={`rounded-md border px-2 py-1 transition ${visibleRiskLayers.includes(layer.id) ? "border-emergency-orange/70 bg-emergency-orange/10 text-orange-100" : "border-emergency-line bg-emergency-panel2 text-slate-500"}`}
+                className={`inline-flex min-h-11 items-center rounded-md border px-2.5 py-1.5 transition sm:min-h-0 sm:px-2 sm:py-1 ${visibleRiskLayers.includes(layer.id) ? "border-emergency-orange/70 bg-emergency-orange/10 text-orange-100" : "border-emergency-line bg-emergency-panel2 text-slate-500"}`}
               >
                 {layer.label}
               </button>
