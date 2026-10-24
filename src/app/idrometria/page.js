@@ -19,6 +19,14 @@ import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import SourcesLink from "@/components/SourcesLink";
 
+const SIR_FLAG_LABELS = {
+  N: "Non validato",
+  P: "Prevalidato",
+  V: "Validato",
+  R: "Ricostruito",
+  "@": "Mancante"
+};
+
 const LEVEL_LINE_COLOR = "#38bdf8";
 const LEVEL_ONE_COLOR = "#e8df20";
 const LEVEL_TWO_COLOR = "#ef4444";
@@ -379,16 +387,20 @@ function HistoricalPanel({ station, stations, selectedId, onSelect, rows, loadin
                 <tr key={row.station_id + index}>
                   <td className="px-4 py-3 text-slate-300">{formatTime(row.measurement_time)}</td>
                   <td className="px-4 py-3 text-sky-100">{row.level_m ?? "n.d."} m</td>
-                  <td className="px-4 py-3 text-slate-400">{row.raw_flag || "n.d."}</td>
+                  <td className="px-4 py-3 text-slate-400">{SIR_FLAG_LABELS[row.raw_flag] || row.raw_flag || "n.d."}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={3}>Storico non caricato o non disponibile per questa stazione.</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={3}>Nessuno storico caricato: seleziona una stazione e premi Carica storico.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Flag SIR: N non validato, P prevalidato, V validato, R ricostruito, @ mancante. Il livello è espresso in
+          metri sopra lo zero idrometrico della stazione.
+        </p>
       </div>
     </section>
   );
@@ -462,6 +474,11 @@ export default function IdrometriaPage() {
           historical: historicalMeasurements.length
         }
       }));
+      // Se la stazione ha anche un realtime CFR, porta il grafico sulla serie
+      // appena caricata: altrimenti il caricamento non produrrebbe effetti visibili.
+      if (payload?.stations?.some((station) => station.station_id === stationId)) {
+        setSelectedTrendStationId(stationId);
+      }
     } catch (err) {
       setHistoricalError(err?.message || String(err));
     } finally {

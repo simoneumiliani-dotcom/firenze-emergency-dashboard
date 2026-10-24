@@ -1137,18 +1137,30 @@ function normalizeHistoricalRow(row, station, sourceUrl) {
     source_type: HYDROMETRY_SOURCES.stationArchive.sourceType,
     source_url: sourceUrl,
     validated: true,
-    raw_flag: firstField(row, ["Flag", "flag", "FLAG"]) || null
+    raw_flag: firstField(row, ["TipoValore", "Flag", "flag", "FLAG"]) || null
   };
 }
 
 export function parseHistoricalHydrometry(payload, station, sourceUrl) {
-  const rows = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.features)
-        ? payload.features.map((feature) => feature.properties || feature)
-        : [];
+  // SIR restituisce una Feature GeoJSON singola: le misure stanno in
+  // properties.SerieDati, non in un array alla radice. Accettiamo anche le
+  // forme gia' tabellari per non perdere compatibilita' con gli altri export.
+  const collectSerie = (properties) => {
+    if (!Array.isArray(properties?.SerieDati)) return [];
+    return properties.SerieDati.map((row) => ({ ...row, TipiValore: properties.TipiValore }));
+  };
+  let rows = [];
+  if (Array.isArray(payload)) {
+    rows = payload;
+  } else if (Array.isArray(payload?.SerieDati)) {
+    rows = payload.SerieDati;
+  } else if (Array.isArray(payload?.data)) {
+    rows = payload.data;
+  } else if (Array.isArray(payload?.features)) {
+    rows = payload.features.flatMap((feature) => collectSerie(feature?.properties || feature));
+  } else if (payload?.type === "Feature") {
+    rows = collectSerie(payload.properties);
+  }
   return rows.map((row) => normalizeHistoricalRow(row, station, sourceUrl)).filter(Boolean);
 }
 
@@ -1168,7 +1180,11 @@ export async function getHydrometryHistorical({ station, limit = 120 } = {}) {
     throw new Error("SIR ha restituito dati storici in un formato non leggibile dalla dashboard.");
   }
 
-  return parseHistoricalHydrometry(payload, station, station.historical_url).slice(-Math.max(1, Number(limit) || 120));
+  // Le righe con flag @/-9999 non hanno un livello misurabile: scartarle prima del
+  // taglio evita di riempire tabella e grafico di valori "n.d.".
+  return parseHistoricalHydrometry(payload, station, station.historical_url)
+    .filter((row) => Number.isFinite(row.level_m))
+    .slice(-Math.max(1, Number(limit) || 120));
 }
 
 export function buildHydrometrySourceMatrix() {
