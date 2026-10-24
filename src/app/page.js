@@ -775,8 +775,17 @@ export default function DashboardPage() {
 
         <PdfParser onAlertDetected={setAlert} />
 
-        <footer className="pb-6 text-xs text-slate-500">
-          Fonti osservazioni: Open-Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
+        <footer className="flex flex-col gap-2 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Fonti osservazioni: Open-Meteo per meteo e neve, CFR Toscana per idrometria. Ultimo aggiornamento: {formatSourceTimestamp(observationData.fetchedAt)}.
+          </p>
+          <Link
+            href="/fonti"
+            className="inline-flex items-center gap-1 font-medium text-sky-300 transition hover:text-sky-100"
+          >
+            Tutte le fonti e i download
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </footer>
     </PageLayout>
   );

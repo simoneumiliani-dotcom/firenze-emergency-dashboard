@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Database, History, RefreshCcw, Waves } from "lucide-react";
+import { AlertTriangle, History, RefreshCcw, Waves } from "lucide-react";
 import {
   CartesianGrid,
   Label,
@@ -235,42 +235,6 @@ function HydrometryTrendChart({ stations, realtimeRows, historicalRows, selected
             </div>
           </div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function SourceMatrix({ items }) {
-  return (
-    <section className="panel overflow-hidden">
-      <div className="flex items-center gap-3 border-b border-emergency-line px-4 py-3">
-        <Database className="h-5 w-5 text-sky-300" />
-        <div>
-          <h2 className="section-title">Fonti ufficiali idrometria</h2>
-          <p className="muted">Mappatura fonte, contenuto, formato e uso applicativo.</p>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-emergency-line text-sm">
-          <thead className="bg-emergency-panel2 text-left text-xs uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="px-4 py-3">Fonte</th>
-              <th className="px-4 py-3">Contenuto</th>
-              <th className="px-4 py-3">Formato</th>
-              <th className="px-4 py-3">Uso applicativo</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-emergency-line">
-            {items.map((item) => (
-              <tr key={item.source}>
-                <td className="px-4 py-3 font-medium text-slate-100">{item.source}</td>
-                <td className="px-4 py-3 text-slate-300">{item.content}</td>
-                <td className="px-4 py-3 text-sky-100">{item.format}</td>
-                <td className="px-4 py-3 text-slate-400">{item.applicationUse}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </section>
   );
@@ -595,7 +559,6 @@ export default function IdrometriaPage() {
             />
           </section>
 
-          <SourceMatrix items={payload?.sourceMatrix || []} />
       </PageLayout>
   );
 }

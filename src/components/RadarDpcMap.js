@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
+import { ExternalLink, Layers, RefreshCcw, Satellite } from "lucide-react";
 import { MapContainer, TileLayer } from "react-leaflet";
 import RadarOverlayLayer from "@/components/RadarOverlayLayer";
 
-const DPC_TILE_CACHE_URL = "https://s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com";
-const DPC_WMS_URL = "https://radar-geowebcache.protezionecivile.it/service/wms";
 const DPC_MAP_URL = "https://radar.protezionecivile.gov.it/";
-const WMS_CAPABILITIES_URL = "https://radar-geowebcache.protezionecivile.it/service/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=getcapabilities&TILED=true";
-const API_DOCS_URL = "https://dpc-radar.readthedocs.io/it/latest/api.html";
-const SERVICES_DOCS_URL = "https://dpc-radar.readthedocs.io/it/latest/services.html";
 
 const FALLBACK_PRODUCTS = [
   {
@@ -325,37 +320,6 @@ function formatDateTime(value) {
     date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 }
 
-function parseDpcWsMessage(data) {
-  const text = String(data || "").replace(/\u0000/g, "").trim();
-  const jsonStart = text.indexOf("{");
-  if (jsonStart === -1) return null;
-  try {
-    return JSON.parse(text.slice(jsonStart));
-  } catch {
-    return null;
-  }
-}
-
-function dpcTileParts(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  const yyyy = String(date.getUTCFullYear());
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(date.getUTCDate()).padStart(2, "0");
-  const hh = String(date.getUTCHours()).padStart(2, "0");
-  const minuteStep = Math.floor(date.getUTCMinutes() / 5) * 5;
-  const min = String(minuteStep).padStart(2, "0");
-  return { datePath: `${yyyy}/${mm}/${dd}`, timePath: `${hh}${min}` };
-}
-
-function buildDpcWebpTileUrl(product, timestamp) {
-  const tileProduct = product?.tileProduct || product?.apiType || product?.id;
-  if (!tileProduct || product?.mapEnabled === false) return null;
-  const parts = dpcTileParts(timestamp);
-  if (!parts) return null;
-  return `${DPC_TILE_CACHE_URL}/${tileProduct}/${parts.datePath}/${parts.timePath}/{z}/{x}/{y}/${tileProduct.toLowerCase()}.webp`;
-}
 function ToggleButton({ product, active, onClick }) {
   return (
     <button
@@ -412,25 +376,16 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
     const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
     return source.filter((product) => product.mapEnabled !== false && (product.tileProduct || product.apiType));
   }, [radarPayload?.products]);
-  const metadataOnlyProducts = useMemo(() => {
-    const source = radarPayload?.products?.length ? radarPayload.products : FALLBACK_PRODUCTS;
-    return source.filter((product) => product.mapEnabled === false || (!product.tileProduct && !product.apiType));
-  }, [radarPayload?.products]);
   const currentProduct = products.find((product) => product.id === selectedProduct || product.apiType === selectedProduct) || products[0];
   const [activeLayers, setActiveLayers] = useState([selectedProduct || "SRI"]);
-  const [wsStatus, setWsStatus] = useState("non connesso");
-  const [liveEvents, setLiveEvents] = useState({});
   const lastProduct = radarPayload?.lastProduct;
   const payloadProductId = radarPayload?.product?.id || null;
-  const rawDownloadUrl = radarPayload?.rawDownload?.url;
-  const restUrl = currentProduct?.restLastUrl || "https://radar-api.protezionecivile.it/findLastProductByType?type=VMI";
   // Il campione del payload vale solo per il prodotto a cui si riferisce: usarlo per un altro
   // prodotto produrrebbe richieste a un timestamp inesistente (403 dal tile cache DPC).
   function tileTimestampFor(product) {
     if (!product || product.id !== payloadProductId) return null;
     return lastProduct?.productDate || lastProduct?.date || lastProduct?.wmsTime || null;
   }
-  const dpcTileUrl = buildDpcWebpTileUrl(currentProduct, tileTimestampFor(currentProduct));
   const errors = radarPayload?.errors || [];
 
   useEffect(() => {
@@ -440,40 +395,6 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
       return [currentProduct.id];
     });
   }, [currentProduct]);
-
-  useEffect(() => {
-    let socket = null;
-    try {
-      socket = new WebSocket("wss://radar-wss.protezionecivile.it");
-      socket.onopen = () => {
-        setWsStatus("connesso");
-        socket.send("CONNECT\naccept-version:1.2\nheart-beat:10000,10000\n\n\u0000");
-        window.setTimeout(() => {
-          if (socket?.readyState === WebSocket.OPEN) {
-            socket.send("SUBSCRIBE\nid:radar-products\ndestination:/topic/product\n\n\u0000");
-          }
-        }, 300);
-      };
-      socket.onmessage = (event) => {
-        const payload = parseDpcWsMessage(event.data);
-        if (!payload?.productType) return;
-        setLiveEvents((current) => ({
-          ...current,
-          [payload.productType]: {
-            ...payload,
-            receivedAt: new Date().toISOString()
-          }
-        }));
-      };
-      socket.onerror = () => setWsStatus("errore");
-      socket.onclose = () => setWsStatus((current) => (current === "errore" ? current : "chiuso"));
-    } catch {
-      setWsStatus("non disponibile");
-    }
-    return () => {
-      if (socket) socket.close();
-    };
-  }, []);
 
   function toggleLayer(productId) {
     setActiveLayers([productId]);
@@ -564,14 +485,10 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
           </div>
 
           <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
-            <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-3">
+            <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
               <div>
                 <p className="uppercase text-slate-500">REST ultimo prodotto</p>
                 <p className="mt-1 font-semibold text-slate-100">{formatDateTime(lastProduct?.date)}</p>
-              </div>
-              <div>
-                <p className="uppercase text-slate-500">WebSocket DPC</p>
-                <p className="mt-1 font-semibold text-slate-100">{wsStatus}</p>
               </div>
               <div>
                 <p className="uppercase text-slate-500">Layer attivi</p>
@@ -603,66 +520,6 @@ export default function RadarDpcMap({ radarPayload, loading, selectedProduct, on
           </div>
 
           <RadarLegend product={currentProduct} />
-
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Aggiornamenti live</p>
-            <div className="mt-3 space-y-2">
-              {Object.keys(liveEvents).slice(-6).length ? Object.keys(liveEvents).slice(-6).map((key) => (
-                <div key={key} className="rounded-md border border-emergency-line bg-emergency-panel px-3 py-2 text-xs">
-                  <p className="font-semibold text-slate-100">{key}</p>
-                  <p className="mt-1 text-slate-400">{formatDateTime(liveEvents[key].time)}</p>
-                </div>
-              )) : (
-                <p className="text-xs leading-5 text-slate-400">
-                  In attesa di notifiche WebSocket. La mappa usa comunque il WMS con ultimo campione disponibile.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Fonti e download</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">Protezione Civile - Radar DPC</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Tile cache WebP ufficiale per la mappa, REST per conoscere l&apos;ultimo campione e scaricare il GeoTIFF grezzo quando disponibile.
-            </p>
-            {!!metadataOnlyProducts.length && (
-              <div className="mt-3 rounded-md border border-emergency-orange/40 bg-emergency-orange/10 px-3 py-2 text-xs leading-5 text-orange-100">
-                Non visualizzati sulla mappa: {metadataOnlyProducts.map((product) => product.shortLabel || product.id).join(", ")}.
-                Sono prodotti REST/download: il tile cache WebP ufficiale DPC non ne pubblica le tile raster, quindi restano consultabili solo come dati grezzi.
-              </div>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <a href={restUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-                REST ultimo dato
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-              <a href={WMS_CAPABILITIES_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-                WMS capabilities
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-              {dpcTileUrl && (
-                <a href={dpcTileUrl.replace("{z}", "7").replace("{x}", "68").replace("{y}", "46")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-                  Test tile Firenze
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              )}
-              {rawDownloadUrl && (
-                <a href={rawDownloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-400/20">
-                  GeoTIFF
-                  <Download className="h-3.5 w-3.5" />
-                </a>
-              )}
-              <a href={SERVICES_DOCS_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-slate-500/40 bg-slate-500/10 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-500/20">
-                Docs WMS
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-              <a href={API_DOCS_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-slate-500/40 bg-slate-500/10 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-500/20">
-                Docs REST
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
-          </div>
 
           {!!errors.length && (
             <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 p-4 text-xs leading-5 text-orange-100">
