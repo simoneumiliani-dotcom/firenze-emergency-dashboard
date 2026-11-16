@@ -4,10 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
+import {
+  isBulletinCurrent,
+  pruneBulletins,
+  readDeviceArchive,
+  readDeviceCurrentBulletin,
+  writeDeviceArchive,
+  writeDeviceCurrentBulletin
+} from "@/lib/bulletinDeviceArchive";
 
-const LOCAL_CURRENT_KEY = "firenze:current-bulletin:v1";
-const LOCAL_ARCHIVE_KEY = "firenze:bulletin-archive:v1";
-const BULLETIN_ARCHIVE_LIMIT = 5;
 const PDF_DB_NAME = "firenze-bulletin-pdfs";
 const PDF_DB_STORE = "pdfs";
 
@@ -184,38 +189,6 @@ function getBulletinValidityDetails(text) {
 }
 
 
-function isCurrentBulletin(item) {
-  if (!item?.validTo) return false;
-  const validTo = new Date(item.validTo);
-  return Number.isFinite(validTo.getTime()) && validTo >= new Date();
-}
-
-function pruneLocalArchive(items) {
-  return [...(Array.isArray(items) ? items : [])]
-    .filter((item) => item?.id)
-    .sort((a, b) => new Date(b.uploadedAt || b.validTo || 0) - new Date(a.uploadedAt || a.validTo || 0))
-    .slice(0, BULLETIN_ARCHIVE_LIMIT);
-}
-
-function readJsonStorage(key, fallback) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJsonStorage(key, value) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Se il browser non ha spazio sufficiente, manteniamo comunque la sessione corrente.
-  }
-}
-
 function openPdfDatabase() {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined" || !window.indexedDB) return resolve(null);
@@ -338,7 +311,7 @@ function fileToDataUrl(file) {
   });
 }
 
-export default function PdfParser({ onAlertDetected }) {
+export default function PdfParser({ onBulletinChange }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -356,8 +329,8 @@ export default function PdfParser({ onAlertDetected }) {
   const pendingDeleteRef = useRef(null);
   const objectUrlRef = useRef(null);
 
-  // Il codice di pubblicazione è unico per tutti: la dashboard lo chiede una
-  // sola volta, già compilato con il default, e poi lo ricorda su questo browser.
+  // Il codice di pubblicazione è unico per tutti: la pagina Allerte lo chiede
+  // una sola volta, già compilato con il default, e poi lo ricorda su questo browser.
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(PUBLISH_CODE_STORAGE_KEY);
@@ -385,8 +358,14 @@ export default function PdfParser({ onAlertDetected }) {
       if (response.ok) {
         const archive = await response.json();
         setPublishNotice(archive?.saved === false
-          ? { ok: false, message: "Archivio condiviso non persistente: il bollettino resta su questo dispositivo." }
+          ? {
+              ok: false,
+              message: archive.persistent
+                ? "Archivio condiviso non raggiungibile: il bollettino resta su questo dispositivo."
+                : "Archivio condiviso non configurato: il bollettino resta su questo dispositivo."
+            }
           : { ok: true, message: "Bollettino pubblicato nell'archivio condiviso." });
+        onBulletinChange?.();
         return archive;
       }
 
@@ -406,7 +385,7 @@ export default function PdfParser({ onAlertDetected }) {
       setPublishNotice({ ok: false, message: "Archivio condiviso non raggiungibile." });
       return null;
     }
-  }, [publishCode]);
+  }, [onBulletinChange, publishCode]);
 
   const removeBulletinRecord = useCallback(async (id, codeOverride) => {
     const code = String(codeOverride || publishCode || "").trim();
@@ -425,19 +404,16 @@ export default function PdfParser({ onAlertDetected }) {
 
       if (response.ok) {
         const archive = await response.json();
-        const nextLocal = pruneLocalArchive(
-          readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin).filter((item) => item.id !== id)
+        const nextLocal = pruneBulletins(
+          readDeviceArchive().filter((item) => item.id !== id)
         );
-        writeJsonStorage(LOCAL_ARCHIVE_KEY, nextLocal);
+        writeDeviceArchive(nextLocal);
         setArchive(nextLocal);
         removeOldPdfBlobs(nextLocal.map((item) => item.id));
 
-        const localCurrent = readJsonStorage(LOCAL_CURRENT_KEY, null);
+        const localCurrent = readDeviceCurrentBulletin();
         const wasCurrent = localCurrent?.id === id;
-        if (wasCurrent) {
-          writeJsonStorage(LOCAL_CURRENT_KEY, null);
-          onAlertDetected?.({ level: "Verde", matches: [], reason: "Nessun bollettino pubblicato in corso." });
-        }
+        if (wasCurrent) writeDeviceCurrentBulletin(null);
         if (wasCurrent || result?.id === id) {
           setResult(null);
           setStatus("idle");
@@ -451,6 +427,7 @@ export default function PdfParser({ onAlertDetected }) {
         }
 
         setPublishNotice({ ok: true, message: "Bollettino rimosso dall'archivio condiviso." });
+        onBulletinChange?.();
         return archive;
       }
 
@@ -472,7 +449,7 @@ export default function PdfParser({ onAlertDetected }) {
     } finally {
       setRemovingId(null);
     }
-  }, [onAlertDetected, publishCode, result]);
+  }, [onBulletinChange, publishCode, result]);
 
   const confirmPublishCode = useCallback(async () => {
     const code = String(codePrompt?.code || "").trim();
@@ -522,13 +499,12 @@ export default function PdfParser({ onAlertDetected }) {
     async function restoreCurrentBulletin() {
       // In localStorage restano solo i metadati: eventuali PDF incorporati in
       // record vecchi vengono scartati (si richiedono a /api/bulletins/pdf).
-      const localArchive = pruneLocalArchive(readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin));
+      const localArchive = readDeviceArchive();
       setArchive(localArchive);
-      writeJsonStorage(LOCAL_ARCHIVE_KEY, localArchive);
       removeOldPdfBlobs(localArchive.map((item) => item.id));
 
-      const localCurrent = toPublicBulletin(readJsonStorage(LOCAL_CURRENT_KEY, null));
-      if (localCurrent && isCurrentBulletin(localCurrent)) {
+      const localCurrent = readDeviceCurrentBulletin();
+      if (localCurrent && isBulletinCurrent(localCurrent)) {
         const pdfBlob = await loadPdfBlob(localCurrent.id);
         const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : getBulletinPdfHref(localCurrent);
 
@@ -543,24 +519,23 @@ export default function PdfParser({ onAlertDetected }) {
         setStatus("done");
         setPdfUrl(restoredPdfUrl);
         setViewerOpen(false);
-        onAlertDetected?.(localCurrent);
       } else if (localCurrent) {
-        writeJsonStorage(LOCAL_CURRENT_KEY, null);
+        writeDeviceCurrentBulletin(null);
       }
 
       fetch("/api/bulletins", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
         .then((archive) => {
           if (cancelled || !archive) return;
-          const remoteArchive = pruneLocalArchive((archive.items || []).map(toPublicBulletin));
+          const remoteArchive = pruneBulletins((archive.items || []).map(toPublicBulletin));
           if (remoteArchive.length) {
             setArchive(remoteArchive);
-            writeJsonStorage(LOCAL_ARCHIVE_KEY, remoteArchive);
+            writeDeviceArchive(remoteArchive);
           }
-          if (!archive.current || !isCurrentBulletin(archive.current)) return;
+          if (!archive.current || !isBulletinCurrent(archive.current)) return;
 
           const next = { ...toPublicBulletin(archive.current), archivePersistent: archive.persistent };
-          writeJsonStorage(LOCAL_CURRENT_KEY, next);
+          writeDeviceCurrentBulletin(next);
           setResult(next);
           setStatus("done");
           if (objectUrlRef.current) {
@@ -569,7 +544,6 @@ export default function PdfParser({ onAlertDetected }) {
           }
           setPdfUrl(getBulletinPdfHref(next));
           setViewerOpen(false);
-          onAlertDetected?.(next);
         })
         .catch(() => {});
     }
@@ -579,7 +553,7 @@ export default function PdfParser({ onAlertDetected }) {
     return () => {
       cancelled = true;
     };
-  }, [onAlertDetected]);
+  }, []);
 
   const borderClass = useMemo(() => {
     if (isDragging) return "border-sky-300 bg-sky-400/10";
@@ -631,17 +605,19 @@ export default function PdfParser({ onAlertDetected }) {
       };
       const savedPdf = await savePdfBlob(payload.id, file);
       const localPayload = { ...payload, pdfUrl: null, hasLocalPdf: savedPdf };
-      const previousArchive = readJsonStorage(LOCAL_ARCHIVE_KEY, []).map(toPublicBulletin);
-      const nextArchive = pruneLocalArchive([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
-      writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
-      writeJsonStorage(LOCAL_CURRENT_KEY, localPayload);
+      const previousArchive = readDeviceArchive();
+      const nextArchive = pruneBulletins([localPayload, ...previousArchive.filter((item) => item.id !== localPayload.id)]);
+      writeDeviceArchive(nextArchive);
+      writeDeviceCurrentBulletin(localPayload);
       removeOldPdfBlobs(nextArchive.map((item) => item.id));
 
       setArchive(nextArchive);
       setResult(localPayload);
       setStatus("done");
       setViewerOpen(false);
-      onAlertDetected?.(localPayload);
+      // Il record è già su questo dispositivo: la pagina lo mostra subito, anche
+      // se la pubblicazione condivisa viene annullata o non riesce.
+      onBulletinChange?.();
 
       const remoteArchive = await publishBulletin(payload);
       if (remoteArchive) setArchive(remoteArchive.items || []);
@@ -653,7 +629,7 @@ export default function PdfParser({ onAlertDetected }) {
         message: "Non riesco a leggere il PDF. Verifica che non sia protetto o scansionato come immagine."
       });
     }
-  }, [onAlertDetected, publishBulletin]);
+  }, [onBulletinChange, publishBulletin]);
 
   async function hydrateArchivedBulletin(item, pdfBlob) {
     if ((item.issue && item.validity) || !pdfBlob) return item;
@@ -678,8 +654,8 @@ export default function PdfParser({ onAlertDetected }) {
       };
 
       setArchive((items) => {
-        const nextArchive = pruneLocalArchive([enriched, ...items.filter((entry) => entry.id !== enriched.id)]);
-        writeJsonStorage(LOCAL_ARCHIVE_KEY, nextArchive);
+        const nextArchive = pruneBulletins([enriched, ...items.filter((entry) => entry.id !== enriched.id)]);
+        writeDeviceArchive(nextArchive);
         return nextArchive;
       });
       await publishBulletin(enriched);
@@ -712,7 +688,6 @@ export default function PdfParser({ onAlertDetected }) {
     setViewerOpen(false);
     setExtractOpen(false);
     setArchiveOpen(false);
-    onAlertDetected?.(nextItem);
   }
 
   return (
@@ -960,8 +935,8 @@ export default function PdfParser({ onAlertDetected }) {
             </p>
             <p className="mt-1 text-sm text-slate-400">
               {codePrompt.mode === "delete"
-                ? "Il bollettino viene ritirato dall'archivio condiviso: se era quello in corso, il livello in Allerte torna a quello precedente. Conferma il codice per continuare."
-                : "Il bollettino viene pubblicato nell'archivio condiviso e diventa visibile anche in Allerte. Conferma il codice per continuare: lo ricordiamo su questo browser."}
+                ? "Il bollettino viene ritirato dall'archivio condiviso: se era quello in corso, il livello in pagina torna a quello precedente. Conferma il codice per continuare."
+                : "Il bollettino viene pubblicato nell'archivio condiviso e compare subito in questa pagina. Conferma il codice per continuare: lo ricordiamo su questo browser."}
             </p>
             <label className="mt-3 flex flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>

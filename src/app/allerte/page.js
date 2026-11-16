@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
@@ -18,8 +17,10 @@ import {
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
+import PdfParser from "@/components/PdfParser";
 import SourcesLink from "@/components/SourcesLink";
 import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
+import { isBulletinCurrent, mergeBulletins, readDeviceArchive } from "@/lib/bulletinDeviceArchive";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const LEVEL_ORDER = ["Verde", "Giallo", "Arancione", "Rosso"];
@@ -138,29 +139,37 @@ function BulletinPdfLink({ item, label }) {
 
 export default function AllertePage() {
   const [archive, setArchive] = useState(null);
+  const [deviceItems, setDeviceItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [textOpen, setTextOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const loadArchive = useCallback(async () => {
-    setLoading(true);
+  const loadArchive = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
+    // La copia del dispositivo è ciò che il riquadro PDF ha già caricato qui:
+    // si legge a ogni giro, anche quando il server non conserva l'archivio.
+    setDeviceItems(readDeviceArchive());
     try {
       const response = await fetch("/api/bulletins", { cache: "no-store" });
       if (!response.ok) throw new Error("HTTP " + response.status);
       setArchive(await response.json());
       setError(null);
     } catch {
-      setError("Archivio dei bollettini non raggiungibile in questo momento.");
+      if (!quiet) setError("Archivio dei bollettini non raggiungibile in questo momento.");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
       setNow(Date.now());
     }
   }, []);
 
+  // Il riquadro PDF pubblica nell'archivio: al cambio rileggiamo i dati senza
+  // mostrare il caricamento, così il bollettino appare subito in pagina.
+  const handleBulletinChange = useCallback(() => loadArchive({ quiet: true }), [loadArchive]);
+
   useEffect(() => {
     loadArchive();
-    const timer = window.setInterval(loadArchive, REFRESH_INTERVAL_MS);
+    const timer = window.setInterval(() => loadArchive({ quiet: true }), REFRESH_INTERVAL_MS);
     const clock = window.setInterval(() => setNow(Date.now()), 60 * 1000);
     return () => {
       window.clearInterval(timer);
@@ -168,15 +177,19 @@ export default function AllertePage() {
     };
   }, [loadArchive]);
 
-  const items = useMemo(() => (Array.isArray(archive?.items) ? archive.items : []), [archive]);
+  const sharedItems = useMemo(() => (Array.isArray(archive?.items) ? archive.items : []), [archive]);
+
+  // Archivio condiviso più la copia del dispositivo, senza doppioni: il bollettino
+  // appena caricato qui resta visibile anche senza archivio condiviso.
+  const items = useMemo(
+    () => mergeBulletins(sharedItems, deviceItems, archive?.archiveLimit),
+    [archive, sharedItems, deviceItems]
+  );
 
   // Solo un bollettino con scadenza futura è "in corso": senza validTo non è
   // possibile affermare che l'allerta sia ancora attiva.
   const current = useMemo(
-    () => items.find((item) => {
-      const validTo = parseDate(item?.validTo);
-      return validTo && validTo.getTime() >= now;
-    }) || null,
+    () => items.find((item) => isBulletinCurrent(item, new Date(now))) || null,
     [items, now]
   );
 
@@ -204,7 +217,7 @@ export default function AllertePage() {
               </div>
               <p className="mt-1 text-2xl font-semibold">{current ? currentLevel : "—"}</p>
               <p className="mt-1 max-w-[16rem] text-xs opacity-90">
-                {current ? formatResidual(current.validTo, now) : "La dashboard mostra il livello solo dopo la pubblicazione di un bollettino."}
+                {current ? formatResidual(current.validTo, now) : "Il livello compare solo dopo la pubblicazione di un bollettino."}
               </p>
             </div>
           </PageHeader>
@@ -215,7 +228,7 @@ export default function AllertePage() {
 
           {archive && !sharedArchive && (
             <div className="rounded-lg border border-emergency-orange/40 bg-emergency-orange/5 px-4 py-3 text-sm text-orange-100">
-              Archivio condiviso non configurato su questo server: i bollettini pubblicati da altri dispositivi non sono visibili qui.
+              Archivio condiviso non configurato su questo server: qui compaiono i bollettini pubblicati da questo dispositivo, quelli degli altri dispositivi non sono visibili.
             </div>
           )}
 
@@ -226,7 +239,16 @@ export default function AllertePage() {
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bollettino corrente</p>
                   <h2 className="mt-1 text-lg font-semibold text-white">{current?.issue || "Criticità idraulica e idrogeologica"}</h2>
                 </div>
-                {current ? <LevelBadge level={currentLevel} size="lg" /> : null}
+                <div className="flex items-center gap-3">
+                  {current ? <LevelBadge level={currentLevel} size="lg" /> : null}
+                  <a
+                    href="#carica-bollettino"
+                    className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-sky-200 hover:underline"
+                  >
+                    Carica bollettino
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </a>
+                </div>
               </div>
 
               {current ? (
@@ -321,15 +343,8 @@ export default function AllertePage() {
                       <p className="text-sm font-semibold">Nessuna allerta in corso</p>
                     </div>
                     <p className="max-w-xl text-sm leading-6 text-slate-400">
-                      Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato dalla dashboard: una volta pubblicato, il livello compare anche qui.
+                      Non risulta un bollettino con validità ancora aperta. Il bollettino viene caricato e pubblicato da questa pagina, nel riquadro in fondo: una volta pubblicato, il livello compare qui.
                     </p>
-                    <Link
-                      href="/"
-                      className="inline-flex min-h-11 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
-                    >
-                      Vai alla dashboard
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
                   </div>
 
                   {lastArchived && (
@@ -372,7 +387,7 @@ export default function AllertePage() {
                   </p>
                   <p className="mt-1 text-sm text-slate-200">{archivedCount} di {archiveLimit} bollettini conservati</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {sharedArchive ? "Archivio condiviso attivo" : "Solo memoria locale del server"}
+                    {sharedArchive ? "Archivio condiviso attivo" : "Bollettini di questo dispositivo"}
                   </p>
                 </div>
                 <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-3">
@@ -382,7 +397,7 @@ export default function AllertePage() {
               </div>
               <button
                 type="button"
-                onClick={loadArchive}
+                onClick={() => loadArchive()}
                 disabled={loading}
                 className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-sky-400/60 bg-sky-400/10 px-4 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60"
               >
@@ -500,14 +515,18 @@ export default function AllertePage() {
               </>
             ) : (
               <div className="mt-4 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6 text-sm text-slate-400">
-                Nessun bollettino archiviato. La pubblicazione avviene dalla dashboard, nella sezione di caricamento PDF: basta un bollettino valido e la conferma del codice di pubblicazione.
+                Nessun bollettino archiviato. La pubblicazione avviene da questa pagina, nel riquadro di caricamento in fondo: basta un bollettino valido e la conferma del codice di pubblicazione.
               </div>
             )}
           </section>
 
+          <div id="carica-bollettino" className="scroll-mt-24">
+            <PdfParser onBulletinChange={handleBulletinChange} />
+          </div>
+
           <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>
-              Fonte: bollettini di criticità idraulica e idrogeologica CFR Toscana, pubblicati dalla dashboard aziendale. Il livello mostrato è quello estratto dal bollettino più recente ancora valido; in assenza di bollettini validi la pagina non stima un livello.
+              Fonte: bollettini di criticità idraulica e idrogeologica CFR Toscana, pubblicati da questa pagina. Il livello mostrato è quello estratto dal bollettino più recente ancora valido; in assenza di bollettini validi la pagina non stima un livello.
             </p>
             <SourcesLink section="allerte" label="Fonti e bollettini" />
           </footer>

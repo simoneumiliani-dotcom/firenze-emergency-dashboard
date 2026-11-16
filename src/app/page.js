@@ -18,7 +18,6 @@ import {
   Wind,
   X
 } from "lucide-react";
-import PdfParser from "@/components/PdfParser";
 import LazySection from "@/components/LazySection";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
@@ -31,6 +30,7 @@ import {
   getStationPosition,
   getMeasurementMeta
 } from "@/lib/cfrStations";
+import { isBulletinCurrent, mergeBulletins, readDeviceArchive } from "@/lib/bulletinDeviceArchive";
 
 const MapDashboard = dynamic(() => import("@/components/MapDashboard"), {
   ssr: false,
@@ -476,7 +476,7 @@ function MobileMeasurementPanel({ config, onChange, measurements, stationCatalog
 }
 
 export default function DashboardPage() {
-  const [alert, setAlert] = useState({ level: "Verde", matches: [], fileName: null });
+  const [alert, setAlert] = useState({ level: "Verde", fileName: null });
   const refreshingRef = useRef(false);
   const [observationData, setObservationData] = useState(normalizeObservationData(null));
   const [panelConfigs, setPanelConfigs] = useState(DEFAULT_PANEL_CONFIGS);
@@ -544,6 +544,21 @@ export default function DashboardPage() {
         warning: current.warning || "Idrometria ufficiale CFR non raggiungibile in questo momento."
       }));
     }
+  }
+
+  // Il bollettino si carica e si pubblica dalla pagina Allerte: qui serve solo
+  // il livello in corso per il riquadro in testata. Le fonti sono le stesse
+  // della pagina Allerte, così le due pagine non possono contraddirsi.
+  async function loadBulletinAlert() {
+    const archive = await fetch("/api/bulletins", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null);
+    const deviceItems = readDeviceArchive();
+    // In caso di errore la testata mantiene l'ultimo livello noto.
+    if (!archive && !deviceItems.length) return;
+    const current = mergeBulletins(archive?.items, deviceItems, archive?.archiveLimit)
+      .find((item) => isBulletinCurrent(item)) || null;
+    setAlert({ level: current?.level || "Verde", fileName: current?.fileName || null });
   }
 
   const selectedObservationQuery = useMemo(() => buildSelectedObservationQuery(panelConfigs), [panelConfigs]);
@@ -652,6 +667,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadObservationData();
     loadHydrometryData();
+    loadBulletinAlert();
   }, []);
 
   useEffect(() => {
@@ -666,6 +682,7 @@ export default function DashboardPage() {
       Promise.allSettled([
         loadObservationData(),
         loadHydrometryData(),
+        loadBulletinAlert(),
         loadSelectedObservationData(selectedObservationQuery),
         loadClientOpenMeteoData()
       ]).finally(() => {
@@ -773,8 +790,6 @@ export default function DashboardPage() {
             />
           ))}
         </section>
-
-        <PdfParser onAlertDetected={setAlert} />
 
         <footer className="flex flex-col gap-2 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <p>

@@ -40,7 +40,12 @@ restava in archivio**: la dashboard di un ente pubblico avrebbe mostrato "Allert
 fino al 2099, oppure un attaccante poteva forzare `level: "Verde"` per *nascondere* un'allerta
 reale. Era il problema più grave del progetto: integrità dei dati in un sistema di protezione civile.
 
-### 1.2 ALTO — `/api/sync-observations` è *fail-open* quando `CRON_SECRET` non è impostato
+### 1.2 ALTO — ~~`/api/sync-observations` è *fail-open* quando `CRON_SECRET` non è impostato~~ — RISOLTO
+
+> **Risolto il 16/11/2026.** `isAuthorized` ora nega quando `CRON_SECRET` manca,
+> accetta il segreto solo dagli header (`x-cron-secret` o `Authorization: Bearer`,
+> quello che invia Vercel Cron) e confronta in tempo costante. Senza la variabile
+> l'endpoint risponde `401` e non chiama le fonti.
 
 `src/app/api/sync-observations/route.js:8-12`:
 
@@ -233,7 +238,7 @@ Cause sovrapposte:
 | # | Intervento | Impatto | Costo |
 |---|---|---|---|
 | 1 | ~~Autenticare `POST /api/bulletins`~~ — fatto (§5.2) | Critico | Basso |
-| 2 | `CRON_SECRET` fail-closed + segreto solo in header (§1.2) | Alto | Molto basso |
+| 2 | ~~`CRON_SECRET` fail-closed + segreto solo in header (§1.2)~~ — fatto | Alto | Molto basso |
 | 3 | Non serializzare i PDF in base64 nel record d'archivio (§1.3) | Alto | Medio |
 | 4 | Una sola fetch del documento condiviso + cache TTL su `/api/hydrometry` (§3.1) | Alto (18-25 s → secondi) | Medio |
 | 5 | Debounce + abort su `previsioni` (§3.2) | Alto | Basso |

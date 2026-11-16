@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getObservationData } from "@/lib/observationData";
 import { STATIONS_BY_TYPE } from "@/lib/cfrStations";
@@ -5,12 +6,30 @@ import { STATIONS_BY_TYPE } from "@/lib/cfrStations";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function readProvidedSecret(request) {
+  const header = request.headers.get("x-cron-secret");
+  if (header && header.trim()) return header.trim();
+  const authorization = request.headers.get("authorization");
+  if (authorization && /^bearer\s+/i.test(authorization)) {
+    return authorization.replace(/^bearer\s+/i, "").trim();
+  }
+  return null;
+}
+
+// Fail-closed: senza CRON_SECRET l'endpoint resta chiuso, così non può essere
+// usato per amplificare chiamate verso CFR Toscana e Open-Meteo. Il segreto
+// viaggia solo negli header (Vercel Cron invia Authorization: Bearer), mai in
+// query string, che finirebbe nei log di accesso.
 function isAuthorized(request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  if (!secret) return false;
 
-  const { searchParams } = new URL(request.url);
-  return request.headers.get("x-cron-secret") === secret || searchParams.get("secret") === secret;
+  const provided = readProvidedSecret(request);
+  if (!provided) return false;
+
+  const left = Buffer.from(provided, "utf8");
+  const right = Buffer.from(secret, "utf8");
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export async function GET(request) {
