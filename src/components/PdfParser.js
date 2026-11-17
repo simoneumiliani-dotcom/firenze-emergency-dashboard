@@ -176,16 +176,36 @@ function getBulletinIssueDetails(text) {
 function getBulletinValidityDetails(text) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   const datePart = getBulletinDatePattern();
-  const match = normalized.match(new RegExp("Valido\\s+dalle\\s+ore\\s+(" + datePart + ")\\s+alle\\s+ore\\s+(" + datePart + ")", "i"));
-  if (!match) return { label: null, validFrom: null, validTo: null };
 
-  const fromText = match[1].trim();
-  const toText = match[2].trim();
-  return {
-    label: "Valido dalle ore " + fromText + " alle ore " + toText,
-    validFrom: parseItalianDateText(fromText),
-    validTo: parseItalianDateText(toText)
-  };
+  // Il CFR usa due forme: "Valido dalle ore A alle ore B" per gli avvisi che
+  // coprono due giornate e "Valido fino alle ore B" per quelli che chiudono
+  // entro la stessa giornata.
+  const range = normalized.match(
+    new RegExp("Valid[oa]\\s+dalle\\s+ore\\s+(" + datePart + ")\\s+(?:alle|fino\\s+alle)\\s+ore\\s+(" + datePart + ")", "i")
+  );
+  if (range) {
+    const fromText = range[1].trim();
+    const toText = range[2].trim();
+    return {
+      label: "Valido dalle ore " + fromText + " alle ore " + toText,
+      validFrom: parseItalianDateText(fromText),
+      validTo: parseItalianDateText(toText)
+    };
+  }
+
+  const until = normalized.match(
+    new RegExp("Valid[oa]\\s+fino\\s+(?:alle\\s+ore|al)\\s+(" + datePart + ")", "i")
+  );
+  if (until) {
+    const toText = until[1].trim();
+    return {
+      label: "Valido fino alle ore " + toText,
+      validFrom: null,
+      validTo: parseItalianDateText(toText)
+    };
+  }
+
+  return { label: null, validFrom: null, validTo: null };
 }
 
 
