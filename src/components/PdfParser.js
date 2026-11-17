@@ -311,7 +311,7 @@ function fileToDataUrl(file) {
   });
 }
 
-export default function PdfParser({ onBulletinChange }) {
+export default function PdfParser({ onBulletinChange, embedded = false, currentLevel = null }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -690,10 +690,20 @@ export default function PdfParser({ onBulletinChange }) {
     setArchiveOpen(false);
   }
 
+  // In modalità embedded il pannello condivide la card del bollettino: quando si
+  // aprono archivio, PDF o estratto occupa l'intera larghezza della card.
+  const detailsOpen = archiveOpen || viewerOpen || extractOpen;
+
   return (
-    <section className={`rounded-lg border p-4 shadow-glow transition ${borderClass}`}>
+    <section
+      className={
+        embedded
+          ? `flex flex-col gap-3 rounded-lg border p-3 transition ${borderClass}${detailsOpen ? " lg:col-span-2" : ""}`
+          : `rounded-lg border p-4 shadow-glow transition ${borderClass}`
+      }
+    >
       <div
-        className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+        className={embedded ? "flex flex-col gap-3" : "flex flex-col gap-4 md:flex-row md:items-center md:justify-between"}
         onDragOver={(event) => {
           event.preventDefault();
           setIsDragging(true);
@@ -706,18 +716,24 @@ export default function PdfParser({ onBulletinChange }) {
         }}
       >
         <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-sky-400/10 p-3 text-sky-300">
-            <UploadCloud className="h-6 w-6" />
+          <div className={"rounded-lg bg-sky-400/10 text-sky-300 " + (embedded ? "p-2" : "p-3")}>
+            <UploadCloud className={embedded ? "h-5 w-5" : "h-6 w-6"} />
           </div>
           <div>
-            <h2 className="section-title">Adozione Stato di Allerta Regionale</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Carica il PDF ufficiale, consulta quello valido o richiama l&apos;archivio degli ultimi 5 bollettini.
+            {embedded ? (
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Adozione stato di allerta regionale</p>
+            ) : (
+              <h2 className="section-title">Adozione Stato di Allerta Regionale</h2>
+            )}
+            <p className={"mt-1 text-slate-400 " + (embedded ? "text-xs leading-5" : "text-sm")}>
+              {embedded
+                ? "Trascina qui il PDF ufficiale, oppure selezionalo per verificarlo e pubblicarlo."
+                : "Carica il PDF ufficiale, consulta quello valido o richiama l'archivio degli ultimi 5 bollettini."}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 md:justify-end">
+        <div className={embedded ? "flex flex-wrap gap-2" : "flex flex-wrap gap-2 md:justify-end"}>
           <button
             type="button"
             onClick={() => setArchiveOpen((current) => !current)}
@@ -829,6 +845,11 @@ export default function PdfParser({ onBulletinChange }) {
               </div>
               <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
                 Livello rilevato: <span className="font-semibold">{result.level}</span>
+                {currentLevel ? (
+                  <span className={"ml-2 text-xs " + (currentLevel === result.level ? "text-slate-400" : "text-orange-100")}>
+                    {currentLevel === result.level ? "coerente con il bollettino in corso" : "bollettino in corso: " + currentLevel}
+                  </span>
+                ) : null}
               </div>
             </div>
           )}
@@ -902,7 +923,7 @@ export default function PdfParser({ onBulletinChange }) {
               <iframe
                 src={pdfUrl}
                 title="Anteprima bollettino PDF"
-                className="h-[32rem] w-full bg-slate-950 sm:h-[38rem]"
+                className={"w-full bg-slate-950 " + (embedded ? "h-[26rem]" : "h-[32rem] sm:h-[38rem]")}
               />
             </div>
           )}
