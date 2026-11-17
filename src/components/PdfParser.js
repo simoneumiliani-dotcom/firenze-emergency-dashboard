@@ -35,9 +35,107 @@ const LEVELS = [
   { name: "Giallo", weight: 1, patterns: [/allerta\s*-\s*codice\s+giallo/i, /criticita['’]?\s+giallo/i, /fase\s+\w+\s*-\s*giallo/i] }
 ];
 
+// Zone di allerta CFR (delibera regionale 395 del 07/04/2015). In tabella il
+// livello di criticità sta a destra dell'elenco delle zone, quindi va letto per
+// riga: concatenare tutto il testo del PDF produce associazioni sbagliate.
+const ZONE_CODES = [
+  "A1", "A2", "A3", "A4", "A5", "A6", "B", "C", "E1", "E2", "E3",
+  "F1", "F2", "I", "L", "M", "O1", "O2", "O3", "R1", "R2", "S1", "S2", "S3", "T", "V"
+];
+
+// Zone che comprendono almeno un comune della provincia di Firenze: A2 (Valdarno
+// superiore), A3 (area fiorentina), A4 (Valdarno inferiore/empolese), A5
+// (Valdelsa), B (piana fiorentina-pratese-pistoiese), M (Mugello) e R2 (Romagna
+// toscana).
+const FLORENCE_ZONE_CODES = ["A2", "A3", "A4", "A5", "B", "M", "R2"];
+
+const ZONE_CODE_PATTERN = "(?:A[1-6]|B|C|E[1-3]|F[1-2]|I|L|M|O[1-3]|R[12]|S[1-3]|T|V)";
+
+const LEVEL_NAMES = { verde: "Verde", giallo: "Giallo", arancione: "Arancione", rosso: "Rosso" };
+const LEVEL_WEIGHTS = { Verde: 0, Giallo: 1, Arancione: 2, Rosso: 3 };
+
+function parseZoneAlertRows(text) {
+  const rows = [];
+
+  String(text || "").split("\n").forEach((rawRow) => {
+    const row = rawRow.replace(/\s+/g, " ").trim();
+    if (!row) return;
+
+    const levelMatches = [...row.matchAll(/\b(verde|giallo|arancione|rosso)\b/gi)];
+    if (!levelMatches.length) return;
+
+    levelMatches.forEach((levelMatch) => {
+      const before = row.slice(0, levelMatch.index);
+      const lists = [
+        ...before.matchAll(
+          new RegExp("\\b" + ZONE_CODE_PATTERN + "(?:[\\s,;/]+" + ZONE_CODE_PATTERN + ")*\\b", "gi")
+        )
+      ];
+      const zoneList = lists[lists.length - 1];
+      if (!zoneList) return;
+
+      // La colonna della criticità sta sulla stessa riga: se il livello è troppo
+      // lontano dall'elenco delle zone non gli appartiene.
+      if (before.length - (zoneList.index + zoneList[0].length) > 200) return;
+
+      const zones = [...new Set(
+        zoneList[0]
+          .split(/[\s,;/]+/)
+          .map((code) => code.toUpperCase())
+          .filter((code) => ZONE_CODES.includes(code))
+      )];
+      if (!zones.length) return;
+
+      rows.push({
+        zones,
+        level: LEVEL_NAMES[levelMatch[1].toLowerCase()],
+        inProgress: /in\s+corso/i.test(row)
+      });
+    });
+  });
+
+  return rows;
+}
+
+function getFlorenceZoneLevel(text) {
+  const rows = parseZoneAlertRows(text)
+    .map((row) => ({
+      ...row,
+      florenceZones: row.zones.filter((zone) => FLORENCE_ZONE_CODES.includes(zone))
+    }))
+    .filter((row) => row.florenceZones.length);
+
+  if (!rows.length) return null;
+
+  // Le righe "in corso" descrivono la criticità valida adesso: quando ci sono,
+  // le righe di previsione non devono alzare il livello mostrato.
+  const inProgressRows = rows.filter((row) => row.inProgress);
+  const selectedRows = inProgressRows.length ? inProgressRows : rows;
+
+  const level = selectedRows.reduce(
+    (best, row) => (LEVEL_WEIGHTS[row.level] > LEVEL_WEIGHTS[best] ? row.level : best),
+    "Verde"
+  );
+
+  return {
+    level,
+    zones: [...new Set(selectedRows.flatMap((row) => row.florenceZones))].sort()
+  };
+}
+
 function getBestAlertLevel(text) {
   const lowerText = text.toLowerCase();
   const matches = TERRITORY_KEYWORDS.filter((keyword) => lowerText.includes(keyword));
+  const zoneLevel = getFlorenceZoneLevel(text);
+
+  if (zoneLevel) {
+    return {
+      level: zoneLevel.level,
+      matches,
+      zones: zoneLevel.zones,
+      reason: `Livello ${zoneLevel.level} per le zone ${zoneLevel.zones.join(", ")}, che comprendono comuni della provincia di Firenze.`
+    };
+  }
 
   if (!matches.length) {
     return { level: "Verde", matches: [], reason: "Nessuna area fiorentina rilevata nel testo." };
@@ -315,7 +413,38 @@ async function extractPdfText(file) {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-    pageTexts.push(content.items.map((item) => item.str).join(" "));
+
+    // I frammenti arrivano nell'ordine interno del PDF, senza struttura: vanno
+    // raggruppati per coordinata verticale per ricostruire le righe della tabella
+    // "zone di allerta | rischio | tempi | criticità" prima di cercare i livelli.
+    const rows = [];
+    content.items.forEach((item) => {
+      const fragment = typeof item.str === "string" ? item.str : "";
+      if (!fragment.trim()) return;
+
+      const x = Number(item.transform?.[4]);
+      const y = Number(item.transform?.[5]);
+      if (!Number.isFinite(y)) {
+        rows.push({ y: null, items: [{ text: fragment, x: 0 }] });
+        return;
+      }
+
+      const row = rows.find((candidate) => candidate.y !== null && Math.abs(candidate.y - y) <= 3);
+      if (row) row.items.push({ text: fragment, x: Number.isFinite(x) ? x : 0 });
+      else rows.push({ y, items: [{ text: fragment, x: Number.isFinite(x) ? x : 0 }] });
+    });
+
+    pageTexts.push(
+      rows
+        .sort((a, b) => (b.y ?? -Infinity) - (a.y ?? -Infinity))
+        .map((row) =>
+          row.items
+            .sort((a, b) => a.x - b.x)
+            .map((item) => item.text)
+            .join(" ")
+        )
+        .join("\n")
+    );
   }
 
   return pageTexts.join("\n");
