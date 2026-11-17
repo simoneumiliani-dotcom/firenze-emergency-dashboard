@@ -8,7 +8,6 @@ import {
   ArrowDown,
   Download,
   ExternalLink,
-  FileText,
   MapPin,
   ShieldCheck
 } from "lucide-react";
@@ -138,7 +137,6 @@ export default function AllertePage() {
   const [archive, setArchive] = useState(null);
   const [deviceItems, setDeviceItems] = useState([]);
   const [error, setError] = useState(null);
-  const [textOpen, setTextOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const loadArchive = useCallback(async ({ quiet = false } = {}) => {
@@ -171,14 +169,12 @@ export default function AllertePage() {
     };
   }, [loadArchive]);
 
-  const sharedItems = useMemo(() => (Array.isArray(archive?.items) ? archive.items : []), [archive]);
-
   // Archivio condiviso più la copia del dispositivo, senza doppioni: il bollettino
   // appena caricato qui resta visibile anche senza archivio condiviso.
-  const items = useMemo(
-    () => mergeBulletins(sharedItems, deviceItems, archive?.archiveLimit),
-    [archive, sharedItems, deviceItems]
-  );
+  const items = useMemo(() => {
+    const sharedItems = Array.isArray(archive?.items) ? archive.items : [];
+    return mergeBulletins(sharedItems, deviceItems, archive?.archiveLimit);
+  }, [archive, deviceItems]);
 
   // Solo un bollettino con scadenza futura è "in corso": senza validTo non è
   // possibile affermare che l'allerta sia ancora attiva.
@@ -189,6 +185,8 @@ export default function AllertePage() {
 
   const currentLevel = normalizeLevel(current?.level);
   const areas = Array.isArray(current?.matches) ? current.matches : [];
+  const currentPdfHref = getBulletinPdfHref(current);
+  const currentPdfIsDownload = isInlinePdfUrl(current?.pdfUrl) || Boolean(current?.hasEmbeddedPdf);
   const archivedCount = items.length;
   // items arriva dal più recente: senza allerta valida resta utile mostrare
   // l'ultimo bollettino pubblicato, invece di lasciare la scheda vuota.
@@ -224,138 +222,87 @@ export default function AllertePage() {
           )}
 
           <section className="panel p-4 sm:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bollettino corrente</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">{current?.issue || "Criticità idraulica e idrogeologica"}</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  {current
-                    ? "Emesso il " + formatDateTime(current.issuedAt || current.uploadedAt) + " · " + formatValidity(current)
-                    : "Nessun bollettino con validità ancora aperta."}
-                </p>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bollettino corrente</p>
               {current ? <LevelBadge level={currentLevel} size="lg" /> : null}
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <div className="flex flex-col gap-3">
-                {current ? (
-                  <>
-                    <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                      <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
-                        <dt className="text-xs uppercase tracking-wide text-slate-500">Emesso il</dt>
-                        <dd className="mt-1 text-slate-200">{formatDateTime(current.issuedAt || current.uploadedAt)}</dd>
-                      </div>
-                      <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
-                        <dt className="text-xs uppercase tracking-wide text-slate-500">Validità</dt>
-                        <dd className="mt-1 text-slate-200">{formatValidity(current)}</dd>
-                      </div>
-                      <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
-                        <dt className="text-xs uppercase tracking-wide text-slate-500">Fascia oraria</dt>
-                        <dd className="mt-1 text-slate-200">{current.validity || "non indicata"}</dd>
-                      </div>
-                      <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
-                        <dt className="text-xs uppercase tracking-wide text-slate-500">File di riferimento</dt>
-                        <dd className="mt-1 truncate text-slate-200" title={current.fileName}>{current.fileName}</dd>
-                      </div>
-                    </dl>
-
-                    <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Motivazione</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-200">
-                        {current.reason || "Nessuna motivazione estratta dal bollettino."}
-                      </p>
+            <div className="mt-4 flex flex-col gap-4">
+              {current ? (
+                <>
+                  <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                    <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
+                      <dt className="text-xs uppercase tracking-wide text-slate-500">Emesso il</dt>
+                      <dd className="mt-1 text-slate-200">{formatDateTime(current.issuedAt || current.uploadedAt)}</dd>
                     </div>
-
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aree fiorentine interessate</p>
-                      {areas.length ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {areas.map((area) => (
-                            <span key={area} className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200">
-                              <MapPin className="h-3.5 w-3.5 text-sky-300" />
-                              {area}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-sm text-slate-400">Aree non specificate nel bollettino.</p>
-                      )}
+                    <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
+                      <dt className="text-xs uppercase tracking-wide text-slate-500">Validità</dt>
+                      <dd className="mt-1 text-slate-200">{formatValidity(current)}</dd>
                     </div>
+                  </dl>
 
-                    {current.textPreview && (
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setTextOpen((value) => !value)}
-                          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
-                          aria-expanded={textOpen}
-                        >
-                          <FileText className="h-4 w-4 text-sky-300" />
-                          {textOpen ? "Nascondi testo estratto" : "Mostra testo estratto"}
-                        </button>
-                        {textOpen && (
-                          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md border border-emergency-line bg-emergency-ink/70 px-3 py-3 text-xs leading-5 text-slate-300">
-                            {current.textPreview}
-                          </pre>
-                        )}
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aree fiorentine interessate</p>
+                    {areas.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {areas.map((area) => (
+                          <span key={area} className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200">
+                            <MapPin className="h-3.5 w-3.5 text-sky-300" />
+                            {area}
+                          </span>
+                        ))}
                       </div>
-                    )}
-
-                    {getBulletinPdfHref(current) && ((isInlinePdfUrl(current.pdfUrl) || current.hasEmbeddedPdf) ? (
-                      <a
-                        href={getBulletinPdfHref(current)}
-                        download={current.fileName || "bollettino.pdf"}
-                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
-                      >
-                        Scarica bollettino PDF
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
                     ) : (
-                      <a
-                        href={getBulletinPdfHref(current)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
-                      >
-                        Apri bollettino PDF
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <div className="flex flex-col items-start gap-3 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-5">
-                      <div className="flex items-center gap-2 text-slate-200">
-                        <ShieldCheck className="h-5 w-5 text-emergency-green" />
-                        <p className="text-sm font-semibold">Nessuna allerta in corso</p>
-                      </div>
-                      <p className="max-w-xl text-sm leading-6 text-slate-400">
-                        Non risulta un bollettino con validità ancora aperta. Carica e pubblica il bollettino dal riquadro accanto: una volta pubblicato, il livello compare qui.
-                      </p>
-                    </div>
-
-                    {lastArchived && (
-                      <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-4 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ultimo bollettino pubblicato</p>
-                          <LevelBadge level={normalizeLevel(lastArchived.level)} />
-                        </div>
-                        <p className="mt-2 text-sm text-slate-200">{formatValidity(lastArchived)}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-400">{lastArchived.reason || "Motivazione non registrata."}</p>
-                        <div className="mt-1">
-                          <BulletinPdfLink item={lastArchived} label="Apri il PDF" />
-                        </div>
-                      </div>
+                      <p className="mt-1 text-sm text-slate-400">Aree non specificate nel bollettino.</p>
                     )}
-                  </>
-                )}
-              </div>
+                  </div>
 
-              <PdfParser embedded currentLevel={current ? currentLevel : null} onBulletinChange={handleBulletinChange} />
+                  {currentPdfHref && (
+                    <a
+                      href={currentPdfHref}
+                      {...(currentPdfIsDownload
+                        ? { download: current.fileName || "bollettino.pdf" }
+                        : { target: "_blank", rel: "noreferrer" })}
+                      className="inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+                    >
+                      {currentPdfIsDownload ? "Scarica bollettino PDF" : "Apri bollettino PDF"}
+                      {currentPdfIsDownload
+                        ? <Download className="h-3.5 w-3.5" />
+                        : <ExternalLink className="h-3.5 w-3.5" />}
+                    </a>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col items-start gap-3 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-5">
+                    <div className="flex items-center gap-2 text-slate-200">
+                      <ShieldCheck className="h-5 w-5 text-emergency-green" />
+                      <p className="text-sm font-semibold">Nessuna allerta in corso</p>
+                    </div>
+                    <p className="max-w-xl text-sm leading-6 text-slate-400">
+                      Non risulta un bollettino con validità ancora aperta. Carica e pubblica il bollettino con i comandi qui sotto: una volta pubblicato, il livello compare qui.
+                    </p>
+                  </div>
+
+                  {lastArchived && (
+                    <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ultimo bollettino pubblicato</p>
+                        <LevelBadge level={normalizeLevel(lastArchived.level)} />
+                      </div>
+                      <p className="mt-2 text-sm text-slate-200">{formatValidity(lastArchived)}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-400">{lastArchived.reason || "Motivazione non registrata."}</p>
+                      <div className="mt-1">
+                        <BulletinPdfLink item={lastArchived} label="Apri il PDF" />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <PdfParser currentLevel={current ? currentLevel : null} onBulletinChange={handleBulletinChange} />
             </div>
           </section>
-
           <section className="panel p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
@@ -464,11 +411,10 @@ export default function AllertePage() {
               </>
             ) : (
               <div className="mt-4 rounded-md border border-dashed border-emergency-line bg-emergency-panel2 px-4 py-6 text-sm text-slate-400">
-                Nessun bollettino archiviato. La pubblicazione avviene da questa pagina, nel riquadro di caricamento in fondo: basta un bollettino valido e la conferma del codice di pubblicazione.
+                Nessun bollettino archiviato. La pubblicazione avviene dalla scheda Bollettino corrente, qui sopra: basta un bollettino valido e la conferma del codice di pubblicazione.
               </div>
             )}
           </section>
-
 
           <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>

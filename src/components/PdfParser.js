@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, AlertTriangle, CheckCircle2, Download, Eye, FileText, Trash2, UploadCloud, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Archive, AlertTriangle, Download, Eye, FileText, Trash2, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 import {
@@ -311,7 +311,7 @@ function fileToDataUrl(file) {
   });
 }
 
-export default function PdfParser({ onBulletinChange, embedded = false, currentLevel = null }) {
+export default function PdfParser({ onBulletinChange, currentLevel = null }) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -555,13 +555,6 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
     };
   }, []);
 
-  const borderClass = useMemo(() => {
-    if (isDragging) return "border-sky-300 bg-sky-400/10";
-    if (status === "error") return "border-emergency-red/70 bg-emergency-red/10";
-    if (status === "done") return "border-emergency-green/60 bg-emergency-green/10";
-    return "border-dashed border-emergency-line bg-emergency-panel/90";
-  }, [isDragging, status]);
-
   const handleFile = useCallback(async (file) => {
     if (!file) return;
 
@@ -621,7 +614,7 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
 
       const remoteArchive = await publishBulletin(payload);
       if (remoteArchive) setArchive(remoteArchive.items || []);
-    } catch (error) {
+    } catch {
       setStatus("error");
       setResult({
         level: "Verde",
@@ -690,20 +683,11 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
     setArchiveOpen(false);
   }
 
-  // In modalità embedded il pannello condivide la card del bollettino: quando si
-  // aprono archivio, PDF o estratto occupa l'intera larghezza della card.
-  const detailsOpen = archiveOpen || viewerOpen || extractOpen;
-
   return (
-    <section
-      className={
-        embedded
-          ? `flex flex-col gap-3 rounded-lg border p-3 transition ${borderClass}${detailsOpen ? " lg:col-span-2" : ""}`
-          : `rounded-lg border p-4 shadow-glow transition ${borderClass}`
-      }
-    >
+    <div className="flex flex-col gap-3">
       <div
-        className={embedded ? "flex flex-col gap-3" : "flex flex-col gap-4 md:flex-row md:items-center md:justify-between"}
+        className={"flex flex-wrap gap-2 rounded-lg transition " + (isDragging ? "ring-2 ring-sky-300" : "")}
+        title="Trascina qui il PDF ufficiale per caricarlo"
         onDragOver={(event) => {
           event.preventDefault();
           setIsDragging(true);
@@ -715,48 +699,107 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
           handleFile(event.dataTransfer.files?.[0]);
         }}
       >
-        <div className="flex items-start gap-3">
-          <div className={"rounded-lg bg-sky-400/10 text-sky-300 " + (embedded ? "p-2" : "p-3")}>
-            <UploadCloud className={embedded ? "h-5 w-5" : "h-6 w-6"} />
-          </div>
-          <div>
-            {embedded ? (
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Adozione stato di allerta regionale</p>
-            ) : (
-              <h2 className="section-title">Adozione Stato di Allerta Regionale</h2>
-            )}
-            <p className={"mt-1 text-slate-400 " + (embedded ? "text-xs leading-5" : "text-sm")}>
-              {embedded
-                ? "Trascina qui il PDF ufficiale, oppure selezionalo per verificarlo e pubblicarlo."
-                : "Carica il PDF ufficiale, consulta quello valido o richiama l'archivio degli ultimi 5 bollettini."}
-            </p>
-          </div>
-        </div>
-
-        <div className={embedded ? "flex flex-wrap gap-2" : "flex flex-wrap gap-2 md:justify-end"}>
-          <button
-            type="button"
-            onClick={() => setArchiveOpen((current) => !current)}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
-          >
-            <Archive className="h-4 w-4" />
-            Archivio
-          </button>
-          <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-sky-400/50 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20">
-            <FileText className="h-4 w-4" />
-            Seleziona PDF
-            <input
-              type="file"
-              accept="application/pdf"
-              className="sr-only"
-              onChange={(event) => handleFile(event.target.files?.[0])}
-            />
-          </label>
-        </div>
+        <button
+          type="button"
+          onClick={() => setArchiveOpen((current) => !current)}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+        >
+          <Archive className="h-4 w-4 text-sky-300" />
+          Archivio
+        </button>
+        <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20">
+          <FileText className="h-4 w-4" />
+          Seleziona PDF
+          <input
+            type="file"
+            accept="application/pdf"
+            className="sr-only"
+            onChange={(event) => handleFile(event.target.files?.[0])}
+          />
+        </label>
       </div>
 
+      {status === "done" && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setExtractOpen((current) => !current)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+          >
+            <FileText className="h-4 w-4 text-sky-300" />
+            Testo estratto
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewerOpen((current) => !current)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+          >
+            <Eye className="h-4 w-4" />
+            {viewerOpen ? "Chiudi PDF" : "Leggi bollettino"}
+          </button>
+          {pdfUrl && (
+            <a
+              href={pdfUrl}
+              download={result.fileName}
+              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+            >
+              <Download className="h-4 w-4 text-sky-300" />
+              Scarica
+            </a>
+          )}
+        </div>
+      )}
+
+      {status === "reading" && <p className="text-sm text-slate-300">Lettura del PDF in corso...</p>}
+
+      {status === "error" && (
+        <div className="flex items-center gap-2 text-sm text-red-100">
+          <XCircle className="h-5 w-5 text-emergency-red" />
+          {result?.message || "Errore durante il caricamento."}
+        </div>
+      )}
+
+      {publishNotice && (
+        <p className={`rounded-lg border px-3 py-2 text-xs ${publishNotice.ok ? "border-emergency-green/40 bg-emergency-green/10 text-green-100" : "border-emergency-line bg-black/20 text-slate-300"}`}>
+          {publishNotice.message}
+        </p>
+      )}
+
+      {result?.level && result.level !== "Verde" && (
+        <div className="flex items-start gap-2 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 p-3 text-sm text-orange-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          Verificare sempre il bollettino ufficiale prima di attivare procedure operative.
+        </div>
+      )}
+
+      {viewerOpen && pdfUrl && (
+        <div className="overflow-hidden rounded-lg border border-emergency-line bg-black/30">
+          <div className="flex items-center justify-between border-b border-emergency-line px-3 py-2">
+            <p className="text-sm font-medium text-slate-100">Bollettino ufficiale</p>
+            <button type="button" onClick={() => setViewerOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
+          </div>
+          <iframe
+            src={pdfUrl}
+            title="Anteprima bollettino PDF"
+            className="h-[26rem] w-full bg-slate-950"
+          />
+        </div>
+      )}
+
+      {extractOpen && result?.textPreview && (
+        <div className="rounded-lg border border-emergency-line bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-100">Estratto testuale rilevante</p>
+            <button type="button" onClick={() => setExtractOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
+          </div>
+          <p className="max-h-56 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+            <HighlightedText text={result.textPreview} terms={result.textTerms || []} />
+          </p>
+        </div>
+      )}
+
       {archiveOpen && (
-        <div className="mt-4 rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
+        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-100">Archivio bollettini</p>
@@ -822,132 +865,6 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
         </div>
       )}
 
-      {status !== "idle" && (
-        <div className="mt-4 rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
-          {status === "reading" && <p className="text-sm text-slate-300">Lettura del PDF in corso...</p>}
-
-          {status === "done" && result && (
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 text-emergency-green" />
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setViewerOpen((current) => !current)}
-                    className="text-left text-sm font-medium text-slate-100 underline-offset-4 hover:text-sky-100 hover:underline"
-                  >
-                    {result.fileName}
-                  </button>
-                  <p className="text-xs text-slate-400">{result.reason}</p>
-                  {result.issue && <p className="mt-1 text-xs font-medium text-slate-200">{result.issue}</p>}
-                  {result.validity && <p className="mt-1 text-xs font-medium text-sky-100">{result.validity}</p>}
-                </div>
-              </div>
-              <div className="rounded-lg border border-emergency-line px-3 py-2 text-sm text-slate-200">
-                Livello rilevato: <span className="font-semibold">{result.level}</span>
-                {currentLevel ? (
-                  <span className={"ml-2 text-xs " + (currentLevel === result.level ? "text-slate-400" : "text-orange-100")}>
-                    {currentLevel === result.level ? "coerente con il bollettino in corso" : "bollettino in corso: " + currentLevel}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="flex items-center gap-2 text-sm text-red-100">
-              <XCircle className="h-5 w-5 text-emergency-red" />
-              {result?.message || "Errore durante il caricamento."}
-            </div>
-          )}
-
-          {status === "done" && result && (
-            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {result.matches?.map((match) => (
-                  <span key={match} className="rounded-full border border-emergency-line bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300">
-                    {match}
-                  </span>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setViewerOpen((current) => !current)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/20"
-                >
-                  <Eye className="h-4 w-4" />
-                  {viewerOpen ? "Chiudi PDF" : "Leggi bollettino"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExtractOpen((current) => !current)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-3 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
-                >
-                  <FileText className="h-4 w-4" />
-                  Testo estratto
-                </button>
-                {pdfUrl && (
-                  <a
-                    href={pdfUrl}
-                    download={result.fileName}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emergency-line bg-white/[0.04] px-3 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
-                  >
-                    <Download className="h-4 w-4" />
-                    Scarica
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-
-          {publishNotice && (
-            <p className={`mt-3 rounded-lg border px-3 py-2 text-xs ${publishNotice.ok ? "border-emergency-green/40 bg-emergency-green/10 text-green-100" : "border-emergency-line bg-black/20 text-slate-300"}`}>
-              {publishNotice.message}
-            </p>
-          )}
-
-          {result?.level && result.level !== "Verde" && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 p-3 text-sm text-orange-100">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              Verificare sempre il bollettino ufficiale prima di attivare procedure operative.
-            </div>
-          )}
-
-          {viewerOpen && pdfUrl && (
-            <div className="mt-3 overflow-hidden rounded-lg border border-emergency-line bg-black/30">
-              <div className="flex items-center justify-between border-b border-emergency-line px-3 py-2">
-                <p className="text-sm font-medium text-slate-100">Bollettino ufficiale</p>
-                <button type="button" onClick={() => setViewerOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
-              </div>
-              <iframe
-                src={pdfUrl}
-                title="Anteprima bollettino PDF"
-                className={"w-full bg-slate-950 " + (embedded ? "h-[26rem]" : "h-[32rem] sm:h-[38rem]")}
-              />
-            </div>
-          )}
-
-          {extractOpen && result?.textPreview && (
-            <div className="mt-3 rounded-lg border border-emergency-line bg-black/20 p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-100">Estratto testuale rilevante</p>
-                <button type="button" onClick={() => setExtractOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
-              </div>
-              <p className="max-h-56 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
-                <HighlightedText text={result.textPreview} terms={result.textTerms || []} />
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {status === "idle" && publishNotice && (
-        <p className={`mt-4 rounded-lg border px-3 py-2 text-xs ${publishNotice.ok ? "border-emergency-green/40 bg-emergency-green/10 text-green-100" : "border-emergency-line bg-black/20 text-slate-300"}`}>
-          {publishNotice.message}
-        </p>
-      )}
-
       {codePrompt && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
@@ -996,6 +913,6 @@ export default function PdfParser({ onBulletinChange, embedded = false, currentL
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
