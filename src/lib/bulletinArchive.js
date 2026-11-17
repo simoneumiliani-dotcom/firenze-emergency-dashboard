@@ -96,6 +96,9 @@ function buildBulletinRecord(input) {
     validTo: input.validTo || null,
     textPreview: input.textPreview || null,
     textTerms: Array.isArray(input.textTerms) ? input.textTerms : [],
+    zoneLevels: input.zoneLevels && typeof input.zoneLevels === "object" ? input.zoneLevels : null,
+    provinceLevels:
+      input.provinceLevels && typeof input.provinceLevels === "object" ? input.provinceLevels : null,
     pdfUrl: input.pdfUrl || null,
     uploadedAt
   };

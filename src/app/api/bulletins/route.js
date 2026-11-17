@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getBulletinArchive, removeBulletinFromArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
 import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
 import { toPublicBulletin } from "@/lib/bulletinPdf";
+import { TOSCANA_PROVINCES, ZONE_CODES } from "@/lib/toscanaZones";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,6 +81,17 @@ function asTextList(value) {
   )].slice(0, MAX_LIST_ITEMS);
 }
 
+// Livelli per zona e per provincia: il bollettino porta con sé l'intera mappatura
+// toscana, così la dashboard può mostrare il livello di qualunque territorio
+// senza rileggere il PDF. Chiavi e valori sono validati sui codici ufficiali.
+function asLevelMap(value, allowedKeys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entries = Object.entries(value)
+    .filter(([key, level]) => allowedKeys.includes(key) && LEVELS.has(level))
+    .slice(0, allowedKeys.length);
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
 function asIsoDate(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
@@ -124,6 +136,8 @@ function validateBulletinPayload(payload) {
       validTo,
       textPreview: asText(payload.textPreview, MAX_TEXT),
       textTerms: asTextList(payload.textTerms),
+      zoneLevels: asLevelMap(payload.zoneLevels, ZONE_CODES),
+      provinceLevels: asLevelMap(payload.provinceLevels, Object.keys(TOSCANA_PROVINCES)),
       pdfUrl: asPdfUrl(payload.pdfUrl),
       uploadedAt: asIsoDate(payload.uploadedAt) || undefined
     }

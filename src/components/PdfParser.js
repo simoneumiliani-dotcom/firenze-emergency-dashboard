@@ -5,6 +5,15 @@ import { Archive, AlertTriangle, Download, Eye, FileText, Trash2, XCircle } from
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 import {
+  DEFAULT_PROVINCE,
+  LEVEL_NAMES,
+  PROVINCE_ZONES,
+  TOSCANA_PROVINCES,
+  ZONE_CODES,
+  getProvinceLevels,
+  strongestLevel
+} from "@/lib/toscanaZones";
+import {
   isBulletinCurrent,
   pruneBulletins,
   readDeviceArchive,
@@ -35,24 +44,11 @@ const LEVELS = [
   { name: "Giallo", weight: 1, patterns: [/allerta\s*-\s*codice\s+giallo/i, /criticita['’]?\s+giallo/i, /fase\s+\w+\s*-\s*giallo/i] }
 ];
 
-// Zone di allerta CFR (delibera regionale 395 del 07/04/2015). In tabella il
-// livello di criticità sta a destra dell'elenco delle zone, quindi va letto per
-// riga: concatenare tutto il testo del PDF produce associazioni sbagliate.
-const ZONE_CODES = [
-  "A1", "A2", "A3", "A4", "A5", "A6", "B", "C", "E1", "E2", "E3",
-  "F1", "F2", "I", "L", "M", "O1", "O2", "O3", "R1", "R2", "S1", "S2", "S3", "T", "V"
-];
-
-// Zone che comprendono almeno un comune della provincia di Firenze: A2 (Valdarno
-// superiore), A3 (area fiorentina), A4 (Valdarno inferiore/empolese), A5
-// (Valdelsa), B (piana fiorentina-pratese-pistoiese), M (Mugello) e R2 (Romagna
-// toscana).
-const FLORENCE_ZONE_CODES = ["A2", "A3", "A4", "A5", "B", "M", "R2"];
-
-const ZONE_CODE_PATTERN = "(?:A[1-6]|B|C|E[1-3]|F[1-2]|I|L|M|O[1-3]|R[12]|S[1-3]|T|V)";
-
-const LEVEL_NAMES = { verde: "Verde", giallo: "Giallo", arancione: "Arancione", rosso: "Rosso" };
-const LEVEL_WEIGHTS = { Verde: 0, Giallo: 1, Arancione: 2, Rosso: 3 };
+// In tabella il livello di criticità sta a destra dell'elenco delle zone, quindi
+// va letto per riga: concatenare tutto il testo del PDF produce associazioni
+// sbagliate. Zone, province e relativi livelli vivono in lib/toscanaZones.js.
+const ZONE_CODE_PATTERN =
+  "(?:" + ZONE_CODES.slice().sort((a, b) => b.length - a.length).join("|") + ")";
 
 function parseZoneAlertRows(text) {
   const rows = [];
@@ -97,43 +93,47 @@ function parseZoneAlertRows(text) {
   return rows;
 }
 
-function getFlorenceZoneLevel(text) {
-  const rows = parseZoneAlertRows(text)
-    .map((row) => ({
-      ...row,
-      florenceZones: row.zones.filter((zone) => FLORENCE_ZONE_CODES.includes(zone))
-    }))
-    .filter((row) => row.florenceZones.length);
-
+function getZoneLevels(text) {
+  const rows = parseZoneAlertRows(text);
   if (!rows.length) return null;
 
-  // Le righe "in corso" descrivono la criticità valida adesso: quando ci sono,
-  // le righe di previsione non devono alzare il livello mostrato.
+  // Le righe "in corso" descrivono la criticità valida adesso: quando il
+  // bollettino ne contiene, le righe di previsione non devono alzare il livello
+  // mostrato per nessuna zona.
   const inProgressRows = rows.filter((row) => row.inProgress);
   const selectedRows = inProgressRows.length ? inProgressRows : rows;
 
-  const level = selectedRows.reduce(
-    (best, row) => (LEVEL_WEIGHTS[row.level] > LEVEL_WEIGHTS[best] ? row.level : best),
-    "Verde"
-  );
+  const zoneLevels = {};
+  selectedRows.forEach((row) => {
+    row.zones.forEach((zone) => {
+      zoneLevels[zone] = strongestLevel([zoneLevels[zone], row.level].filter(Boolean));
+    });
+  });
 
-  return {
-    level,
-    zones: [...new Set(selectedRows.flatMap((row) => row.florenceZones))].sort()
-  };
+  return zoneLevels;
 }
 
-function getBestAlertLevel(text) {
+function getBestAlertLevel(text, province = DEFAULT_PROVINCE) {
   const lowerText = text.toLowerCase();
   const matches = TERRITORY_KEYWORDS.filter((keyword) => lowerText.includes(keyword));
-  const zoneLevel = getFlorenceZoneLevel(text);
+  const zoneLevels = getZoneLevels(text);
 
-  if (zoneLevel) {
+  if (zoneLevels) {
+    const provinceLevels = getProvinceLevels(zoneLevels);
+    const sigla = TOSCANA_PROVINCES[province] ? province : DEFAULT_PROVINCE;
+    const detail = PROVINCE_ZONES[sigla]
+      .filter((zone) => zoneLevels[zone])
+      .map((zone) => zone + " " + zoneLevels[zone])
+      .join(", ");
+
     return {
-      level: zoneLevel.level,
+      level: provinceLevels[sigla],
       matches,
-      zones: zoneLevel.zones,
-      reason: `Livello ${zoneLevel.level} per le zone ${zoneLevel.zones.join(", ")}, che comprendono comuni della provincia di Firenze.`
+      zoneLevels,
+      provinceLevels,
+      reason:
+        `Livello ${provinceLevels[sigla]} per la provincia di ${TOSCANA_PROVINCES[sigla]}` +
+        (detail ? ` (zone ${detail}).` : ".")
     };
   }
 
