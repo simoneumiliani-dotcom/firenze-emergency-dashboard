@@ -36,6 +36,7 @@ const server = createServer(async (request, response) => {
     try {
       for (const [command, key, value] of JSON.parse(raw || "[]")) {
         if (command === "SET") store.set(key, value);
+        if (command === "DEL") store.delete(key);
       }
       send(response, 200, [{ result: "OK" }]);
     } catch {

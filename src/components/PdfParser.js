@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Archive, AlertTriangle, Download, Eye, FileText, Trash2, XCircle } from "lucide-react";
+import { Archive, AlertTriangle, Download, Eye, FileText, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 import {
@@ -334,7 +334,7 @@ async function savePdfBlob(id, file) {
   }).finally(() => database.close());
 }
 
-async function loadPdfBlob(id) {
+export async function loadPdfBlob(id) {
   const database = await openPdfDatabase();
   if (!database || !id) return null;
 
@@ -346,7 +346,7 @@ async function loadPdfBlob(id) {
   }).finally(() => database.close());
 }
 
-async function removeOldPdfBlobs(validIds) {
+export async function removeOldPdfBlobs(validIds) {
   const database = await openPdfDatabase();
   if (!database) return;
 
@@ -460,22 +460,23 @@ function fileToDataUrl(file) {
   });
 }
 
-export default function PdfParser({ onBulletinChange, currentLevel = null }) {
+export default function PdfParser({
+  onBulletinChange,
+  currentLevel = null,
+  historyOpen = false,
+  onToggleHistory = null,
+  refreshKey = 0
+}) {
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const [archive, setArchive] = useState([]);
   const [publishCode, setPublishCode] = useState("");
   const [codePrompt, setCodePrompt] = useState(null);
   const [publishNotice, setPublishNotice] = useState(null);
-  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
-  const [removingId, setRemovingId] = useState(null);
   const pendingPayloadsRef = useRef([]);
-  const pendingDeleteRef = useRef(null);
   const objectUrlRef = useRef(null);
 
   // Il codice di pubblicazione è unico per tutti: la pagina Allerte lo chiede
@@ -536,70 +537,6 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
     }
   }, [onBulletinChange, publishCode]);
 
-  const removeBulletinRecord = useCallback(async (id, codeOverride) => {
-    const code = String(codeOverride || publishCode || "").trim();
-    if (!code) {
-      pendingDeleteRef.current = id;
-      setCodePrompt({ code: DEFAULT_BULLETIN_PUBLISH_CODE, error: null, mode: "delete" });
-      return null;
-    }
-
-    setRemovingId(id);
-    try {
-      const response = await fetch("/api/bulletins?id=" + encodeURIComponent(id), {
-        method: "DELETE",
-        headers: { "x-bulletin-token": code }
-      });
-
-      if (response.ok) {
-        const archive = await response.json();
-        const nextLocal = pruneBulletins(
-          readDeviceArchive().filter((item) => item.id !== id)
-        );
-        writeDeviceArchive(nextLocal);
-        setArchive(nextLocal);
-        removeOldPdfBlobs(nextLocal.map((item) => item.id));
-
-        const localCurrent = readDeviceCurrentBulletin();
-        const wasCurrent = localCurrent?.id === id;
-        if (wasCurrent) writeDeviceCurrentBulletin(null);
-        if (wasCurrent || result?.id === id) {
-          setResult(null);
-          setStatus("idle");
-          setViewerOpen(false);
-          setExtractOpen(false);
-          setPdfUrl(null);
-          if (objectUrlRef.current) {
-            URL.revokeObjectURL(objectUrlRef.current);
-            objectUrlRef.current = null;
-          }
-        }
-
-        setPublishNotice({ ok: true, message: "Bollettino rimosso dall'archivio condiviso." });
-        onBulletinChange?.();
-        return archive;
-      }
-
-      if (response.status === 401) {
-        try { window.localStorage.removeItem(PUBLISH_CODE_STORAGE_KEY); } catch {}
-        setPublishCode("");
-        pendingDeleteRef.current = id;
-        setPublishNotice(null);
-        setCodePrompt({ code, error: "Codice non valido: controlla il codice di pubblicazione.", mode: "delete" });
-        return null;
-      }
-
-      const body = await response.json().catch(() => null);
-      setPublishNotice({ ok: false, message: body?.error || "Archivio condiviso non raggiungibile." });
-      return null;
-    } catch {
-      setPublishNotice({ ok: false, message: "Archivio condiviso non raggiungibile." });
-      return null;
-    } finally {
-      setRemovingId(null);
-    }
-  }, [onBulletinChange, publishCode, result]);
-
   const confirmPublishCode = useCallback(async () => {
     const code = String(codePrompt?.code || "").trim();
     if (!code) return;
@@ -608,31 +545,19 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
     setPublishCode(code);
     setCodePrompt(null);
 
-    const pendingId = pendingDeleteRef.current;
-    pendingDeleteRef.current = null;
-    if (pendingId) {
-      await removeBulletinRecord(pendingId, code);
-      return;
-    }
-
     const queue = pendingPayloadsRef.current;
     pendingPayloadsRef.current = [];
     for (const payload of queue) {
-      const remoteArchive = await publishBulletin(payload, code);
-      if (remoteArchive?.items?.length) setArchive(remoteArchive.items);
+      await publishBulletin(payload, code);
     }
-  }, [codePrompt, publishBulletin, removeBulletinRecord]);
+  }, [codePrompt, publishBulletin]);
 
   const cancelPublishCode = useCallback(() => {
-    const wasDelete = Boolean(pendingDeleteRef.current);
-    pendingDeleteRef.current = null;
     pendingPayloadsRef.current = [];
     setCodePrompt(null);
     setPublishNotice({
       ok: false,
-      message: wasDelete
-        ? "Rimozione annullata: il bollettino resta in archivio."
-        : "Pubblicazione annullata: il bollettino resta solo su questo dispositivo."
+      message: "Pubblicazione annullata: il bollettino resta solo su questo dispositivo."
     });
   }, []);
 
@@ -644,12 +569,22 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Un bollettino ritirato dallo storico deve sparire anche da qui: al cambio
+    // di refreshKey si riparte dallo stato vuoto e si rilegge l'archivio.
+    setResult(null);
+    setStatus("idle");
+    setViewerOpen(false);
+    setExtractOpen(false);
+    setPdfUrl(null);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
 
     async function restoreCurrentBulletin() {
       // In localStorage restano solo i metadati: eventuali PDF incorporati in
       // record vecchi vengono scartati (si richiedono a /api/bulletins/pdf).
       const localArchive = readDeviceArchive();
-      setArchive(localArchive);
       removeOldPdfBlobs(localArchive.map((item) => item.id));
 
       const localCurrent = readDeviceCurrentBulletin();
@@ -678,7 +613,6 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
           if (cancelled || !archive) return;
           const remoteArchive = pruneBulletins((archive.items || []).map(toPublicBulletin));
           if (remoteArchive.length) {
-            setArchive(remoteArchive);
             writeDeviceArchive(remoteArchive);
           }
           if (!archive.current || !isBulletinCurrent(archive.current)) return;
@@ -702,7 +636,7 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
@@ -753,7 +687,6 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
       writeDeviceCurrentBulletin(localPayload);
       removeOldPdfBlobs(nextArchive.map((item) => item.id));
 
-      setArchive(nextArchive);
       setResult(localPayload);
       setStatus("done");
       setViewerOpen(false);
@@ -761,8 +694,7 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
       // se la pubblicazione condivisa viene annullata o non riesce.
       onBulletinChange?.();
 
-      const remoteArchive = await publishBulletin(payload);
-      if (remoteArchive) setArchive(remoteArchive.items || []);
+      await publishBulletin(payload);
     } catch {
       setStatus("error");
       setResult({
@@ -772,65 +704,6 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
       });
     }
   }, [onBulletinChange, publishBulletin]);
-
-  async function hydrateArchivedBulletin(item, pdfBlob) {
-    if ((item.issue && item.validity) || !pdfBlob) return item;
-
-    try {
-      const text = await extractPdfText(pdfBlob);
-      const detection = getBestAlertLevel(text);
-      const issueDetails = getBulletinIssueDetails(text);
-      const validityDetails = getBulletinValidityDetails(text);
-      const enriched = {
-        ...item,
-        ...detection,
-        issue: item.issue || issueDetails.label,
-        issuedAt: item.issuedAt || issueDetails.issuedAt,
-        validity: item.validity || validityDetails.label,
-        validFrom: item.validFrom || validityDetails.validFrom,
-        validTo: item.validTo || validityDetails.validTo,
-        textPreview: item.textPreview || buildRelevantExtract(text, detection.matches),
-        textTerms: item.textTerms?.length
-          ? item.textTerms
-          : [...new Set([...detection.matches, detection.level, "Firenze", "Mugello", "Valdarno", "Sieve", "Ema"])]
-      };
-
-      setArchive((items) => {
-        const nextArchive = pruneBulletins([enriched, ...items.filter((entry) => entry.id !== enriched.id)]);
-        writeDeviceArchive(nextArchive);
-        return nextArchive;
-      });
-      await publishBulletin(enriched);
-      return enriched;
-    } catch {
-      return item;
-    }
-  }
-
-  async function openArchivedBulletin(item) {
-    let pdfBlob = await loadPdfBlob(item.id);
-    const pdfHref = getBulletinPdfHref(item);
-    if (!pdfBlob && pdfHref) {
-      try {
-        const response = await fetch(pdfHref);
-        if (response.ok) pdfBlob = await response.blob();
-      } catch {
-        pdfBlob = null;
-      }
-    }
-
-    const restoredPdfUrl = pdfBlob ? URL.createObjectURL(pdfBlob) : pdfHref;
-    const nextItem = await hydrateArchivedBulletin(item, pdfBlob);
-
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = restoredPdfUrl?.startsWith("blob:") ? restoredPdfUrl : null;
-    setResult(nextItem);
-    setStatus("done");
-    setPdfUrl(restoredPdfUrl);
-    setViewerOpen(false);
-    setExtractOpen(false);
-    setArchiveOpen(false);
-  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -850,7 +723,9 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
       >
         <button
           type="button"
-          onClick={() => setArchiveOpen((current) => !current)}
+          onClick={() => onToggleHistory?.()}
+          aria-expanded={Boolean(historyOpen)}
+          aria-controls="storico-bollettini"
           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
         >
           <Archive className="h-4 w-4 text-sky-300" />
@@ -947,83 +822,12 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
         </div>
       )}
 
-      {archiveOpen && (
-        <div className="rounded-lg border border-emergency-line bg-emergency-panel2 p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-100">Archivio bollettini</p>
-              <p className="text-xs text-slate-400">Ultimi 5 bollettini, con PDF consultabile quando disponibile. Il cestino ritira un bollettino pubblicato per errore.</p>
-            </div>
-            <button type="button" onClick={() => setArchiveOpen(false)} className="text-sm text-slate-400 hover:text-white">Chiudi</button>
-          </div>
-
-          {archive.length ? (
-            <div className="grid gap-2">
-              {archive.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-2 rounded-lg border border-emergency-line bg-black/10 p-2 sm:flex-row sm:items-center"
-                >
-                  <button
-                    type="button"
-                    onClick={() => openArchivedBulletin(item)}
-                    className="flex-1 rounded-md px-2 py-1 text-left hover:bg-white/[0.04]"
-                  >
-                    <span className="block text-sm font-medium text-slate-100">{item.fileName}</span>
-                    <span className="mt-1 block text-xs text-slate-400">{item.issue || "Emissione non rilevata"}</span>
-                    <span className="mt-1 block text-xs text-sky-100">{item.validity || "Validita non rilevata"}</span>
-                  </button>
-                  {confirmRemoveId === item.id ? (
-                    <div className="flex gap-2 sm:flex-col">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setConfirmRemoveId(null);
-                          removeBulletinRecord(item.id);
-                        }}
-                        disabled={removingId === item.id}
-                        className="min-h-11 rounded-md border border-emergency-red/60 bg-emergency-red/15 px-3 py-2 text-xs font-medium text-red-100 hover:bg-emergency-red/25 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {removingId === item.id ? "Rimozione..." : "Rimuovi"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmRemoveId(null)}
-                        className="min-h-11 rounded-md border border-emergency-line px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06]"
-                      >
-                        Annulla
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmRemoveId(item.id)}
-                      aria-label={"Rimuovi " + item.fileName + " dall'archivio"}
-                      title="Rimuovi dall'archivio"
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center self-start rounded-md border border-emergency-line px-3 py-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">Nessun bollettino archiviato.</p>
-          )}
-        </div>
-      )}
-
       {codePrompt && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
-            <p className="text-base font-semibold text-slate-100">
-              {codePrompt.mode === "delete" ? "Rimuovi il bollettino" : "Codice di pubblicazione"}
-            </p>
+            <p className="text-base font-semibold text-slate-100">Codice di pubblicazione</p>
             <p className="mt-1 text-sm text-slate-400">
-              {codePrompt.mode === "delete"
-                ? "Il bollettino viene ritirato dall'archivio condiviso: se era quello in corso, il livello in pagina torna a quello precedente. Conferma il codice per continuare."
-                : "Il bollettino viene pubblicato nell'archivio condiviso e compare subito in questa pagina. Conferma il codice per continuare: lo ricordiamo su questo browser."}
+              {"Il bollettino viene pubblicato nell'archivio condiviso e compare subito in questa pagina. Conferma il codice per continuare: lo ricordiamo su questo browser."}
             </p>
             <label className="mt-3 flex flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>
@@ -1056,7 +860,7 @@ export default function PdfParser({ onBulletinChange, currentLevel = null }) {
                 disabled={!codePrompt.code.trim()}
                 className="min-h-11 rounded-lg border border-sky-400/50 bg-sky-400/15 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {codePrompt.mode === "delete" ? "Rimuovi" : "Pubblica"}
+                Pubblica
               </button>
             </div>
           </div>

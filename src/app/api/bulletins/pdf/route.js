@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getBulletinArchive } from "@/lib/bulletinArchive";
+import { getBulletinArchive, readSharedBulletinPdf } from "@/lib/bulletinArchive";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,9 +28,12 @@ export async function GET(request) {
     return NextResponse.redirect(pdfUrl);
   }
 
-  const base64 = typeof pdfUrl === "string" && pdfUrl.startsWith("data:")
+  const inlineBase64 = typeof pdfUrl === "string" && pdfUrl.startsWith("data:")
     ? pdfUrl.replace(/^data:[^,]*,/, "")
     : null;
+  // Il PDF pubblicato da un altro dispositivo sta nei blocchi del KV condiviso.
+  const base64 = inlineBase64
+    || (record.hasSharedPdf ? await readSharedBulletinPdf(record.id, record.pdfChunks) : null);
   if (!base64) return badRequest(404, "PDF non disponibile per questo bollettino.");
 
   let bytes;

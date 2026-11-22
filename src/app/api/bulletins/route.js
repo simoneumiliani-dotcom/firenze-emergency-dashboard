@@ -14,7 +14,9 @@ export const runtime = "nodejs";
 const MAX_FILE_NAME = 160;
 const MAX_LABEL = 200;
 const MAX_TEXT = 4000;
-const MAX_URL = 2048;
+// Un PDF incorporato arriva come data URL base64: resta sotto il limite del
+// corpo richiesta di Vercel e viene poi spacchettato in blocchi nel KV.
+const MAX_PDF_URL = 3000000;
 const MAX_LIST_ITEMS = 50;
 const MAX_LIST_ITEM = 80;
 const LEVELS = new Set(["Verde", "Giallo", "Arancione", "Rosso"]);
@@ -99,11 +101,11 @@ function asIsoDate(value) {
 }
 
 function asPdfUrl(value) {
-  const text = asText(value, MAX_URL);
+  const text = asText(value, MAX_PDF_URL);
   if (!text) return null;
-  // I data URL base64 non vengono salvati: gonfiano il record oltre i limiti del KV
-  // e verrebbero riaperti in un iframe. Il PDF resta su IndexedDB nel dispositivo.
-  return /^https:\/\//i.test(text) ? text : null;
+  if (/^https:\/\//i.test(text)) return text;
+  // Solo PDF: un data URL diverso non deve entrare nell'archivio condiviso.
+  return /^data:application\/pdf[^,]*;base64,[A-Za-z0-9+/=]+$/i.test(text) ? text : null;
 }
 
 function validateBulletinPayload(payload) {

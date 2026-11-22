@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -9,14 +9,17 @@ import {
   Download,
   ExternalLink,
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
-import PdfParser from "@/components/PdfParser";
+import PdfParser, { loadPdfBlob, removeOldPdfBlobs } from "@/components/PdfParser";
 import SourcesLink from "@/components/SourcesLink";
 import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
-import { isBulletinCurrent, mergeBulletins, readDeviceArchive } from "@/lib/bulletinDeviceArchive";
+import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
+import { isBulletinCurrent, mergeBulletins, pruneBulletins, readDeviceArchive, readDeviceCurrentBulletin, writeDeviceArchive, writeDeviceCurrentBulletin } from "@/lib/bulletinDeviceArchive";
+import { strongestLevel } from "@/lib/toscanaZones";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const LEVEL_ORDER = ["Verde", "Giallo", "Arancione", "Rosso"];
@@ -32,6 +35,36 @@ const LEVEL_DOT = {
   Arancione: "bg-emergency-orange",
   Rosso: "bg-emergency-red"
 };
+const LEVEL_ICON = {
+  Verde: "text-emergency-green",
+  Giallo: "text-emergency-yellow",
+  Arancione: "text-emergency-orange",
+  Rosso: "text-emergency-red"
+};
+
+// Zone CFR che contengono ogni area fiorentina mostrata in pagina: i codici sono
+// quelli usati dal bollettino e dalle stazioni (Sieve/Mugello = M, Bisenzio = B,
+// Firenze/Greve/Ema = A3, Valdarno/Empolese = A4...). Servono a dare a ogni area
+// il simbolo con il colore della criticità che il PDF le assegna.
+const AREA_ZONES = {
+  firenze: ["A3", "B"],
+  mugello: ["M"],
+  sieve: ["M"],
+  valdarno: ["A3", "A4"],
+  "ombrone bisenzio": ["B"],
+  bisenzio: ["B"],
+  ema: ["A3"],
+  greve: ["A3"],
+  empolese: ["A4"],
+  chianti: ["A3"]
+};
+
+function getAreaLevel(item, area) {
+  const zones = AREA_ZONES[area] || [];
+  const levels = zones.map((zone) => item?.zoneLevels?.[zone]).filter(Boolean);
+  if (levels.length) return strongestLevel(levels);
+  return item?.provinceLevels?.FI || item?.level || null;
+}
 
 function normalizeLevel(value) {
   return LEVEL_ORDER.includes(value) ? value : "Verde";
@@ -65,6 +98,58 @@ function formatValidity(item) {
   if (from && to) return formatDateTime(from) + " - " + formatDateTime(to);
   if (to) return "fino a " + formatDateTime(to);
   return item?.validity || "validità non indicata";
+}
+
+const PDF_LINK_CLASS =
+  "text-left underline decoration-slate-500 decoration-dotted underline-offset-2 transition hover:text-sky-100 hover:decoration-sky-300";
+
+// La validità di ogni bollettino apre il PDF relativo in una nuova finestra.
+// Per i record solo su questo dispositivo il file arriva da IndexedDB.
+function ValidityPdfLink({ item }) {
+  const label = formatValidity(item);
+  const href = getBulletinPdfHref(item);
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        title="Apri il PDF del bollettino in una nuova finestra"
+        className={PDF_LINK_CLASS}
+      >
+        {label}
+      </a>
+    );
+  }
+
+  if (item?.hasLocalPdf) {
+    return (
+      <button
+        type="button"
+        onClick={async () => {
+          // La finestra si apre subito, nel gesto dell'utente: il browser non la
+          // blocca, e riceve il file appena IndexedDB lo restituisce.
+          const viewer = window.open("", "_blank");
+          const pdfBlob = await loadPdfBlob(item.id);
+          if (!pdfBlob) {
+            viewer?.close();
+            return;
+          }
+          const url = URL.createObjectURL(pdfBlob);
+          if (viewer) viewer.location.href = url;
+          else window.open(url, "_blank", "noopener");
+          window.setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+        }}
+        title="Apri il PDF del bollettino in una nuova finestra"
+        className={PDF_LINK_CLASS}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  return <span>{label}</span>;
 }
 
 function formatResidual(validTo, now) {
@@ -138,6 +223,14 @@ export default function AllertePage() {
   const [deviceItems, setDeviceItems] = useState([]);
   const [error, setError] = useState(null);
   const [now, setNow] = useState(() => Date.now());
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removeCode, setRemoveCode] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState(null);
+  const [removeNotice, setRemoveNotice] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const historyRef = useRef(null);
 
   const loadArchive = useCallback(async ({ quiet = false } = {}) => {
     // La copia del dispositivo è ciò che il riquadro PDF ha già caricato qui:
@@ -159,6 +252,66 @@ export default function AllertePage() {
   // mostrare il caricamento, così il bollettino appare subito in pagina.
   const handleBulletinChange = useCallback(() => loadArchive({ quiet: true }), [loadArchive]);
 
+  // Ritiro di un bollettino pubblicato per errore: la funzione che stava nel
+  // vecchio archivio locale ora vive qui, nello storico.
+  const openRemoveDialog = useCallback((item) => {
+    let remembered = DEFAULT_BULLETIN_PUBLISH_CODE;
+    try {
+      remembered = window.localStorage.getItem(PUBLISH_CODE_STORAGE_KEY) || DEFAULT_BULLETIN_PUBLISH_CODE;
+    } catch {}
+    setRemoveTarget(item);
+    setRemoveCode(remembered);
+    setRemoveError(null);
+    setRemoveNotice(null);
+  }, []);
+
+  const confirmRemove = useCallback(async () => {
+    const code = removeCode.trim();
+    if (!code || !removeTarget || removing) return;
+
+    setRemoving(true);
+    setRemoveError(null);
+    const id = removeTarget.id;
+
+    try {
+      const response = await fetch("/api/bulletins?id=" + encodeURIComponent(id), {
+        method: "DELETE",
+        headers: { "x-bulletin-token": code }
+      });
+
+      if (response.status === 401) {
+        try { window.localStorage.removeItem(PUBLISH_CODE_STORAGE_KEY); } catch {}
+        setRemoveError("Codice non valido: controlla il codice di pubblicazione.");
+        return;
+      }
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setRemoveError(body?.error || "Archivio condiviso non raggiungibile.");
+        return;
+      }
+
+      try { window.localStorage.setItem(PUBLISH_CODE_STORAGE_KEY, code); } catch {}
+
+      // Stessa pulizia che faceva il vecchio archivio: copia sul dispositivo,
+      // PDF in IndexedDB e bollettino corrente.
+      const nextLocal = pruneBulletins(readDeviceArchive().filter((item) => item.id !== id));
+      writeDeviceArchive(nextLocal);
+      setDeviceItems(nextLocal);
+      await removeOldPdfBlobs(nextLocal.map((item) => item.id));
+      if (readDeviceCurrentBulletin()?.id === id) writeDeviceCurrentBulletin(null);
+
+      setRemoveTarget(null);
+      setRemoveNotice({ ok: true, message: "Bollettino rimosso dall'archivio condiviso." });
+      setRefreshKey((key) => key + 1);
+      await loadArchive({ quiet: true });
+    } catch {
+      setRemoveError("Archivio condiviso non raggiungibile.");
+    } finally {
+      setRemoving(false);
+    }
+  }, [loadArchive, removeCode, removeTarget, removing]);
+
   useEffect(() => {
     loadArchive();
     const timer = window.setInterval(() => loadArchive({ quiet: true }), REFRESH_INTERVAL_MS);
@@ -169,12 +322,26 @@ export default function AllertePage() {
     };
   }, [loadArchive]);
 
+  // Il pulsante Archivio apre lo storico più in basso: senza scorrimento, su
+  // schermo piccolo la sezione resterebbe fuori vista.
+  useEffect(() => {
+    if (!historyOpen) return;
+    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [historyOpen]);
+
   // Archivio condiviso più la copia del dispositivo, senza doppioni: il bollettino
   // appena caricato qui resta visibile anche senza archivio condiviso.
   const items = useMemo(() => {
     const sharedItems = Array.isArray(archive?.items) ? archive.items : [];
     return mergeBulletins(sharedItems, deviceItems, archive?.archiveLimit);
   }, [archive, deviceItems]);
+
+  // Solo i bollettini presenti nell'archivio condiviso possono essere ritirati
+  // dal server: quelli rimasti solo su questo dispositivo non hanno un record remoto.
+  const sharedIds = useMemo(
+    () => new Set((Array.isArray(archive?.items) ? archive.items : []).map((item) => item.id)),
+    [archive]
+  );
 
   // Solo un bollettino con scadenza futura è "in corso": senza validTo non è
   // possibile affermare che l'allerta sia ancora attiva.
@@ -191,7 +358,6 @@ export default function AllertePage() {
   // items arriva dal più recente: senza allerta valida resta utile mostrare
   // l'ultimo bollettino pubblicato, invece di lasciare la scheda vuota.
   const lastArchived = items[0] || null;
-  const sharedArchive = archive?.persistent !== false;
 
   return (
     <PageLayout>
@@ -215,15 +381,9 @@ export default function AllertePage() {
             <div className="rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 px-4 py-3 text-sm text-orange-100">{error}</div>
           )}
 
-          {archive && !sharedArchive && (
-            <div className="rounded-lg border border-emergency-orange/40 bg-emergency-orange/5 px-4 py-3 text-sm text-orange-100">
-              Archivio condiviso non configurato su questo server: qui compaiono i bollettini pubblicati da questo dispositivo, quelli degli altri dispositivi non sono visibili.
-            </div>
-          )}
-
           <section className="panel p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bollettino corrente</p>
+              <h2 className="text-lg font-semibold text-white">Bollettino corrente</h2>
               {current ? <LevelBadge level={currentLevel} size="lg" /> : null}
             </div>
 
@@ -237,7 +397,7 @@ export default function AllertePage() {
                     </div>
                     <div className="rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2">
                       <dt className="text-xs uppercase tracking-wide text-slate-500">Validità</dt>
-                      <dd className="mt-1 text-slate-200">{formatValidity(current)}</dd>
+                      <dd className="mt-1 text-slate-200"><ValidityPdfLink item={current} /></dd>
                     </div>
                   </dl>
 
@@ -245,12 +405,27 @@ export default function AllertePage() {
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aree fiorentine interessate</p>
                     {areas.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {areas.map((area) => (
-                          <span key={area} className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200">
-                            <MapPin className="h-3.5 w-3.5 text-sky-300" />
-                            {area}
-                          </span>
-                        ))}
+                        {areas.map((area) => {
+                          const areaLevel = getAreaLevel(current, area);
+                          return (
+                            <span
+                              key={area}
+                              title={areaLevel ? area + ": allerta " + areaLevel : area}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200"
+                            >
+                              {areaLevel ? (
+                                <AlertTriangle
+                                  aria-hidden="true"
+                                  className={"h-3.5 w-3.5 fill-current " + (LEVEL_ICON[areaLevel] || "text-slate-400")}
+                                />
+                              ) : (
+                                <MapPin className="h-3.5 w-3.5 text-sky-300" />
+                              )}
+                              {area}
+                              {areaLevel ? <span className="sr-only">, allerta {areaLevel}</span> : null}
+                            </span>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="mt-1 text-sm text-slate-400">Aree non specificate nel bollettino.</p>
@@ -290,7 +465,7 @@ export default function AllertePage() {
                         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ultimo bollettino pubblicato</p>
                         <LevelBadge level={normalizeLevel(lastArchived.level)} />
                       </div>
-                      <p className="mt-2 text-sm text-slate-200">{formatValidity(lastArchived)}</p>
+                      <p className="mt-2 text-sm text-slate-200"><ValidityPdfLink item={lastArchived} /></p>
                       <p className="mt-1 text-sm leading-6 text-slate-400">{lastArchived.reason || "Motivazione non registrata."}</p>
                       <div className="mt-1">
                         <BulletinPdfLink item={lastArchived} label="Apri il PDF" />
@@ -300,10 +475,17 @@ export default function AllertePage() {
                 </>
               )}
 
-              <PdfParser currentLevel={current ? currentLevel : null} onBulletinChange={handleBulletinChange} />
+              <PdfParser
+                currentLevel={current ? currentLevel : null}
+                onBulletinChange={handleBulletinChange}
+                historyOpen={historyOpen}
+                onToggleHistory={() => setHistoryOpen((open) => !open)}
+                refreshKey={refreshKey}
+              />
             </div>
           </section>
-          <section className="panel p-4 sm:p-5">
+          {historyOpen && (
+          <section id="storico-bollettini" ref={historyRef} className="panel scroll-mt-24 p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-lg font-semibold text-white">Storico bollettini</h2>
@@ -311,6 +493,12 @@ export default function AllertePage() {
               </div>
               <span className="text-xs text-slate-500">{archivedCount} record</span>
             </div>
+
+            {removeNotice && (
+              <p className="mt-3 rounded-lg border border-emergency-green/40 bg-emergency-green/10 px-3 py-2 text-xs text-green-100">
+                {removeNotice.message}
+              </p>
+            )}
 
             {archivedCount ? (
               <>
@@ -332,7 +520,7 @@ export default function AllertePage() {
                       <dl className="mt-3 grid gap-2 text-xs">
                         <div className="flex gap-2">
                           <dt className="w-20 shrink-0 text-slate-500">Validità</dt>
-                          <dd className="min-w-0 text-slate-200">{formatValidity(item)}</dd>
+                          <dd className="min-w-0 text-slate-200"><ValidityPdfLink item={item} /></dd>
                         </div>
                         <div className="flex gap-2">
                           <dt className="w-20 shrink-0 text-slate-500">Variazione</dt>
@@ -352,8 +540,19 @@ export default function AllertePage() {
                           </div>
                         )}
                       </dl>
-                      <div className="mt-2 border-t border-emergency-line/60 pt-1">
+                      <div className="mt-2 flex items-center justify-between gap-2 border-t border-emergency-line/60 pt-1">
                         <BulletinPdfLink item={item} />
+                        {sharedIds.has(item.id) && (
+                          <button
+                            type="button"
+                            onClick={() => openRemoveDialog(item)}
+                            aria-label={"Rimuovi " + (item.fileName || "il bollettino") + " dall'archivio"}
+                            title="Rimuovi dall'archivio"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-emergency-line px-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -370,7 +569,8 @@ export default function AllertePage() {
                       <th className="py-2 pr-3 font-medium">Variazione</th>
                       <th className="py-2 pr-3 font-medium">Aree</th>
                       <th className="py-2 pr-3 font-medium">Motivo</th>
-                      <th className="py-2 font-medium">PDF</th>
+                      <th className="py-2 pr-3 font-medium">PDF</th>
+                      <th className="py-2 font-medium">Rimuovi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -386,7 +586,7 @@ export default function AllertePage() {
                             {isCurrent && <span className="ml-2 rounded border border-sky-400/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-sky-200">in corso</span>}
                           </td>
                           <td className="py-3 pr-3"><LevelBadge level={level} /></td>
-                          <td className="py-3 pr-3 text-slate-300">{formatValidity(item)}</td>
+                          <td className="py-3 pr-3 text-slate-300"><ValidityPdfLink item={item} /></td>
                           <td className={"py-3 pr-3 " + delta.className}>
                             <span className="inline-flex items-center gap-1">
                               {DeltaIcon ? <DeltaIcon className="h-3.5 w-3.5" /> : null}
@@ -399,8 +599,23 @@ export default function AllertePage() {
                           <td className="max-w-[18rem] py-3 pr-3 text-slate-400">
                             <span className="line-clamp-2">{item.reason || "—"}</span>
                           </td>
-                          <td className="py-3">
+                          <td className="py-3 pr-3">
                             <BulletinPdfLink item={item} />
+                          </td>
+                          <td className="py-3">
+                            {sharedIds.has(item.id) ? (
+                              <button
+                                type="button"
+                                onClick={() => openRemoveDialog(item)}
+                                aria-label={"Rimuovi " + (item.fileName || "il bollettino") + " dall'archivio"}
+                                title="Rimuovi dall'archivio"
+                                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-emergency-line px-2 text-slate-400 hover:border-emergency-red/60 hover:bg-emergency-red/10 hover:text-red-100"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-600">—</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -415,6 +630,58 @@ export default function AllertePage() {
               </div>
             )}
           </section>
+          )}
+
+          {removeTarget && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
+              <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
+                <p className="text-base font-semibold text-slate-100">Rimuovi il bollettino</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {(removeTarget.fileName || "Il bollettino") + " viene ritirato dall'archivio condiviso: se era quello in corso, il livello in pagina torna a quello precedente. Conferma il codice per continuare."}
+                </p>
+                <label className="mt-3 flex flex-col gap-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>
+                  <input
+                    type="text"
+                    value={removeCode}
+                    onChange={(event) => {
+                      setRemoveCode(event.target.value);
+                      setRemoveError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        confirmRemove();
+                      }
+                    }}
+                    autoComplete="off"
+                    className="min-h-11 rounded-md border border-emergency-line bg-emergency-panel2 px-3 py-2 text-base text-slate-100 outline-none focus:border-sky-400 sm:text-sm"
+                  />
+                </label>
+                {removeError && <p className="mt-2 text-xs text-red-200">{removeError}</p>}
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemoveTarget(null);
+                      setRemoveError(null);
+                    }}
+                    className="min-h-11 rounded-lg border border-emergency-line bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.08]"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmRemove}
+                    disabled={!removeCode.trim() || removing}
+                    className="min-h-11 rounded-lg border border-emergency-red/60 bg-emergency-red/15 px-4 py-2 text-sm font-medium text-red-100 hover:bg-emergency-red/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {removing ? "Rimozione..." : "Rimuovi"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <footer className="flex flex-col gap-1 pb-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>

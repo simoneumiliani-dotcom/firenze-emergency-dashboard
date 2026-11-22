@@ -24,9 +24,11 @@ export function getBulletinPdfHref(item) {
 export function toPublicBulletin(item) {
   if (!item) return item;
   const inline = isInlinePdfUrl(item.pdfUrl);
+  // hasSharedPdf: il PDF sta nei blocchi del KV condiviso ed è servito da
+  // /api/bulletins/pdf, quindi è raggiungibile da qualunque dispositivo.
   return {
     ...item,
     pdfUrl: inline ? null : item.pdfUrl || null,
-    hasEmbeddedPdf: inline || Boolean(item.hasEmbeddedPdf)
+    hasEmbeddedPdf: inline || Boolean(item.hasEmbeddedPdf) || Boolean(item.hasSharedPdf)
   };
 }

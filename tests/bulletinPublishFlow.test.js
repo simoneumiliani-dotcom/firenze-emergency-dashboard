@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DELETE, GET, POST } from "@/app/api/bulletins/route";
+import { GET as GET_PDF } from "@/app/api/bulletins/pdf/route";
 import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
 import {
   isBulletinCurrent,
@@ -20,6 +21,7 @@ function createKvStub({ failWrites = false } = {}) {
       if (failWrites) return new Response("errore", { status: 500 });
       for (const [command, key, value] of JSON.parse(options.body || "[]")) {
         if (command === "SET") store.set(key, value);
+        if (command === "DEL") store.delete(key);
       }
       return new Response(JSON.stringify([{ result: "OK" }]), { status: 200 });
     }
@@ -151,6 +153,58 @@ describe("pubblicazione nell'archivio condiviso (/api/bulletins)", () => {
     expect(body.persistent).toBe(false);
     expect(body.items).toHaveLength(1);
     expect(kv.fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("PDF condiviso tra dispositivi", () => {
+  const pdfBase64 = Buffer.from("%PDF-1.4\nbollettino di prova\n%%EOF\n").toString("base64");
+
+  function pdfRequest(id) {
+    return new Request("http://localhost/api/bulletins/pdf?id=" + encodeURIComponent(id));
+  }
+
+  it("serve a un altro dispositivo il PDF pubblicato, fuori dal record d'archivio", async () => {
+    const published = await (await POST(postRequest({
+      ...bulletin,
+      id: "condiviso-pdf",
+      pdfUrl: "data:application/pdf;base64," + pdfBase64
+    }))).json();
+
+    expect(published.saved).toBe(true);
+    expect(published.items[0].hasEmbeddedPdf).toBe(true);
+    expect(published.items[0].pdfUrl).toBeNull();
+    // Il base64 non sta nel record, ma in blocchi separati nel KV.
+    expect(readArchive(kv.store).items[0].pdfUrl).toBeNull();
+    expect(readArchive(kv.store).items[0].pdfChunks).toBe(1);
+
+    // Un altro client riceve il bollettino e può scaricarne il PDF.
+    const listed = await (await GET()).json();
+    expect(listed.items[0].hasEmbeddedPdf).toBe(true);
+
+    const response = await GET_PDF(pdfRequest("condiviso-pdf"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(Buffer.from(await response.arrayBuffer()).toString("base64")).toBe(pdfBase64);
+  });
+
+  it("divide i PDF grandi in più blocchi e li rimuove con il bollettino", async () => {
+    const bigBase64 = "A".repeat(1500000);
+    const published = await (await POST(postRequest({
+      ...bulletin,
+      id: "pdf-grande",
+      pdfUrl: "data:application/pdf;base64," + bigBase64
+    }))).json();
+
+    expect(published.saved).toBe(true);
+    expect(readArchive(kv.store).items[0].pdfChunks).toBe(3);
+
+    const response = await GET_PDF(pdfRequest("pdf-grande"));
+    expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer()).toString("base64")).toBe(bigBase64);
+
+    await DELETE(deleteRequest("pdf-grande"));
+    expect(kv.store.has("firenze:bulletin-pdf:v1:pdf-grande:0")).toBe(false);
+    expect(kv.store.has("firenze:bulletin-pdf:v1:pdf-grande:2")).toBe(false);
   });
 });
 
