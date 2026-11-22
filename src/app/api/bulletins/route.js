@@ -109,6 +109,22 @@ function asZoneRiskMap(value) {
   return Object.keys(clean).length ? clean : null;
 }
 
+// Tempi per zona e rischio, dalla colonna "tempistica" del bollettino:
+// { B: { idrogeologico: "in corso fino alle ore 23.59…" } }.
+function asZoneTimingMap(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const clean = {};
+  Object.entries(value).forEach(([zone, risks]) => {
+    if (!ZONE_CODES.includes(zone) || !risks || typeof risks !== "object" || Array.isArray(risks)) return;
+    const entries = Object.entries(risks)
+      .filter(([risk, timing]) => RISK_KEYS.includes(risk) && typeof timing === "string" && timing.trim())
+      .slice(0, RISK_KEYS.length)
+      .map(([risk, timing]) => [risk, timing.trim().slice(0, MAX_LABEL)]);
+    if (entries.length) clean[zone] = Object.fromEntries(entries);
+  });
+  return Object.keys(clean).length ? clean : null;
+}
+
 function asIsoDate(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
@@ -155,6 +171,7 @@ function validateBulletinPayload(payload) {
       textTerms: asTextList(payload.textTerms),
       zoneLevels: asLevelMap(payload.zoneLevels, ZONE_CODES),
       zoneRisks: asZoneRiskMap(payload.zoneRisks),
+      zoneTimings: asZoneTimingMap(payload.zoneTimings),
       provinceLevels: asLevelMap(payload.provinceLevels, Object.keys(TOSCANA_PROVINCES)),
       pdfUrl: asPdfUrl(payload.pdfUrl),
       uploadedAt: asIsoDate(payload.uploadedAt) || undefined

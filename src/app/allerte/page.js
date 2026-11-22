@@ -95,13 +95,59 @@ function zoneLabel(zone) {
   return zone + " " + ZONE_NAMES[zone];
 }
 
-// Rischio che determina il livello mostrato: distingue, per esempio, un giallo
-// per vento da uno per idrogeologico.
-function riskNote(item, zone, level) {
-  const risks = item?.zoneRisks?.[zone];
-  if (!risks) return "";
-  const names = Object.keys(risks).filter((risk) => risks[risk] === level);
-  return names.length ? " · " + names.join(", ") : "";
+const RISK_LABELS = {
+  temporali: "TEMPORALI",
+  vento: "VENTO",
+  mareggiate: "MAREGGIATE",
+  neve: "NEVE",
+  ghiaccio: "GHIACCIO"
+};
+
+// Criticità del riquadro: il reticolo minore sta nella stessa cella
+// dell'idrogeologico, quindi non è una voce a sé.
+function riskLabel(risks) {
+  const list = Array.isArray(risks) ? risks : [];
+  const labels = [];
+  if (list.includes("idrogeologico")) {
+    labels.push(list.includes("idraulico") ? "IDROGEO. RETICOLO MINORE" : "IDROGEO.");
+  } else if (list.includes("idraulico")) {
+    labels.push("IDRAULICO RETICOLO MINORE");
+  }
+  list.forEach((risk) => {
+    if (risk === "idrogeologico" || risk === "idraulico") return;
+    labels.push(RISK_LABELS[risk] || risk.toUpperCase());
+  });
+  return labels.join(" · ");
+}
+
+// Un riquadro per zona e livello: quando la stessa zona ha criticità con livelli
+// diversi (giallo per vento e arancione per idrogeologico) restano separate,
+// ognuna con la sua icona, la sua criticità e i suoi tempi.
+function zoneBoxes(item) {
+  return fiorentineZones(item).flatMap((zone) => {
+    const risks = item?.zoneRisks?.[zone] || {};
+    const byLevel = new Map();
+    Object.entries(risks).forEach(([risk, level]) => {
+      const value = normalizeLevel(level);
+      byLevel.set(value, [...(byLevel.get(value) || []), risk]);
+    });
+
+    if (!byLevel.size) {
+      return [{ key: zone, zone, level: normalizeLevel(item?.zoneLevels?.[zone]), risks: [], timing: "" }];
+    }
+
+    return [...byLevel.entries()]
+      .sort((left, right) => levelWeight(right[0]) - levelWeight(left[0]))
+      .map(([level, list]) => ({
+        key: zone + "-" + level,
+        zone,
+        level,
+        risks: list,
+        timing: [...new Set(
+          list.map((risk) => item?.zoneTimings?.[zone]?.[risk]).filter(Boolean)
+        )].join(" · ")
+      }));
+  });
 }
 
 const PDF_LINK_CLASS =
@@ -355,7 +401,7 @@ export default function AllertePage() {
   );
 
   const currentLevel = normalizeLevel(current?.level);
-  const currentZones = fiorentineZones(current);
+  const currentBoxes = zoneBoxes(current);
   const currentPdfHref = getBulletinPdfHref(current);
   const currentPdfIsDownload = isInlinePdfUrl(current?.pdfUrl) || Boolean(current?.hasEmbeddedPdf);
   const archivedCount = items.length;
@@ -386,10 +432,7 @@ export default function AllertePage() {
           )}
 
           <section className="panel p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Bollettino corrente</h2>
-              {current ? <LevelBadge level={currentLevel} size="lg" /> : null}
-            </div>
+            <h2 className="text-lg font-semibold text-white">Bollettino corrente</h2>
 
             <div className="mt-4 flex flex-col gap-4">
               {current ? (
@@ -407,26 +450,31 @@ export default function AllertePage() {
 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aree fiorentine interessate</p>
-                    {currentZones.length ? (
+                    {currentBoxes.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {currentZones.map((zone) => {
-                          const zoneLevel = normalizeLevel(current.zoneLevels[zone]);
-                          const ZoneIcon = LEVEL_SHAPE[zoneLevel];
+                        {currentBoxes.map(({ key, zone, level, risks, timing }) => {
+                          const ZoneIcon = LEVEL_SHAPE[level];
                           const label = zoneLabel(zone);
+                          const note = riskLabel(risks);
                           return (
                             <span
-                              key={zone}
-                              title={label + ": allerta " + zoneLevel + riskNote(current, zone, zoneLevel)}
+                              key={key}
+                              title={
+                                label + ": allerta " + level +
+                                (note ? " per " + note.toLowerCase() : "") +
+                                (timing ? " (" + timing + ")" : "")
+                              }
                               className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200"
                             >
                               <ZoneIcon
                                 aria-hidden="true"
-                                className={"h-3.5 w-3.5 fill-current " + LEVEL_ICON[zoneLevel]}
+                                className={"h-3.5 w-3.5 shrink-0 fill-current " + LEVEL_ICON[level]}
                               />
-                              {label}
-                              <span className="text-slate-400">
-                                {" " + zoneLevel + riskNote(current, zone, zoneLevel)}
-                              </span>
+                              <span>{label}</span>
+                              {note && <span className="text-[11px] font-semibold text-slate-300">{note}</span>}
+                              {timing && (
+                                <span className="hidden text-[11px] text-slate-500 md:inline">· {timing}</span>
+                              )}
                             </span>
                           );
                         })}

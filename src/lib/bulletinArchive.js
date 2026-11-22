@@ -157,6 +157,7 @@ function buildBulletinRecord(input) {
     textTerms: Array.isArray(input.textTerms) ? input.textTerms : [],
     zoneLevels: input.zoneLevels && typeof input.zoneLevels === "object" ? input.zoneLevels : null,
     zoneRisks: input.zoneRisks && typeof input.zoneRisks === "object" ? input.zoneRisks : null,
+    zoneTimings: input.zoneTimings && typeof input.zoneTimings === "object" ? input.zoneTimings : null,
     provinceLevels:
       input.provinceLevels && typeof input.provinceLevels === "object" ? input.provinceLevels : null,
     pdfUrl: input.pdfUrl || null,

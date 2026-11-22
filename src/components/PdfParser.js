@@ -7,6 +7,7 @@ import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 import {
   DEFAULT_PROVINCE,
   LEVEL_NAMES,
+  LEVEL_ORDER,
   PROVINCE_ZONES,
   TOSCANA_PROVINCES,
   ZONE_CODES,
@@ -25,6 +26,11 @@ import {
 
 const PDF_DB_NAME = "firenze-bulletin-pdfs";
 const PDF_DB_STORE = "pdfs";
+
+// Tutti i comandi della scheda usano lo stesso tasto (quello di "Seleziona
+// PDF"): Archivio, testo estratto, lettura e download non si distinguono più.
+const ACTION_BUTTON =
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20";
 
 const TERRITORY_KEYWORDS = [
   "firenze",
@@ -68,32 +74,74 @@ function risksOf(text) {
   return RISK_PATTERNS.filter(([pattern]) => pattern.test(text)).map(([, risk]) => risk);
 }
 
-function parseZoneAlertRows(text) {
-  const rows = [];
-  let lastRowLine = -1;
+// La cella "tempistica" del bollettino va a capo sulla riga sotto ("dalle ore
+// 15.00 Domenica, 22" / "Novembre 2026"): i frammenti si ricompongono riga per
+// riga, tenendo solo le parole di tempo.
+const TIMING_HINT =
+  /\d{1,2}[.:]\d{2}|\bin corso fino\b|\b(?:domenica|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato)\b|\b(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\b/i;
+const TIMING_TOKEN =
+  /^(?:in|corso|fino|dalle|alle|ore|\d{1,2}[.:]\d{2}|\d{1,2}|\d{4}|domenica|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)$/i;
 
-  // La cella "rischio" può continuare sulla riga sotto ("IDRAULICO RETICOLO
-  // MINORE"): una riga senza zone ma con un rischio va attribuita alla riga
-  // precedente della stessa cella, cioè quella subito sopra.
-  const attachRisksToPreviousRow = (line, lineIndex) => {
-    const previous = rows[rows.length - 1];
-    if (!previous || lineIndex !== lastRowLine + 1) return;
-    const risks = risksOf(line);
-    if (!risks.length) return;
-    previous.risks = [...new Set([...previous.risks, ...risks])];
-  };
+function timingOf(lines) {
+  return lines
+    .join(" ")
+    .split(/\s+/)
+    .filter((token) => TIMING_TOKEN.test(token.replace(/,$/, "")))
+    .join(" ");
+}
 
-  String(text || "").split("\n").forEach((rawRow, lineIndex) => {
-    const row = rawRow.replace(/\s+/g, " ").trim();
-    if (!row) return;
+const LEVEL_WORDS = Object.keys(LEVEL_NAMES);
 
-    const levelMatches = [...row.matchAll(/\b(verde|giallo|arancione|rosso)\b/gi)];
-    if (!levelMatches.length) {
-      attachRisksToPreviousRow(row, lineIndex);
-      return;
+// La colonna della criticità non sempre sta su una riga sola: il livello può
+// spezzarsi in "ALLERTA - CODICE ARANCIO" e, due righe sotto, "ARANCIONE".
+// "ARANCIO" non è un livello valido, quindi senza ricomporlo la riga viene
+// scartata e le sue zone (con il loro rischio e i loro tempi) spariscono dai
+// dati. Il nome completo si cerca solo nelle righe immediatamente sotto e
+// prima della zona successiva, per non prendere il livello di un'altra voce.
+function completeSplitLevels(lines) {
+  const zoneRow = new RegExp("\\b" + ZONE_CODE_PATTERN + "\\b", "i");
+  const fullLevel = (word) => new RegExp("\\b" + word + "\\b", "i");
+
+  return lines.map((line, index) => {
+    if (!line || !zoneRow.test(line) || !risksOf(line).length) return line;
+    // Livello già completo sulla riga: non c'è niente da ricomporre.
+    if (LEVEL_WORDS.some((word) => fullLevel(word).test(line))) return line;
+
+    const truncated = [...line.matchAll(/\b[A-Za-zÀ-ÿ]{4,}\b/g)]
+      .map((match) => match[0])
+      .find((word) => {
+        const lower = word.toLowerCase();
+        return LEVEL_WORDS.some((level) => level !== lower && level.startsWith(lower));
+      });
+    if (!truncated) return line;
+
+    const level = LEVEL_WORDS.find((word) => word.startsWith(truncated.toLowerCase()));
+    for (let next = index + 1; next < Math.min(lines.length, index + 5); next += 1) {
+      const candidate = lines[next];
+      if (!candidate) continue;
+      if (zoneRow.test(candidate)) break;
+      if (!fullLevel(level).test(candidate)) continue;
+      return line.replace(fullLevel(truncated), level.toUpperCase());
     }
 
-    let parsed = false;
+    return line;
+  });
+}
+
+function parseZoneAlertRows(text) {
+  const lines = completeSplitLevels(
+    String(text || "")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+  );
+
+  // Righe della tabella con un livello: zona, rischio e livello stanno sulla
+  // stessa riga, mentre rischio e tempistica possono continuare su quelle sotto.
+  const entries = [];
+  lines.forEach((row, lineIndex) => {
+    const levelMatches = [...row.matchAll(/\b(verde|giallo|arancione|rosso)\b/gi)];
+    if (!row || !levelMatches.length) return;
+
     levelMatches.forEach((levelMatch) => {
       const before = row.slice(0, levelMatch.index);
       const lists = [
@@ -118,20 +166,38 @@ function parseZoneAlertRows(text) {
 
       const riskText = row.slice(zoneList.index + zoneList[0].length, levelMatch.index);
 
-      rows.push({
+      entries.push({
+        lineIndex,
         zones,
         risks: risksOf(riskText),
         level: LEVEL_NAMES[levelMatch[1].toLowerCase()],
         inProgress: /in\s+corso/i.test(row)
       });
-      parsed = true;
     });
-
-    if (parsed) lastRowLine = lineIndex;
-    else attachRisksToPreviousRow(row, lineIndex);
   });
 
-  return rows;
+  // Ogni voce arriva fino alla voce successiva: le righe di mezzo portano la
+  // continuazione di rischio e tempi, e si fermano alla prima senza orario
+  // (titoli delle pagine di scenario, note, piè di pagina). Si fermano anche
+  // quando inizia una nuova tempistica ("in corso fino" / "dalle ore"), così
+  // le righe di una voce non assorbono quelle della voce successiva.
+  return entries.map((entry, index) => {
+    const block = [];
+    const end = entries[index + 1]?.lineIndex ?? lines.length;
+    for (let lineIndex = entry.lineIndex + 1; lineIndex < end; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (!line) continue;
+      if (!TIMING_HINT.test(line)) break;
+      if (/\bin corso fino\b|\bdalle ore\b/i.test(line)) break;
+      block.push(line);
+    }
+
+    return {
+      ...entry,
+      risks: [...new Set([...entry.risks, ...block.flatMap(risksOf)])],
+      timing: timingOf([lines[entry.lineIndex], ...block])
+    };
+  });
 }
 
 function getZoneLevels(text) {
@@ -158,24 +224,39 @@ function getZoneLevels(text) {
   // pagina ricava le zone in corso e quelle in previsione. Il rischio evita di
   // scambiare un giallo per vento con un'allerta idrogeologica.
   const zoneRisks = {};
+  // Tempi dichiarati nel PDF per ogni zona e rischio: il riquadro in pagina
+  // mostra il periodo della riga che assegna il livello più alto (a parità di
+  // livello vale la riga più avanti nel bollettino).
+  const zoneTimings = {};
   rows.forEach((row) => {
     row.zones.forEach((zone) => {
       const perZone = zoneRisks[zone] || {};
+      const timings = zoneTimings[zone] || {};
       row.risks.forEach((risk) => {
-        perZone[risk] = strongestLevel([perZone[risk], row.level].filter(Boolean));
+        const previous = perZone[risk];
+        perZone[risk] = strongestLevel([previous, row.level].filter(Boolean));
+        if (row.timing && (!previous || LEVEL_ORDER[row.level] >= LEVEL_ORDER[previous])) {
+          timings[risk] = row.timing;
+        }
       });
       if (Object.keys(perZone).length) zoneRisks[zone] = perZone;
+      if (Object.keys(timings).length) zoneTimings[zone] = timings;
     });
   });
 
-  return { inProgressLevels: levelsOf(selectedRows), zoneLevels: levelsOf(rows), zoneRisks };
+  return {
+    inProgressLevels: levelsOf(selectedRows),
+    zoneLevels: levelsOf(rows),
+    zoneRisks,
+    zoneTimings
+  };
 }
 
 function getBestAlertLevel(text, province = DEFAULT_PROVINCE) {
   const parsed = getZoneLevels(text);
 
   if (parsed) {
-    const { inProgressLevels, zoneLevels, zoneRisks } = parsed;
+    const { inProgressLevels, zoneLevels, zoneRisks, zoneTimings } = parsed;
     const provinceLevels = getProvinceLevels(inProgressLevels);
     const sigla = TOSCANA_PROVINCES[province] ? province : DEFAULT_PROVINCE;
     const provinceZones = PROVINCE_ZONES[sigla];
@@ -195,6 +276,7 @@ function getBestAlertLevel(text, province = DEFAULT_PROVINCE) {
       matches: areasForZones(Object.keys(bulletinZones)),
       zoneLevels: bulletinZones,
       zoneRisks: onlyProvince(zoneRisks),
+      zoneTimings: onlyProvince(zoneTimings),
       provinceLevels,
       reason:
         `Livello ${provinceLevels[sigla]} per la provincia di ${TOSCANA_PROVINCES[sigla]}` +
@@ -796,12 +878,12 @@ export default function PdfParser({
           onClick={() => onToggleHistory?.()}
           aria-expanded={Boolean(historyOpen)}
           aria-controls="storico-bollettini"
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+          className={ACTION_BUTTON}
         >
-          <Archive className="h-4 w-4 text-sky-300" />
+          <Archive className="h-4 w-4" />
           Archivio
         </button>
-        <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20">
+        <label className={ACTION_BUTTON + " cursor-pointer"}>
           <FileText className="h-4 w-4" />
           Seleziona PDF
           <input
@@ -818,15 +900,15 @@ export default function PdfParser({
           <button
             type="button"
             onClick={() => setExtractOpen((current) => !current)}
-            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+            className={ACTION_BUTTON}
           >
-            <FileText className="h-4 w-4 text-sky-300" />
+            <FileText className="h-4 w-4" />
             Testo estratto
           </button>
           <button
             type="button"
             onClick={() => setViewerOpen((current) => !current)}
-            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+            className={ACTION_BUTTON}
           >
             <Eye className="h-4 w-4" />
             {viewerOpen ? "Chiudi PDF" : "Leggi bollettino"}
@@ -835,9 +917,9 @@ export default function PdfParser({
             <a
               href={pdfUrl}
               download={result.fileName}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emergency-line bg-emergency-panel2 px-3 text-xs font-semibold text-slate-200 transition hover:border-sky-400/40 hover:text-sky-100"
+              className={ACTION_BUTTON}
             >
-              <Download className="h-4 w-4 text-sky-300" />
+              <Download className="h-4 w-4" />
               Scarica
             </a>
           )}
