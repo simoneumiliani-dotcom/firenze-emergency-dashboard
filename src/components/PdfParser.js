@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Archive, AlertTriangle, Download, Eye, FileText, XCircle } from "lucide-react";
+import { Archive, Download, Eye, FileText, XCircle } from "lucide-react";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { getBulletinPdfHref, toPublicBulletin } from "@/lib/bulletinPdf";
 import {
@@ -10,6 +10,7 @@ import {
   PROVINCE_ZONES,
   TOSCANA_PROVINCES,
   ZONE_CODES,
+  areasForZones,
   getProvinceLevels,
   strongestLevel
 } from "@/lib/toscanaZones";
@@ -36,6 +37,18 @@ const TERRITORY_KEYWORDS = [
   "greve",
   "empolese",
   "chianti"
+];
+
+// Rischio scritto tra l'elenco delle zone e il livello, nell'ordine in cui va
+// cercato: serve a spiegare il colore di una zona.
+const RISK_PATTERNS = [
+  [/TEMPORALI\s+FORTI/i, "temporali"],
+  [/IDRAULICO/i, "idraulico"],
+  [/IDROGEOLOGICO/i, "idrogeologico"],
+  [/MAREGGIATE/i, "mareggiate"],
+  [/VENTO/i, "vento"],
+  [/NEVE/i, "neve"],
+  [/GHIACCIO/i, "ghiaccio"]
 ];
 
 const LEVELS = [
@@ -82,8 +95,12 @@ function parseZoneAlertRows(text) {
       )];
       if (!zones.length) return;
 
+      const riskText = row.slice(zoneList.index + zoneList[0].length, levelMatch.index);
+      const risks = RISK_PATTERNS.filter(([pattern]) => pattern.test(riskText)).map(([, risk]) => risk);
+
       rows.push({
         zones,
+        risks,
         level: LEVEL_NAMES[levelMatch[1].toLowerCase()],
         inProgress: /in\s+corso/i.test(row)
       });
@@ -103,39 +120,68 @@ function getZoneLevels(text) {
   const inProgressRows = rows.filter((row) => row.inProgress);
   const selectedRows = inProgressRows.length ? inProgressRows : rows;
 
-  const zoneLevels = {};
-  selectedRows.forEach((row) => {
+  const levelsOf = (rowsToRead) => {
+    const levels = {};
+    rowsToRead.forEach((row) => {
+      row.zones.forEach((zone) => {
+        levels[zone] = strongestLevel([levels[zone], row.level].filter(Boolean));
+      });
+    });
+    return levels;
+  };
+
+  // Livello e rischio di ogni zona su tutte le righe del bollettino: da qui la
+  // pagina ricava le zone in corso e quelle in previsione. Il rischio evita di
+  // scambiare un giallo per vento con un'allerta idrogeologica.
+  const zoneRisks = {};
+  rows.forEach((row) => {
     row.zones.forEach((zone) => {
-      zoneLevels[zone] = strongestLevel([zoneLevels[zone], row.level].filter(Boolean));
+      const perZone = zoneRisks[zone] || {};
+      row.risks.forEach((risk) => {
+        perZone[risk] = strongestLevel([perZone[risk], row.level].filter(Boolean));
+      });
+      if (Object.keys(perZone).length) zoneRisks[zone] = perZone;
     });
   });
 
-  return zoneLevels;
+  return { inProgressLevels: levelsOf(selectedRows), zoneLevels: levelsOf(rows), zoneRisks };
 }
 
 function getBestAlertLevel(text, province = DEFAULT_PROVINCE) {
-  const lowerText = text.toLowerCase();
-  const matches = TERRITORY_KEYWORDS.filter((keyword) => lowerText.includes(keyword));
-  const zoneLevels = getZoneLevels(text);
+  const parsed = getZoneLevels(text);
 
-  if (zoneLevels) {
-    const provinceLevels = getProvinceLevels(zoneLevels);
+  if (parsed) {
+    const { inProgressLevels, zoneLevels, zoneRisks } = parsed;
+    const provinceLevels = getProvinceLevels(inProgressLevels);
     const sigla = TOSCANA_PROVINCES[province] ? province : DEFAULT_PROVINCE;
-    const detail = PROVINCE_ZONES[sigla]
-      .filter((zone) => zoneLevels[zone])
-      .map((zone) => zone + " " + zoneLevels[zone])
+    const provinceZones = PROVINCE_ZONES[sigla];
+    const detail = provinceZones
+      .filter((zone) => inProgressLevels[zone])
+      .map((zone) => zone + " " + inProgressLevels[zone])
       .join(", ");
+
+    // In archivio entrano solo le zone della provincia mostrata in pagina: le
+    // altre non le legge nessuno e restano dentro provinceLevels.
+    const onlyProvince = (map) =>
+      Object.fromEntries(Object.entries(map).filter(([zone]) => provinceZones.includes(zone)));
+    const bulletinZones = onlyProvince(zoneLevels);
 
     return {
       level: provinceLevels[sigla],
-      matches,
-      zoneLevels,
+      matches: areasForZones(Object.keys(bulletinZones)),
+      zoneLevels: bulletinZones,
+      zoneRisks: onlyProvince(zoneRisks),
       provinceLevels,
       reason:
         `Livello ${provinceLevels[sigla]} per la provincia di ${TOSCANA_PROVINCES[sigla]}` +
         (detail ? ` (zone ${detail}).` : ".")
     };
   }
+
+  // Senza tabella zona/livello restano le parole del testo, unico segnale
+  // disponibile per un PDF con un formato diverso da quello del CFR.
+  const lowerText = text.toLowerCase();
+  const matches = TERRITORY_KEYWORDS.filter((keyword) => lowerText.includes(keyword));
 
   if (!matches.length) {
     return { level: "Verde", matches: [], reason: "Nessuna area fiorentina rilevata nel testo." };
@@ -511,10 +557,10 @@ export default function PdfParser({
           ? {
               ok: false,
               message: archive.persistent
-                ? "Archivio condiviso non raggiungibile: il bollettino resta su questo dispositivo."
-                : "Archivio condiviso non configurato: il bollettino resta su questo dispositivo."
+                ? "Server non raggiungibile: il bollettino resta su questo dispositivo."
+                : "Pubblicazione non riuscita: il bollettino resta su questo dispositivo."
             }
-          : { ok: true, message: "Bollettino pubblicato nell'archivio condiviso." });
+          : { ok: true, message: "Bollettino pubblicato: compare subito in questa pagina." });
         onBulletinChange?.();
         return archive;
       }
@@ -529,10 +575,10 @@ export default function PdfParser({
       }
 
       const body = await response.json().catch(() => null);
-      setPublishNotice({ ok: false, message: body?.error || "Archivio condiviso non raggiungibile." });
+      setPublishNotice({ ok: false, message: body?.error || "Pubblicazione non riuscita." });
       return null;
     } catch {
-      setPublishNotice({ ok: false, message: "Archivio condiviso non raggiungibile." });
+      setPublishNotice({ ok: false, message: "Pubblicazione non riuscita." });
       return null;
     }
   }, [onBulletinChange, publishCode]);
@@ -789,13 +835,6 @@ export default function PdfParser({
         </p>
       )}
 
-      {result?.level && result.level !== "Verde" && (
-        <div className="flex items-start gap-2 rounded-lg border border-emergency-orange/50 bg-emergency-orange/10 p-3 text-sm text-orange-100">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          Verificare sempre il bollettino ufficiale prima di attivare procedure operative.
-        </div>
-      )}
-
       {viewerOpen && pdfUrl && (
         <div className="overflow-hidden rounded-lg border border-emergency-line bg-black/30">
           <div className="flex items-center justify-between border-b border-emergency-line px-3 py-2">
@@ -827,7 +866,7 @@ export default function PdfParser({
           <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
             <p className="text-base font-semibold text-slate-100">Codice di pubblicazione</p>
             <p className="mt-1 text-sm text-slate-400">
-              {"Il bollettino viene pubblicato nell'archivio condiviso e compare subito in questa pagina. Conferma il codice per continuare: lo ricordiamo su questo browser."}
+              {"Il bollettino viene pubblicato e compare subito in questa pagina. Conferma il codice per continuare: lo ricordiamo su questo browser."}
             </p>
             <label className="mt-3 flex flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>

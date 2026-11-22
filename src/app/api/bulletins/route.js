@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getBulletinArchive, removeBulletinFromArchive, saveBulletinToArchive } from "@/lib/bulletinArchive";
 import { DEFAULT_BULLETIN_PUBLISH_CODE } from "@/lib/bulletinPublishCode";
 import { toPublicBulletin } from "@/lib/bulletinPdf";
-import { TOSCANA_PROVINCES, ZONE_CODES } from "@/lib/toscanaZones";
+import { RISK_KEYS, TOSCANA_PROVINCES, ZONE_CODES } from "@/lib/toscanaZones";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -94,6 +94,21 @@ function asLevelMap(value, allowedKeys) {
   return entries.length ? Object.fromEntries(entries) : null;
 }
 
+// Rischi per zona: { A2: { vento: "Giallo" }, ... }. Chiavi e livelli validati
+// sugli stessi elenchi ufficiali delle zone.
+function asZoneRiskMap(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const clean = {};
+  Object.entries(value).forEach(([zone, risks]) => {
+    if (!ZONE_CODES.includes(zone) || !risks || typeof risks !== "object" || Array.isArray(risks)) return;
+    const entries = Object.entries(risks)
+      .filter(([risk, level]) => RISK_KEYS.includes(risk) && LEVELS.has(level))
+      .slice(0, RISK_KEYS.length);
+    if (entries.length) clean[zone] = Object.fromEntries(entries);
+  });
+  return Object.keys(clean).length ? clean : null;
+}
+
 function asIsoDate(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
@@ -139,6 +154,7 @@ function validateBulletinPayload(payload) {
       textPreview: asText(payload.textPreview, MAX_TEXT),
       textTerms: asTextList(payload.textTerms),
       zoneLevels: asLevelMap(payload.zoneLevels, ZONE_CODES),
+      zoneRisks: asZoneRiskMap(payload.zoneRisks),
       provinceLevels: asLevelMap(payload.provinceLevels, Object.keys(TOSCANA_PROVINCES)),
       pdfUrl: asPdfUrl(payload.pdfUrl),
       uploadedAt: asIsoDate(payload.uploadedAt) || undefined

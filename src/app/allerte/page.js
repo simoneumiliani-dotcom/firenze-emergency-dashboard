@@ -6,10 +6,11 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowDown,
+  Circle,
   Download,
   ExternalLink,
-  MapPin,
   ShieldCheck,
+  Square,
   Trash2
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
@@ -19,7 +20,7 @@ import SourcesLink from "@/components/SourcesLink";
 import { getBulletinPdfHref, isInlinePdfUrl } from "@/lib/bulletinPdf";
 import { DEFAULT_BULLETIN_PUBLISH_CODE, PUBLISH_CODE_STORAGE_KEY } from "@/lib/bulletinPublishCode";
 import { isBulletinCurrent, mergeBulletins, pruneBulletins, readDeviceArchive, readDeviceCurrentBulletin, writeDeviceArchive, writeDeviceCurrentBulletin } from "@/lib/bulletinDeviceArchive";
-import { strongestLevel } from "@/lib/toscanaZones";
+import { PROVINCE_ZONES, ZONE_NAMES } from "@/lib/toscanaZones";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const LEVEL_ORDER = ["Verde", "Giallo", "Arancione", "Rosso"];
@@ -41,30 +42,14 @@ const LEVEL_ICON = {
   Arancione: "text-emergency-orange",
   Rosso: "text-emergency-red"
 };
-
-// Zone CFR che contengono ogni area fiorentina mostrata in pagina: i codici sono
-// quelli usati dal bollettino e dalle stazioni (Sieve/Mugello = M, Bisenzio = B,
-// Firenze/Greve/Ema = A3, Valdarno/Empolese = A4...). Servono a dare a ogni area
-// il simbolo con il colore della criticità che il PDF le assegna.
-const AREA_ZONES = {
-  firenze: ["A3", "B"],
-  mugello: ["M"],
-  sieve: ["M"],
-  valdarno: ["A3", "A4"],
-  "ombrone bisenzio": ["B"],
-  bisenzio: ["B"],
-  ema: ["A3"],
-  greve: ["A3"],
-  empolese: ["A4"],
-  chianti: ["A3"]
+// Forma dell'icona per livello: quadrato giallo, tondo arancione, triangolo
+// rosso. Il verde (nessuna allerta) resta il triangolo verde di prima.
+const LEVEL_SHAPE = {
+  Verde: AlertTriangle,
+  Giallo: Square,
+  Arancione: Circle,
+  Rosso: AlertTriangle
 };
-
-function getAreaLevel(item, area) {
-  const zones = AREA_ZONES[area] || [];
-  const levels = zones.map((zone) => item?.zoneLevels?.[zone]).filter(Boolean);
-  if (levels.length) return strongestLevel(levels);
-  return item?.provinceLevels?.FI || item?.level || null;
-}
 
 function normalizeLevel(value) {
   return LEVEL_ORDER.includes(value) ? value : "Verde";
@@ -98,6 +83,25 @@ function formatValidity(item) {
   if (from && to) return formatDateTime(from) + " - " + formatDateTime(to);
   if (to) return "fino a " + formatDateTime(to);
   return item?.validity || "validità non indicata";
+}
+
+// Zone del bollettino con almeno un comune in provincia di Firenze, con codice
+// e nome: la card e lo storico leggono gli stessi dati.
+function fiorentineZones(item) {
+  return PROVINCE_ZONES.FI.filter((zone) => item?.zoneLevels?.[zone]);
+}
+
+function zoneLabel(zone) {
+  return zone + " " + ZONE_NAMES[zone];
+}
+
+// Rischio che determina il livello mostrato: distingue, per esempio, un giallo
+// per vento da uno per idrogeologico.
+function riskNote(item, zone, level) {
+  const risks = item?.zoneRisks?.[zone];
+  if (!risks) return "";
+  const names = Object.keys(risks).filter((risk) => risks[risk] === level);
+  return names.length ? " · " + names.join(", ") : "";
 }
 
 const PDF_LINK_CLASS =
@@ -287,7 +291,7 @@ export default function AllertePage() {
 
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        setRemoveError(body?.error || "Archivio condiviso non raggiungibile.");
+        setRemoveError(body?.error || "Rimozione non riuscita: server non raggiungibile.");
         return;
       }
 
@@ -302,11 +306,11 @@ export default function AllertePage() {
       if (readDeviceCurrentBulletin()?.id === id) writeDeviceCurrentBulletin(null);
 
       setRemoveTarget(null);
-      setRemoveNotice({ ok: true, message: "Bollettino rimosso dall'archivio condiviso." });
+      setRemoveNotice({ ok: true, message: "Bollettino rimosso dallo storico." });
       setRefreshKey((key) => key + 1);
       await loadArchive({ quiet: true });
     } catch {
-      setRemoveError("Archivio condiviso non raggiungibile.");
+      setRemoveError("Rimozione non riuscita: server non raggiungibile.");
     } finally {
       setRemoving(false);
     }
@@ -351,7 +355,7 @@ export default function AllertePage() {
   );
 
   const currentLevel = normalizeLevel(current?.level);
-  const areas = Array.isArray(current?.matches) ? current.matches : [];
+  const currentZones = fiorentineZones(current);
   const currentPdfHref = getBulletinPdfHref(current);
   const currentPdfIsDownload = isInlinePdfUrl(current?.pdfUrl) || Boolean(current?.hasEmbeddedPdf);
   const archivedCount = items.length;
@@ -403,32 +407,32 @@ export default function AllertePage() {
 
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aree fiorentine interessate</p>
-                    {areas.length ? (
+                    {currentZones.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {areas.map((area) => {
-                          const areaLevel = getAreaLevel(current, area);
+                        {currentZones.map((zone) => {
+                          const zoneLevel = normalizeLevel(current.zoneLevels[zone]);
+                          const ZoneIcon = LEVEL_SHAPE[zoneLevel];
+                          const label = zoneLabel(zone);
                           return (
                             <span
-                              key={area}
-                              title={areaLevel ? area + ": allerta " + areaLevel : area}
+                              key={zone}
+                              title={label + ": allerta " + zoneLevel + riskNote(current, zone, zoneLevel)}
                               className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200"
                             >
-                              {areaLevel ? (
-                                <AlertTriangle
-                                  aria-hidden="true"
-                                  className={"h-3.5 w-3.5 fill-current " + (LEVEL_ICON[areaLevel] || "text-slate-400")}
-                                />
-                              ) : (
-                                <MapPin className="h-3.5 w-3.5 text-sky-300" />
-                              )}
-                              {area}
-                              {areaLevel ? <span className="sr-only">, allerta {areaLevel}</span> : null}
+                              <ZoneIcon
+                                aria-hidden="true"
+                                className={"h-3.5 w-3.5 fill-current " + LEVEL_ICON[zoneLevel]}
+                              />
+                              {label}
+                              <span className="text-slate-400">
+                                {" " + zoneLevel + riskNote(current, zone, zoneLevel)}
+                              </span>
                             </span>
                           );
                         })}
                       </div>
                     ) : (
-                      <p className="mt-1 text-sm text-slate-400">Aree non specificate nel bollettino.</p>
+                      <p className="mt-1 text-sm text-slate-400">Nessuna area fiorentina interessata dal bollettino.</p>
                     )}
                   </div>
 
@@ -531,7 +535,7 @@ export default function AllertePage() {
                         </div>
                         <div className="flex gap-2">
                           <dt className="w-20 shrink-0 text-slate-500">Aree</dt>
-                          <dd className="min-w-0 text-slate-400">{Array.isArray(item.matches) && item.matches.length ? item.matches.join(", ") : "—"}</dd>
+                          <dd className="min-w-0 text-slate-400">{fiorentineZones(item).map(zoneLabel).join(", ") || "—"}</dd>
                         </div>
                         {item.reason && (
                           <div className="flex gap-2">
@@ -594,7 +598,7 @@ export default function AllertePage() {
                             </span>
                           </td>
                           <td className="py-3 pr-3 text-slate-400">
-                            {Array.isArray(item.matches) && item.matches.length ? item.matches.join(", ") : "—"}
+                            {fiorentineZones(item).map(zoneLabel).join(", ") || "—"}
                           </td>
                           <td className="max-w-[18rem] py-3 pr-3 text-slate-400">
                             <span className="line-clamp-2">{item.reason || "—"}</span>
@@ -637,7 +641,7 @@ export default function AllertePage() {
               <div className="w-full max-w-md rounded-xl border border-emergency-line bg-emergency-panel p-4 shadow-glow">
                 <p className="text-base font-semibold text-slate-100">Rimuovi il bollettino</p>
                 <p className="mt-1 text-sm text-slate-400">
-                  {(removeTarget.fileName || "Il bollettino") + " viene ritirato dall'archivio condiviso: se era quello in corso, il livello in pagina torna a quello precedente. Conferma il codice per continuare."}
+                  {(removeTarget.fileName || "Il bollettino") + " viene rimosso dallo storico: se era quello in corso, il livello in pagina torna a quello precedente. Conferma il codice per continuare."}
                 </p>
                 <label className="mt-3 flex flex-col gap-1">
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Codice</span>
