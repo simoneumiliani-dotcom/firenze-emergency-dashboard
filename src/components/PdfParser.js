@@ -63,16 +63,37 @@ const LEVELS = [
 const ZONE_CODE_PATTERN =
   "(?:" + ZONE_CODES.slice().sort((a, b) => b.length - a.length).join("|") + ")";
 
+// Rischi nominati in un testo, nell'ordine di RISK_PATTERNS.
+function risksOf(text) {
+  return RISK_PATTERNS.filter(([pattern]) => pattern.test(text)).map(([, risk]) => risk);
+}
+
 function parseZoneAlertRows(text) {
   const rows = [];
+  let lastRowLine = -1;
 
-  String(text || "").split("\n").forEach((rawRow) => {
+  // La cella "rischio" può continuare sulla riga sotto ("IDRAULICO RETICOLO
+  // MINORE"): una riga senza zone ma con un rischio va attribuita alla riga
+  // precedente della stessa cella, cioè quella subito sopra.
+  const attachRisksToPreviousRow = (line, lineIndex) => {
+    const previous = rows[rows.length - 1];
+    if (!previous || lineIndex !== lastRowLine + 1) return;
+    const risks = risksOf(line);
+    if (!risks.length) return;
+    previous.risks = [...new Set([...previous.risks, ...risks])];
+  };
+
+  String(text || "").split("\n").forEach((rawRow, lineIndex) => {
     const row = rawRow.replace(/\s+/g, " ").trim();
     if (!row) return;
 
     const levelMatches = [...row.matchAll(/\b(verde|giallo|arancione|rosso)\b/gi)];
-    if (!levelMatches.length) return;
+    if (!levelMatches.length) {
+      attachRisksToPreviousRow(row, lineIndex);
+      return;
+    }
 
+    let parsed = false;
     levelMatches.forEach((levelMatch) => {
       const before = row.slice(0, levelMatch.index);
       const lists = [
@@ -96,15 +117,18 @@ function parseZoneAlertRows(text) {
       if (!zones.length) return;
 
       const riskText = row.slice(zoneList.index + zoneList[0].length, levelMatch.index);
-      const risks = RISK_PATTERNS.filter(([pattern]) => pattern.test(riskText)).map(([, risk]) => risk);
 
       rows.push({
         zones,
-        risks,
+        risks: risksOf(riskText),
         level: LEVEL_NAMES[levelMatch[1].toLowerCase()],
         inProgress: /in\s+corso/i.test(row)
       });
+      parsed = true;
     });
+
+    if (parsed) lastRowLine = lineIndex;
+    else attachRisksToPreviousRow(row, lineIndex);
   });
 
   return rows;
