@@ -464,16 +464,21 @@ export default function AllertePage() {
                                 (note ? " per " + note.toLowerCase() : "") +
                                 (timing ? " (" + timing + ")" : "")
                               }
-                              className="inline-flex items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200"
+                              className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-emergency-line bg-emergency-panel2 px-2 py-1 text-xs text-slate-200"
                             >
-                              <ZoneIcon
-                                aria-hidden="true"
-                                className={"h-3.5 w-3.5 shrink-0 fill-current " + LEVEL_ICON[level]}
-                              />
-                              <span>{label}</span>
-                              {note && <span className="text-[11px] font-semibold text-slate-300">{note}</span>}
+                              <span className="inline-flex items-center gap-1.5">
+                                <ZoneIcon
+                                  aria-hidden="true"
+                                  className={"h-3.5 w-3.5 shrink-0 fill-current " + LEVEL_ICON[level]}
+                                />
+                                <span>{label}</span>
+                                {note && <span className="text-[11px] font-semibold text-slate-300">{note}</span>}
+                              </span>
                               {timing && (
-                                <span className="hidden text-[11px] text-slate-500 md:inline">· {timing}</span>
+                                <span className="w-full text-[11px] text-slate-500 md:inline md:w-auto">
+                                  <span className="hidden md:inline">· </span>
+                                  {timing}
+                                </span>
                               )}
                             </span>
                           );
