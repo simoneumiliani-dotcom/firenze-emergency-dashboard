@@ -9,6 +9,7 @@ import {
   Circle,
   Download,
   ExternalLink,
+  FileText,
   ShieldCheck,
   Square,
   Trash2
@@ -238,6 +239,43 @@ function LevelBadge({ level, size = "sm" }) {
       <span className={"h-2 w-2 rounded-full " + LEVEL_DOT[value]} />
       {value}
     </span>
+  );
+}
+
+// Tasto PDF dello storico: stesso ingombro del tasto di rimozione, accanto
+// ad esso, per aprire (o scaricare) il bollettino relativo.
+function ArchivePdfButton({ item }) {
+  const href = getBulletinPdfHref(item);
+  const base =
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border px-2 transition ";
+  const label = "Apri il PDF " + (item.fileName || "del bollettino");
+
+  if (!href) {
+    return (
+      <span
+        title="PDF non disponibile"
+        aria-label="PDF non disponibile"
+        className={base + "border-emergency-line text-slate-600 opacity-60"}
+      >
+        <FileText className="h-4 w-4" />
+      </span>
+    );
+  }
+
+  const isDownload = isInlinePdfUrl(item.pdfUrl) || item.hasEmbeddedPdf;
+
+  return (
+    <a
+      href={href}
+      {...(isDownload
+        ? { download: item.fileName || "bollettino.pdf" }
+        : { target: "_blank", rel: "noreferrer" })}
+      aria-label={label}
+      title={isDownload ? "Scarica il PDF del bollettino" : "Apri il PDF del bollettino in una nuova finestra"}
+      className={base + "border-sky-400/40 text-sky-200 hover:border-sky-400/70 hover:bg-sky-400/10"}
+    >
+      <FileText className="h-4 w-4" />
+    </a>
   );
 }
 
@@ -597,8 +635,8 @@ export default function AllertePage() {
                           </div>
                         )}
                       </dl>
-                      <div className="mt-2 flex items-center justify-between gap-2 border-t border-emergency-line/60 pt-1">
-                        <BulletinPdfLink item={item} />
+                      <div className="mt-2 flex items-center justify-end gap-2 border-t border-emergency-line/60 pt-1">
+                        <ArchivePdfButton item={item} />
                         {sharedIds.has(item.id) && (
                           <button
                             type="button"
